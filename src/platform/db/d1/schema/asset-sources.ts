@@ -10,7 +10,7 @@ const assetSourceKindValues = [
   "import",
 ] as const;
 
-// 这里单独存来源信息，避免把所有入口元数据都塞到 assets 主表。
+// 这里单独存来源信息，避免把所有入口元数据都堆进 assets 主表。
 export const assetSources = sqliteTable(
   "asset_sources",
   {

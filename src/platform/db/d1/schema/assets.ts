@@ -3,7 +3,7 @@ import { index, sqliteTable, text } from "drizzle-orm/sqlite-core";
 const assetTypeValues = ["url", "pdf", "note", "image", "chat"] as const;
 const assetStatusValues = ["pending", "processing", "ready", "failed"] as const;
 
-// 这里定义资产主表；在接入 R2 前，文本内容先落在 content_text 中避免原文丢失。
+// 这里定义 D1 里的资产主表，原始正文先落在 content_text，避免原文丢失。
 export const assets = sqliteTable(
   "assets",
   {

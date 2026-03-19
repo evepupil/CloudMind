@@ -3,12 +3,11 @@ import { and, count, desc, eq, like, or } from "drizzle-orm";
 import { AssetNotFoundError } from "@/core/assets/errors";
 import type {
   AssetRepository,
+  AssetSearchInput,
   CreateFileAssetInput,
   CreateTextAssetInput,
   CreateUrlAssetInput,
 } from "@/core/assets/ports";
-import { createDb } from "@/db/client";
-import { assetSources, assets, ingestJobs } from "@/db/schema";
 import type {
   AssetDetail,
   AssetListQuery,
@@ -18,6 +17,8 @@ import type {
   AssetType,
   IngestJobSummary,
 } from "@/features/assets/model/types";
+import { createDb } from "@/platform/db/d1/client";
+import { assetSources, assets, ingestJobs } from "@/platform/db/d1/schema";
 
 const mapAssetSummary = (record: typeof assets.$inferSelect): AssetSummary => {
   return {
@@ -46,7 +47,32 @@ const mapJobSummary = (
   };
 };
 
-// 这里实现面向 D1 的资产仓储；后续如切换数据库，只替换这一层。
+const buildAssetListWhereClause = (query?: AssetListQuery) => {
+  const conditions = [];
+
+  if (query?.status) {
+    conditions.push(eq(assets.status, query.status));
+  }
+
+  if (query?.type) {
+    conditions.push(eq(assets.type, query.type));
+  }
+
+  if (query?.query) {
+    const search = `%${query.query}%`;
+    conditions.push(
+      or(
+        like(assets.title, search),
+        like(assets.summary, search),
+        like(assets.sourceUrl, search)
+      )
+    );
+  }
+
+  return conditions.length > 0 ? and(...conditions) : undefined;
+};
+
+// 这里实现面向 D1 的资产仓储；后续如切数据库，只替换这一层。
 export class D1AssetRepository implements AssetRepository {
   private readonly db: ReturnType<typeof createDb>;
 
@@ -55,31 +81,10 @@ export class D1AssetRepository implements AssetRepository {
   }
 
   public async listAssets(query?: AssetListQuery): Promise<AssetListResult> {
-    const conditions = [];
     const page = query?.page ?? 1;
     const pageSize = query?.pageSize ?? 20;
     const offset = (page - 1) * pageSize;
-
-    if (query?.status) {
-      conditions.push(eq(assets.status, query.status));
-    }
-
-    if (query?.type) {
-      conditions.push(eq(assets.type, query.type));
-    }
-
-    if (query?.query) {
-      const search = `%${query.query}%`;
-      conditions.push(
-        or(
-          like(assets.title, search),
-          like(assets.summary, search),
-          like(assets.sourceUrl, search)
-        )
-      );
-    }
-
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    const whereClause = buildAssetListWhereClause(query);
     const records = await this.db
       .select()
       .from(assets)
@@ -104,6 +109,14 @@ export class D1AssetRepository implements AssetRepository {
         totalPages: total === 0 ? 0 : Math.ceil(total / pageSize),
       },
     };
+  }
+
+  public async searchAssets(input: AssetSearchInput): Promise<AssetListResult> {
+    return this.listAssets({
+      query: input.query,
+      page: input.page,
+      pageSize: input.pageSize,
+    });
   }
 
   public async getAssetById(id: string): Promise<AssetDetail> {

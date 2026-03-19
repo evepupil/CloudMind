@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AssetRepository } from "@/core/assets/ports";
+import type { AssetQueryRepository } from "@/core/assets/ports";
 import type {
   AssetDetail,
   AssetListQuery,
@@ -53,7 +53,7 @@ const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
   };
 };
 
-class InMemoryAssetRepository implements AssetRepository {
+class InMemoryAssetRepository implements AssetQueryRepository {
   private asset: AssetDetail;
 
   public constructor(asset: AssetDetail) {
@@ -79,30 +79,6 @@ class InMemoryAssetRepository implements AssetRepository {
 
     return structuredClone(this.asset);
   }
-
-  public async createTextAsset(): Promise<AssetDetail> {
-    return structuredClone(this.asset);
-  }
-
-  public async createUrlAsset(): Promise<AssetDetail> {
-    return structuredClone(this.asset);
-  }
-
-  public async createFileAsset(): Promise<AssetDetail> {
-    return structuredClone(this.asset);
-  }
-
-  public async markAssetProcessing(): Promise<void> {}
-
-  public async completeAssetProcessing(): Promise<void> {}
-
-  public async failAssetProcessing(): Promise<void> {}
-
-  public async markIngestJobRunning(): Promise<void> {}
-
-  public async completeIngestJob(): Promise<void> {}
-
-  public async failIngestJob(): Promise<void> {}
 }
 
 describe("asset service", () => {
@@ -162,34 +138,6 @@ describe("asset service", () => {
     expect(result).toMatchObject({
       id: "asset-detail-1",
       title: "Asset detail item",
-    });
-  });
-
-  it("searchAssets delegates to the repository query search", async () => {
-    const repository = new InMemoryAssetRepository(
-      createAsset({
-        id: "asset-search-1",
-        title: "CloudMind Search Item",
-      })
-    );
-    const listAssetsSpy = vi.spyOn(repository, "listAssets");
-    const service = createAssetService({
-      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
-    });
-
-    await service.searchAssets(
-      { APP_NAME: "cloudmind-test" },
-      {
-        query: "cloudmind",
-        page: 2,
-        pageSize: 10,
-      }
-    );
-
-    expect(listAssetsSpy).toHaveBeenCalledWith({
-      query: "cloudmind",
-      page: 2,
-      pageSize: 10,
     });
   });
 });

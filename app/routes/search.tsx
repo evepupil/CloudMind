@@ -1,7 +1,7 @@
 import { createRoute } from "honox/factory";
 
-import { searchAssets } from "@/features/assets/server/service";
 import { SearchPage } from "@/features/search/components/search-page";
+import { searchAssets } from "@/features/search/server/service";
 
 export default createRoute(async (context) => {
   const query = context.req.query("query")?.trim() ?? "";

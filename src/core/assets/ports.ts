@@ -23,9 +23,25 @@ export interface CreateFileAssetInput {
   rawR2Key: string;
 }
 
-// 这里定义资产领域侧的持久化端口，避免 feature 直接绑定 D1 细节。
-export interface AssetRepository {
+export interface AssetSearchInput {
+  query: string;
+  page?: number | undefined;
+  pageSize?: number | undefined;
+}
+
+// 这里定义资产读取侧端口，供列表与详情等读模型复用。
+export interface AssetQueryRepository {
   listAssets(query?: AssetListQuery): Promise<AssetListResult>;
+  getAssetById(id: string): Promise<AssetDetail>;
+}
+
+// 这里单独抽出搜索端口，避免未来把语义检索继续塞进列表接口。
+export interface AssetSearchRepository {
+  searchAssets(input: AssetSearchInput): Promise<AssetListResult>;
+}
+
+// 这里保留采集与处理链路需要的写侧端口。
+export interface AssetIngestRepository {
   getAssetById(id: string): Promise<AssetDetail>;
   createTextAsset(input: CreateTextAssetInput): Promise<AssetDetail>;
   createUrlAsset(input: CreateUrlAssetInput): Promise<AssetDetail>;
@@ -41,3 +57,7 @@ export interface AssetRepository {
   completeIngestJob(jobId: string): Promise<void>;
   failIngestJob(jobId: string, message: string): Promise<void>;
 }
+
+export type AssetRepository = AssetQueryRepository &
+  AssetSearchRepository &
+  AssetIngestRepository;

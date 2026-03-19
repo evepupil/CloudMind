@@ -11,7 +11,6 @@ vi.mock("@/features/assets/server/service", () => {
   return {
     getAssetById: vi.fn(),
     listAssets: vi.fn(),
-    searchAssets: vi.fn(),
   };
 });
 
@@ -85,10 +84,8 @@ describe("asset routes", () => {
       env
     );
 
-    const payload = await response.json();
-
     expect(response.status).toBe(200);
-    expect(payload).toEqual({ item });
+    await expect(response.json()).resolves.toEqual({ item });
     expect(assetService.getAssetById).toHaveBeenCalledWith(
       env,
       "asset-route-detail"
@@ -129,10 +126,9 @@ describe("asset routes", () => {
       {},
       env
     );
-    const payload = await response.json();
 
     expect(response.status).toBe(200);
-    expect(payload).toEqual({
+    await expect(response.json()).resolves.toEqual({
       items: item.jobs,
     });
     expect(assetService.getAssetById).toHaveBeenCalledWith(env, "asset-jobs-1");
@@ -146,10 +142,9 @@ describe("asset routes", () => {
     );
 
     const response = await app.request("/api/assets/missing-asset");
-    const payload = await response.json();
 
     expect(response.status).toBe(404);
-    expect(payload).toEqual({
+    await expect(response.json()).resolves.toEqual({
       error: {
         code: "ASSET_NOT_FOUND",
         message: "Asset not found",
@@ -165,10 +160,9 @@ describe("asset routes", () => {
     );
 
     const response = await app.request("/api/assets/missing-asset/jobs");
-    const payload = await response.json();
 
     expect(response.status).toBe(404);
-    expect(payload).toEqual({
+    await expect(response.json()).resolves.toEqual({
       error: {
         code: "ASSET_NOT_FOUND",
         message: "Asset not found",
@@ -201,10 +195,9 @@ describe("asset routes", () => {
       undefined,
       env
     );
-    const payload = await response.json();
 
     expect(response.status).toBe(200);
-    expect(payload).toEqual({
+    await expect(response.json()).resolves.toEqual({
       items: [
         expect.objectContaining({
           id: "asset-filter-1",
@@ -224,64 +217,6 @@ describe("asset routes", () => {
       query: "cloudflare",
       page: 2,
       pageSize: 10,
-    });
-  });
-
-  it("POST /api/search returns keyword search results", async () => {
-    const app = createApp();
-    const env = { APP_NAME: "cloudmind-test" };
-
-    vi.mocked(assetService.searchAssets).mockResolvedValue({
-      items: [
-        createAssetDetail({
-          id: "asset-search-1",
-          title: "Search result asset",
-        }),
-      ],
-      pagination: {
-        page: 1,
-        pageSize: 20,
-        total: 1,
-        totalPages: 1,
-      },
-    });
-
-    const response = await app.request(
-      "/api/search",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          query: "cloudmind",
-          page: 1,
-          pageSize: 20,
-        }),
-      },
-      env
-    );
-    const payload = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(payload).toEqual({
-      items: [
-        expect.objectContaining({
-          id: "asset-search-1",
-          title: "Search result asset",
-        }),
-      ],
-      pagination: {
-        page: 1,
-        pageSize: 20,
-        total: 1,
-        totalPages: 1,
-      },
-    });
-    expect(assetService.searchAssets).toHaveBeenCalledWith(env, {
-      query: "cloudmind",
-      page: 1,
-      pageSize: 20,
     });
   });
 });

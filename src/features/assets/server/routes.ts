@@ -4,12 +4,8 @@ import type { z } from "zod";
 import { AssetNotFoundError } from "@/core/assets/errors";
 import type { AppEnv } from "@/env";
 
-import {
-  assetIdParamsSchema,
-  assetListQuerySchema,
-  assetSearchPayloadSchema,
-} from "./schemas";
-import { getAssetById, listAssets, searchAssets } from "./service";
+import { assetIdParamsSchema, assetListQuerySchema } from "./schemas";
+import { getAssetById, listAssets } from "./service";
 
 const getValidationErrorBody = (error: z.ZodError) => {
   return {
@@ -30,7 +26,7 @@ const getAssetNotFoundBody = () => {
   };
 };
 
-// 这里注册资产查询相关 API，只负责读模型与搜索能力。
+// 这里注册资产查询相关 API，只负责列表与详情读模型。
 export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
   app.get("/api/assets", async (context) => {
     const parsedQuery = assetListQuerySchema.safeParse(context.req.query());
@@ -84,18 +80,5 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
 
       throw error;
     }
-  });
-
-  app.post("/api/search", async (context) => {
-    const rawPayload = await context.req.json().catch(() => null);
-    const parsedPayload = assetSearchPayloadSchema.safeParse(rawPayload);
-
-    if (!parsedPayload.success) {
-      return context.json(getValidationErrorBody(parsedPayload.error), 400);
-    }
-
-    const result = await searchAssets(context.env, parsedPayload.data);
-
-    return context.json(result);
   });
 };
