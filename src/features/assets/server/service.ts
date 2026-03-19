@@ -1,54 +1,25 @@
-import { D1AssetRepository } from "@/db/repositories/d1-asset-repository";
+import type {
+  AssetRepository,
+  CreateFileAssetInput,
+  CreateTextAssetInput,
+  CreateUrlAssetInput,
+} from "@/core/assets/ports";
+import { createRawAssetBlobKey } from "@/core/blob/keys";
+import type { BlobStore } from "@/core/blob/ports";
 import type { AppBindings } from "@/env";
 import type {
   AssetDetail,
   AssetListQuery,
   AssetListResult,
 } from "@/features/assets/model/types";
+import { getBlobStoreFromBindings } from "@/platform/blob/r2/get-blob-store";
+import { getAssetRepositoryFromBindings } from "@/platform/db/d1/get-asset-repository";
 
-import {
-  type BlobStore,
-  BlobStoreConfigError,
-  createRawAssetBlobKey,
-  R2BlobStore,
-} from "./blob-store";
 import {
   processPdfAsset,
   processTextAsset,
   processUrlAsset,
 } from "./processor";
-import type {
-  AssetRepository,
-  CreateFileAssetInput,
-  CreateTextAssetInput,
-  CreateUrlAssetInput,
-} from "./repository";
-
-const getDatabaseBinding = (bindings: AppBindings | undefined): D1Database => {
-  if (!bindings?.DB) {
-    throw new Error(
-      'Cloudflare D1 binding "DB" is not configured. ' +
-        "Create the database and bind it in wrangler.jsonc before using assets."
-    );
-  }
-
-  return bindings.DB;
-};
-
-const getAssetRepository = (bindings: AppBindings | undefined) => {
-  return new D1AssetRepository(getDatabaseBinding(bindings));
-};
-
-const getBlobStore = (bindings: AppBindings | undefined): BlobStore => {
-  if (!bindings?.ASSET_FILES) {
-    throw new BlobStoreConfigError(
-      'Cloudflare R2 binding "ASSET_FILES" is not configured. ' +
-        "Create the bucket and bind it in wrangler.jsonc before using file ingest."
-    );
-  }
-
-  return new R2BlobStore(bindings.ASSET_FILES);
-};
 
 interface AssetServiceDependencies {
   getAssetRepository: (
@@ -86,8 +57,8 @@ interface AssetServiceDependencies {
 }
 
 const defaultDependencies: AssetServiceDependencies = {
-  getAssetRepository,
-  getBlobStore,
+  getAssetRepository: getAssetRepositoryFromBindings,
+  getBlobStore: getBlobStoreFromBindings,
   processTextAsset,
   processUrlAsset,
   processPdfAsset,

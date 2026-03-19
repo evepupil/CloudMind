@@ -23,6 +23,7 @@ export interface CreateFileAssetInput {
   rawR2Key: string;
 }
 
+// 这里定义资产领域侧的持久化端口，避免 feature 直接绑定 D1 细节。
 export interface AssetRepository {
   listAssets(query?: AssetListQuery): Promise<AssetListResult>;
   getAssetById(id: string): Promise<AssetDetail>;
@@ -39,12 +40,4 @@ export interface AssetRepository {
   markIngestJobRunning(jobId: string): Promise<void>;
   completeIngestJob(jobId: string): Promise<void>;
   failIngestJob(jobId: string, message: string): Promise<void>;
-}
-
-// 这里用显式错误区分“数据不存在”和“系统配置缺失”，便于路由层返回稳定状态码。
-export class AssetNotFoundError extends Error {
-  public constructor(id: string) {
-    super(`Asset "${id}" was not found.`);
-    this.name = "AssetNotFoundError";
-  }
 }

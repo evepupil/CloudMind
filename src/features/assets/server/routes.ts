@@ -1,9 +1,9 @@
 import type { Hono } from "hono";
 import type { z } from "zod";
 
+import { AssetNotFoundError } from "@/core/assets/errors";
 import type { AppEnv } from "@/env";
 
-import { AssetNotFoundError } from "./repository";
 import {
   assetIdParamsSchema,
   assetListQuerySchema,

@@ -9,16 +9,16 @@ import type {
 import type {
   BlobObject,
   BlobStore,
-} from "@/features/assets/server/blob-store";
-import {
-  processPdfAsset,
-  processTextAsset,
-} from "@/features/assets/server/processor";
+} from "@/core/blob/ports";
 import type {
   AssetRepository,
   CreateFileAssetInput,
   CreateTextAssetInput,
-} from "@/features/assets/server/repository";
+} from "@/core/assets/ports";
+import {
+  processPdfAsset,
+  processTextAsset,
+} from "@/features/assets/server/processor";
 
 const createJob = (
   overrides: Partial<IngestJobSummary> = {}

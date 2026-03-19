@@ -1,5 +1,12 @@
 import { and, count, desc, eq, like, or } from "drizzle-orm";
 
+import { AssetNotFoundError } from "@/core/assets/errors";
+import type {
+  AssetRepository,
+  CreateFileAssetInput,
+  CreateTextAssetInput,
+  CreateUrlAssetInput,
+} from "@/core/assets/ports";
 import { createDb } from "@/db/client";
 import { assetSources, assets, ingestJobs } from "@/db/schema";
 import type {
@@ -11,13 +18,6 @@ import type {
   AssetType,
   IngestJobSummary,
 } from "@/features/assets/model/types";
-import {
-  AssetNotFoundError,
-  type AssetRepository,
-  type CreateFileAssetInput,
-  type CreateTextAssetInput,
-  type CreateUrlAssetInput,
-} from "@/features/assets/server/repository";
 
 const mapAssetSummary = (record: typeof assets.$inferSelect): AssetSummary => {
   return {
@@ -46,7 +46,7 @@ const mapJobSummary = (
   };
 };
 
-// 这里实现面向 D1 的资产仓储；后续如果切换存储实现，只替换这一层。
+// 这里实现面向 D1 的资产仓储；后续如切换数据库，只替换这一层。
 export class D1AssetRepository implements AssetRepository {
   private readonly db: ReturnType<typeof createDb>;
 

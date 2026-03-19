@@ -6,12 +6,12 @@ import type {
   AssetListResult,
   IngestJobSummary,
 } from "@/features/assets/model/types";
-import type { BlobStore } from "@/features/assets/server/blob-store";
 import type {
   AssetRepository,
   CreateFileAssetInput,
   CreateTextAssetInput,
-} from "@/features/assets/server/repository";
+} from "@/core/assets/ports";
+import type { BlobStore } from "@/core/blob/ports";
 import { createAssetService } from "@/features/assets/server/service";
 
 const createJob = (

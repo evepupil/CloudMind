@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AssetNotFoundError } from "@/core/assets/errors";
 import type { AppEnv } from "@/env";
 import type { AssetDetail } from "@/features/assets/model/types";
-import { AssetNotFoundError } from "@/features/assets/server/repository";
 import { registerAssetRoutes } from "@/features/assets/server/routes";
 import * as assetService from "@/features/assets/server/service";
 

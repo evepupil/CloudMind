@@ -1,7 +1,6 @@
 import type { AssetDetail } from "@/features/assets/model/types";
-
-import type { BlobStore } from "./blob-store";
-import type { AssetRepository } from "./repository";
+import type { AssetRepository } from "@/core/assets/ports";
+import type { BlobStore } from "@/core/blob/ports";
 
 const normalizeContent = (content: string): string => {
   return content.replace(/\s+/g, " ").trim();

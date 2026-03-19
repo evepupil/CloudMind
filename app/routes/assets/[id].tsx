@@ -1,7 +1,7 @@
 import { createRoute } from "honox/factory";
 
+import { AssetNotFoundError } from "@/core/assets/errors";
 import { AssetDetailPage } from "@/features/assets/components/asset-detail-page";
-import { AssetNotFoundError } from "@/features/assets/server/repository";
 import { getAssetById } from "@/features/assets/server/service";
 
 const getFlashMessage = (
