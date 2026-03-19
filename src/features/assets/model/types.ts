@@ -80,6 +80,7 @@ export interface AssetChunkSummary {
   id: string;
   chunkIndex: number;
   textPreview: string;
+  contentText?: string | null;
   vectorId: string | null;
 }
 

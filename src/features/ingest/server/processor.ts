@@ -132,6 +132,7 @@ const indexPreparedChunks = async (
   return chunks.map((chunk) => ({
     chunkIndex: chunk.chunkIndex,
     textPreview: chunk.textPreview,
+    contentText: chunk.text,
     vectorId: createChunkVectorId(asset.id, chunk.chunkIndex),
   }));
 };

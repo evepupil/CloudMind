@@ -30,6 +30,7 @@ class InMemorySearchRepository implements AssetSearchRepository {
       id: `chunk-${index + 1}`,
       chunkIndex: index,
       textPreview: `Source snippet ${index + 1}`,
+      contentText: `Full chunk body ${index + 1}`,
       vectorId,
       asset: {
         id: `asset-${index + 1}`,
@@ -113,6 +114,11 @@ describe("chat service", () => {
     expect(aiProvider.generateText).toHaveBeenCalledWith(
       expect.objectContaining({
         prompt: expect.stringContaining("[S1] Asset 1"),
+      })
+    );
+    expect(aiProvider.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining("Snippet: Full chunk body 1"),
       })
     );
     expect(result).toEqual({

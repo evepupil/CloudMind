@@ -1,0 +1,1 @@
+ALTER TABLE `asset_chunks` ADD `content_text` text DEFAULT '' NOT NULL;

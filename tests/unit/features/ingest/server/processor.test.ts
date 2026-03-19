@@ -192,6 +192,7 @@ class InMemoryAssetRepository implements AssetRepository {
     chunks: Array<{
       chunkIndex: number;
       textPreview: string;
+      contentText: string;
       vectorId?: string | null;
     }>
   ): Promise<void> {
@@ -199,6 +200,7 @@ class InMemoryAssetRepository implements AssetRepository {
       id: `chunk-${index + 1}`,
       chunkIndex: chunk.chunkIndex,
       textPreview: chunk.textPreview,
+      contentText: chunk.contentText,
       vectorId: chunk.vectorId ?? null,
     }));
   }
@@ -345,6 +347,8 @@ describe("processTextAsset", () => {
         chunkIndex: 0,
         textPreview:
           "CloudMind keeps the original content and generates a concise summary.",
+        contentText:
+          "CloudMind keeps the original content and generates a concise summary.",
         vectorId: "asset-1:0",
       },
     ]);
@@ -478,6 +482,7 @@ describe("processPdfAsset", () => {
         id: "chunk-1",
         chunkIndex: 0,
         textPreview: "Hello CloudMind PDF",
+        contentText: "Hello CloudMind PDF",
         vectorId: "asset-pdf-1:0",
       },
     ]);

@@ -39,6 +39,7 @@ export interface CompleteAssetProcessingInput {
 export interface CreateAssetChunkInput {
   chunkIndex: number;
   textPreview: string;
+  contentText: string;
   vectorId?: string | null;
 }
 

@@ -14,6 +14,7 @@ export const assetChunks = sqliteTable(
       }),
     chunkIndex: integer("chunk_index").notNull(),
     textPreview: text("text_preview").notNull(),
+    contentText: text("content_text").notNull().default(""),
     vectorId: text("vector_id"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),

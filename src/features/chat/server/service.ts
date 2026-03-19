@@ -59,6 +59,55 @@ const buildPrompt = (question: string, sources: ChatSource[]): string => {
   ].join("\n");
 };
 
+interface GroundingContext {
+  source: ChatSource;
+  contentText: string;
+}
+
+const buildGroundingContexts = (
+  vectorMatches: Awaited<ReturnType<VectorStore["search"]>>,
+  chunkMatches: Awaited<ReturnType<AssetSearchRepository["getChunkMatchesByVectorIds"]>>
+): GroundingContext[] => {
+  const chunkMatchMap = new Map(
+    chunkMatches
+      .filter((match) => match.vectorId)
+      .map((match) => [match.vectorId as string, match])
+  );
+
+  return vectorMatches.reduce<GroundingContext[]>((contexts, match) => {
+      const chunkMatch = chunkMatchMap.get(match.id);
+
+      if (!chunkMatch) {
+        return contexts;
+      }
+
+      contexts.push({
+        source: {
+          assetId: chunkMatch.asset.id,
+          chunkId: chunkMatch.id,
+          title: chunkMatch.asset.title,
+          sourceUrl: chunkMatch.asset.sourceUrl,
+          snippet: chunkMatch.textPreview,
+        },
+        contentText: chunkMatch.contentText?.trim() || chunkMatch.textPreview,
+      });
+
+      return contexts;
+    }, []);
+};
+
+const buildChatPrompt = (
+  question: string,
+  contexts: GroundingContext[]
+): string => {
+  const promptSources = contexts.map((context) => ({
+    ...context.source,
+    snippet: context.contentText,
+  }));
+
+  return buildPrompt(question, promptSources);
+};
+
 // 这里实现最小问答链路：query embedding -> Vectorize 召回 -> D1 回填 -> AI 生成答案。
 export const createChatService = (
   dependencies: ChatServiceDependencies = defaultDependencies
@@ -108,32 +157,12 @@ export const createChatService = (
       const chunkMatches = await repository.getChunkMatchesByVectorIds(
         vectorMatches.map((match) => match.id)
       );
-      const chunkMatchMap = new Map(
+      const groundingContexts = buildGroundingContexts(
+        vectorMatches,
         chunkMatches
-          .filter((match) => match.vectorId)
-          .map((match) => [match.vectorId as string, match])
       );
-      const orderedSources = vectorMatches
-        .map((match) => {
-          const chunkMatch = chunkMatchMap.get(match.id);
 
-          if (!chunkMatch) {
-            return null;
-          }
-
-          const source: ChatSource = {
-            assetId: chunkMatch.asset.id,
-            chunkId: chunkMatch.id,
-            title: chunkMatch.asset.title,
-            sourceUrl: chunkMatch.asset.sourceUrl,
-            snippet: chunkMatch.textPreview,
-          };
-
-          return source;
-        })
-        .filter((source) => source !== null);
-
-      if (orderedSources.length === 0) {
+      if (groundingContexts.length === 0) {
         return {
           answer: createFallbackAnswer(),
           sources: [],
@@ -143,7 +172,7 @@ export const createChatService = (
       const answer = await aiProvider.generateText({
         systemPrompt:
           "You are a source-aware knowledge base assistant. Keep answers concise and grounded in the provided sources.",
-        prompt: buildPrompt(question, orderedSources),
+        prompt: buildChatPrompt(question, groundingContexts),
         temperature: 0.2,
         maxOutputTokens: 700,
       });
@@ -151,7 +180,7 @@ export const createChatService = (
       return {
         answer:
           answer.text.trim().length > 0 ? answer.text.trim() : createFallbackAnswer(),
-        sources: orderedSources,
+        sources: groundingContexts.map((context) => context.source),
       };
     },
   };

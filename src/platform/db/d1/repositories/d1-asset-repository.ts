@@ -63,6 +63,7 @@ const mapChunkSummary = (
     id: record.id,
     chunkIndex: record.chunkIndex,
     textPreview: record.textPreview,
+    contentText: record.contentText,
     vectorId: record.vectorId,
   };
 };
@@ -458,6 +459,7 @@ export class D1AssetRepository implements AssetRepository {
       assetId,
       chunkIndex: chunk.chunkIndex,
       textPreview: chunk.textPreview,
+      contentText: chunk.contentText,
       vectorId: chunk.vectorId ?? null,
       createdAt: now,
       updatedAt: now,
