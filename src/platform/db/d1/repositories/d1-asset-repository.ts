@@ -102,6 +102,16 @@ const buildAssetListWhereClause = (query?: AssetListQuery) => {
   return conditions.length > 0 ? and(...conditions) : undefined;
 };
 
+const splitIntoBatches = <T>(items: T[], batchSize: number): T[][] => {
+  const batches: T[][] = [];
+
+  for (let index = 0; index < items.length; index += batchSize) {
+    batches.push(items.slice(index, index + batchSize));
+  }
+
+  return batches;
+};
+
 // 这里实现面向 D1 的资产仓储；后续如切数据库，只替换这一层。
 export class D1AssetRepository implements AssetRepository {
   private readonly db: ReturnType<typeof createDb>;
@@ -443,18 +453,20 @@ export class D1AssetRepository implements AssetRepository {
     }
 
     const now = new Date().toISOString();
+    const rows = chunks.map((chunk) => ({
+      id: crypto.randomUUID(),
+      assetId,
+      chunkIndex: chunk.chunkIndex,
+      textPreview: chunk.textPreview,
+      vectorId: chunk.vectorId ?? null,
+      createdAt: now,
+      updatedAt: now,
+    }));
 
-    await this.db.insert(assetChunks).values(
-      chunks.map((chunk) => ({
-        id: crypto.randomUUID(),
-        assetId,
-        chunkIndex: chunk.chunkIndex,
-        textPreview: chunk.textPreview,
-        vectorId: chunk.vectorId ?? null,
-        createdAt: now,
-        updatedAt: now,
-      }))
-    );
+    // 这里按批写入，避开 Cloudflare D1 单条查询最多 100 个绑定参数的限制。
+    for (const batch of splitIntoBatches(rows, 12)) {
+      await this.db.insert(assetChunks).values(batch);
+    }
   }
 
   public async failAssetProcessing(id: string, message: string): Promise<void> {
