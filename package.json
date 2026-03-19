@@ -1,0 +1,22 @@
+{
+  "name": "cloudmind",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w @cloudmind/api",
+    "dev:web": "npm run dev -w @cloudmind/web",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck -w @cloudmind/shared && npm run typecheck -w @cloudmind/api && npm run typecheck -w @cloudmind/web",
+    "lint": "biome check .",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.8",
+    "@types/node": "^24.5.2",
+    "typescript": "^5.9.3"
+  }
+}
