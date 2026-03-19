@@ -1,5 +1,6 @@
 import type { AssetDetail } from "@/features/assets/model/types";
 
+import type { BlobStore } from "./blob-store";
 import type { AssetRepository } from "./repository";
 
 const normalizeContent = (content: string): string => {
@@ -20,10 +21,15 @@ const getLatestJob = (asset: AssetDetail) => {
   return asset.jobs[0] ?? null;
 };
 
+interface ProcessResult {
+  summary: string;
+  contentText?: string | null;
+}
+
 const processAsset = async (
   repository: AssetRepository,
   assetId: string,
-  getSummary: (asset: AssetDetail) => string,
+  execute: (asset: AssetDetail) => Promise<ProcessResult> | ProcessResult,
   options?: {
     force?: boolean;
   }
@@ -45,15 +51,13 @@ const processAsset = async (
       await repository.markIngestJobRunning(latestJob.id);
     }
 
-    const content = asset.contentText?.trim();
+    const result = await execute(asset);
 
-    if (!content) {
-      throw new Error("Asset content is empty and cannot be processed.");
-    }
-
-    const summary = getSummary(asset);
-
-    await repository.completeAssetProcessing(asset.id, summary);
+    await repository.completeAssetProcessing(
+      asset.id,
+      result.summary,
+      result.contentText
+    );
 
     if (latestJob) {
       await repository.completeIngestJob(latestJob.id);
@@ -76,6 +80,29 @@ const processAsset = async (
   }
 };
 
+const decodePdfSignature = (body: ArrayBuffer): string => {
+  const signatureBytes = body.slice(0, 4);
+
+  return new TextDecoder().decode(signatureBytes);
+};
+
+const createPdfPlaceholderContent = (
+  asset: AssetDetail,
+  size: number,
+  contentType: string | undefined
+): string => {
+  return [
+    `PDF asset: ${asset.title}`,
+    `Storage: R2`,
+    `Raw key: ${asset.rawR2Key ?? "N/A"}`,
+    `Detected MIME type: ${contentType ?? asset.mimeType ?? "unknown"}`,
+    `Detected size: ${size} bytes`,
+    "",
+    "This is placeholder content produced by the minimal PDF processor.",
+    "A real text extraction pipeline will replace this field later.",
+  ].join("\n");
+};
+
 // 这里实现最小处理器：先把文本资产从 pending 推到 ready，后续再拆成真正的异步流水线。
 export const processTextAsset = async (
   repository: AssetRepository,
@@ -94,7 +121,9 @@ export const processTextAsset = async (
         throw new Error("Asset content is empty and cannot be processed.");
       }
 
-      return createTextSummary(content);
+      return {
+        summary: createTextSummary(content),
+      };
     },
     options
   );
@@ -117,7 +146,54 @@ export const processUrlAsset = async (
         throw new Error("Asset URL is empty and cannot be processed.");
       }
 
-      return `Saved URL asset for ${sourceUrl}`;
+      return {
+        summary: `Saved URL asset for ${sourceUrl}`,
+      };
+    },
+    options
+  );
+};
+
+export const processPdfAsset = async (
+  repository: AssetRepository,
+  blobStore: BlobStore,
+  assetId: string,
+  options?: {
+    force?: boolean;
+  }
+): Promise<AssetDetail> => {
+  return processAsset(
+    repository,
+    assetId,
+    async (asset) => {
+      const rawR2Key = asset.rawR2Key?.trim();
+
+      if (!rawR2Key) {
+        throw new Error("Asset raw file key is missing.");
+      }
+
+      const object = await blobStore.get(rawR2Key);
+
+      if (!object) {
+        throw new Error("Asset file was not found in blob storage.");
+      }
+
+      if (object.size === 0) {
+        throw new Error("Asset file is empty and cannot be processed.");
+      }
+
+      if (decodePdfSignature(object.body) !== "%PDF") {
+        throw new Error("Uploaded file is not a valid PDF.");
+      }
+
+      return {
+        summary: `Verified PDF asset in R2 (${object.size} bytes).`,
+        contentText: createPdfPlaceholderContent(
+          asset,
+          object.size,
+          object.contentType
+        ),
+      };
     },
     options
   );

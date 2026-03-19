@@ -6,7 +6,14 @@ import type {
   AssetListResult,
   IngestJobSummary,
 } from "@/features/assets/model/types";
-import { processTextAsset } from "@/features/assets/server/processor";
+import type {
+  BlobObject,
+  BlobStore,
+} from "@/features/assets/server/blob-store";
+import {
+  processPdfAsset,
+  processTextAsset,
+} from "@/features/assets/server/processor";
 import type {
   AssetRepository,
   CreateFileAssetInput,
@@ -28,6 +35,15 @@ const createJob = (
   };
 };
 
+const encodeArrayBuffer = (value: string): ArrayBuffer => {
+  const encoded = new TextEncoder().encode(value);
+
+  return encoded.buffer.slice(
+    encoded.byteOffset,
+    encoded.byteOffset + encoded.byteLength
+  ) as ArrayBuffer;
+};
+
 const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
   return {
     id: "asset-1",
@@ -39,6 +55,8 @@ const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
     createdAt: "2026-03-19T00:00:00.000Z",
     updatedAt: "2026-03-19T00:00:00.000Z",
     contentText: "Default content",
+    rawR2Key: null,
+    contentR2Key: null,
     mimeType: "text/plain",
     language: null,
     errorMessage: null,
@@ -109,7 +127,8 @@ class InMemoryAssetRepository implements AssetRepository {
 
   public async completeAssetProcessing(
     id: string,
-    summary: string
+    summary: string,
+    contentText?: string | null
   ): Promise<void> {
     this.assertId(id);
     this.asset.status = "ready";
@@ -118,6 +137,10 @@ class InMemoryAssetRepository implements AssetRepository {
     this.asset.failedAt = null;
     this.asset.processedAt = "2026-03-19T00:02:00.000Z";
     this.asset.updatedAt = "2026-03-19T00:02:00.000Z";
+
+    if (contentText !== undefined) {
+      this.asset.contentText = contentText;
+    }
   }
 
   public async failAssetProcessing(id: string, message: string): Promise<void> {
@@ -163,6 +186,24 @@ class InMemoryAssetRepository implements AssetRepository {
     }
 
     return job;
+  }
+}
+
+class InMemoryBlobStore implements BlobStore {
+  private readonly objects = new Map<string, BlobObject>();
+
+  public constructor(objects: BlobObject[] = []) {
+    for (const object of objects) {
+      this.objects.set(object.key, object);
+    }
+  }
+
+  public async put(): Promise<void> {
+    throw new Error("put is not used in processor tests.");
+  }
+
+  public async get(key: string): Promise<BlobObject | null> {
+    return this.objects.get(key) ?? null;
   }
 }
 
@@ -220,5 +261,93 @@ describe("processTextAsset", () => {
     expect(result.status).toBe("ready");
     expect(result.summary).toBe("Existing summary");
     expect(result.jobs[0]?.status).toBe("succeeded");
+  });
+});
+
+describe("processPdfAsset", () => {
+  it("verifies the PDF in R2 and promotes the asset to ready", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-pdf-1",
+        type: "pdf",
+        title: "CloudMind Whitepaper",
+        contentText: null,
+        rawR2Key: "assets/asset-pdf-1/raw/cloudmind.pdf",
+        mimeType: "application/pdf",
+      })
+    );
+    const blobStore = new InMemoryBlobStore([
+      {
+        key: "assets/asset-pdf-1/raw/cloudmind.pdf",
+        body: encodeArrayBuffer("%PDF-1.7 sample"),
+        size: 15,
+        contentType: "application/pdf",
+      },
+    ]);
+
+    const result = await processPdfAsset(repository, blobStore, "asset-pdf-1");
+
+    expect(result.status).toBe("ready");
+    expect(result.summary).toBe("Verified PDF asset in R2 (15 bytes).");
+    expect(result.contentText).toContain("PDF asset: CloudMind Whitepaper");
+    expect(result.contentText).toContain(
+      "Raw key: assets/asset-pdf-1/raw/cloudmind.pdf"
+    );
+    expect(result.jobs[0]?.status).toBe("succeeded");
+  });
+
+  it("marks the asset as failed when the R2 object is missing", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-pdf-missing",
+        type: "pdf",
+        contentText: null,
+        rawR2Key: "assets/asset-pdf-missing/raw/missing.pdf",
+        mimeType: "application/pdf",
+      })
+    );
+    const blobStore = new InMemoryBlobStore();
+
+    const result = await processPdfAsset(
+      repository,
+      blobStore,
+      "asset-pdf-missing"
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.errorMessage).toBe(
+      "Asset file was not found in blob storage."
+    );
+    expect(result.jobs[0]?.status).toBe("failed");
+  });
+
+  it("marks the asset as failed when the uploaded file is not a PDF", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-pdf-invalid",
+        type: "pdf",
+        contentText: null,
+        rawR2Key: "assets/asset-pdf-invalid/raw/not-a-pdf.pdf",
+        mimeType: "application/pdf",
+      })
+    );
+    const blobStore = new InMemoryBlobStore([
+      {
+        key: "assets/asset-pdf-invalid/raw/not-a-pdf.pdf",
+        body: encodeArrayBuffer("NOTPDF"),
+        size: 6,
+        contentType: "application/pdf",
+      },
+    ]);
+
+    const result = await processPdfAsset(
+      repository,
+      blobStore,
+      "asset-pdf-invalid"
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.errorMessage).toBe("Uploaded file is not a valid PDF.");
+    expect(result.jobs[0]?.status).toBe("failed");
   });
 });

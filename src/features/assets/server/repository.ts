@@ -30,7 +30,11 @@ export interface AssetRepository {
   createUrlAsset(input: CreateUrlAssetInput): Promise<AssetDetail>;
   createFileAsset(input: CreateFileAssetInput): Promise<AssetDetail>;
   markAssetProcessing(id: string): Promise<void>;
-  completeAssetProcessing(id: string, summary: string): Promise<void>;
+  completeAssetProcessing(
+    id: string,
+    summary: string,
+    contentText?: string | null
+  ): Promise<void>;
   failAssetProcessing(id: string, message: string): Promise<void>;
   markIngestJobRunning(jobId: string): Promise<void>;
   completeIngestJob(jobId: string): Promise<void>;

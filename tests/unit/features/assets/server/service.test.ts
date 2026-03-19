@@ -40,6 +40,8 @@ const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
     createdAt: "2026-03-19T00:00:00.000Z",
     updatedAt: "2026-03-19T00:00:00.000Z",
     contentText: "Default content",
+    rawR2Key: null,
+    contentR2Key: null,
     mimeType: "text/plain",
     language: null,
     errorMessage: null,
@@ -121,6 +123,8 @@ class InMemoryAssetRepository implements AssetRepository {
       sourceUrl: null,
       status: "pending",
       contentText: null,
+      rawR2Key: input.rawR2Key,
+      contentR2Key: null,
       mimeType: input.mimeType,
       source: {
         kind: "upload",
@@ -147,7 +151,8 @@ class InMemoryAssetRepository implements AssetRepository {
 
   public async completeAssetProcessing(
     _id: string,
-    _summary: string
+    _summary: string,
+    _contentText?: string | null
   ): Promise<void> {}
 
   public async failAssetProcessing(
@@ -164,8 +169,10 @@ class InMemoryAssetRepository implements AssetRepository {
 
 describe("asset service", () => {
   const processTextAssetMock = vi.fn();
+  const processPdfAssetMock = vi.fn();
   const blobStoreMock: BlobStore = {
     put: vi.fn(),
+    get: vi.fn(),
   };
   const getAssetRepositoryMock = vi.fn();
 
@@ -193,8 +200,10 @@ describe("asset service", () => {
       getBlobStore: vi.fn().mockResolvedValue(blobStoreMock),
       processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
       processUrlAsset: vi.fn(),
+      processPdfAsset: processPdfAssetMock,
       getProcessTextAssetForced: vi.fn(),
       getProcessUrlAssetForced: vi.fn(),
+      getProcessPdfAssetForced: vi.fn(),
     });
 
     const result = await service.ingestTextAsset(
@@ -233,8 +242,10 @@ describe("asset service", () => {
       getBlobStore: vi.fn().mockResolvedValue(blobStoreMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: vi.fn(),
+      processPdfAsset: processPdfAssetMock,
       getProcessTextAssetForced: vi.fn(),
       getProcessUrlAssetForced: vi.fn(),
+      getProcessPdfAssetForced: vi.fn(),
     });
 
     const result = await service.listAssets({ APP_NAME: "cloudmind-test" });
@@ -256,20 +267,33 @@ describe("asset service", () => {
     expect(processTextAssetMock).not.toHaveBeenCalled();
   });
 
-  it("ingestFileAsset uploads the file to blob storage before creating the asset", async () => {
+  it("ingestFileAsset uploads the file and forwards the created asset to the PDF processor", async () => {
     const repository = new InMemoryAssetRepository(
       createAsset({
         id: "asset-original",
       })
     );
     const getBlobStoreMock = vi.fn().mockResolvedValue(blobStoreMock);
+    const processedAsset = createAsset({
+      id: "asset-file-1",
+      type: "pdf",
+      title: "CloudMind PDF",
+      status: "ready",
+      summary: "Verified PDF asset in R2 (8 bytes).",
+      contentText: "PDF placeholder content",
+      rawR2Key: "assets/asset-file-1/raw/cloudmind.pdf",
+      mimeType: "application/pdf",
+      jobs: [createJob({ status: "succeeded" })],
+    });
     const service = createAssetService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock,
       processTextAsset: processTextAssetMock,
       processUrlAsset: vi.fn(),
+      processPdfAsset: processPdfAssetMock.mockResolvedValue(processedAsset),
       getProcessTextAssetForced: vi.fn(),
       getProcessUrlAssetForced: vi.fn(),
+      getProcessPdfAssetForced: vi.fn(),
     });
     const file = new File(["%PDF-1.7"], "cloudmind.pdf", {
       type: "application/pdf",
@@ -293,11 +317,60 @@ describe("asset service", () => {
         contentDisposition: 'inline; filename="cloudmind.pdf"',
       })
     );
-    expect(result).toMatchObject({
+    expect(processPdfAssetMock).toHaveBeenCalledWith(
+      repository,
+      blobStoreMock,
+      expect.any(String)
+    );
+    expect(result).toEqual(processedAsset);
+  });
+
+  it("reprocessAsset uses the PDF processor for pdf assets", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-pdf-1",
+        type: "pdf",
+        title: "CloudMind PDF",
+        rawR2Key: "assets/asset-pdf-1/raw/cloudmind.pdf",
+        mimeType: "application/pdf",
+      })
+    );
+    const getBlobStoreMock = vi.fn().mockResolvedValue(blobStoreMock);
+    const processedAsset = createAsset({
+      id: "asset-pdf-1",
       type: "pdf",
-      title: "CloudMind PDF",
-      status: "pending",
+      status: "ready",
+      summary: "Verified PDF asset in R2 (8 bytes).",
+      rawR2Key: "assets/asset-pdf-1/raw/cloudmind.pdf",
       mimeType: "application/pdf",
     });
+    const getProcessPdfAssetForcedMock = vi
+      .fn()
+      .mockResolvedValue(processedAsset);
+    const service = createAssetService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock,
+      processTextAsset: processTextAssetMock,
+      processUrlAsset: vi.fn(),
+      processPdfAsset: processPdfAssetMock,
+      getProcessTextAssetForced: vi.fn(),
+      getProcessUrlAssetForced: vi.fn(),
+      getProcessPdfAssetForced: getProcessPdfAssetForcedMock,
+    });
+
+    const result = await service.reprocessAsset(
+      { APP_NAME: "cloudmind-test" },
+      "asset-pdf-1"
+    );
+
+    expect(getBlobStoreMock).toHaveBeenCalledWith({
+      APP_NAME: "cloudmind-test",
+    });
+    expect(getProcessPdfAssetForcedMock).toHaveBeenCalledWith(
+      repository,
+      blobStoreMock,
+      "asset-pdf-1"
+    );
+    expect(result).toEqual(processedAsset);
   });
 });

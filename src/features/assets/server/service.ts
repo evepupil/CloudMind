@@ -12,7 +12,11 @@ import {
   createRawAssetBlobKey,
   R2BlobStore,
 } from "./blob-store";
-import { processTextAsset, processUrlAsset } from "./processor";
+import {
+  processPdfAsset,
+  processTextAsset,
+  processUrlAsset,
+} from "./processor";
 import type {
   AssetRepository,
   CreateFileAssetInput,
@@ -61,12 +65,22 @@ interface AssetServiceDependencies {
     repository: AssetRepository,
     assetId: string
   ) => Promise<AssetDetail>;
+  processPdfAsset: (
+    repository: AssetRepository,
+    blobStore: BlobStore,
+    assetId: string
+  ) => Promise<AssetDetail>;
   getProcessTextAssetForced: (
     repository: AssetRepository,
     assetId: string
   ) => Promise<AssetDetail>;
   getProcessUrlAssetForced: (
     repository: AssetRepository,
+    assetId: string
+  ) => Promise<AssetDetail>;
+  getProcessPdfAssetForced: (
+    repository: AssetRepository,
+    blobStore: BlobStore,
     assetId: string
   ) => Promise<AssetDetail>;
 }
@@ -76,10 +90,13 @@ const defaultDependencies: AssetServiceDependencies = {
   getBlobStore,
   processTextAsset,
   processUrlAsset,
+  processPdfAsset,
   getProcessTextAssetForced: (repository, assetId) =>
     processTextAsset(repository, assetId, { force: true }),
   getProcessUrlAssetForced: (repository, assetId) =>
     processUrlAsset(repository, assetId, { force: true }),
+  getProcessPdfAssetForced: (repository, blobStore, assetId) =>
+    processPdfAsset(repository, blobStore, assetId, { force: true }),
 };
 
 // 这里通过 service 层收敛仓储和处理器入口，便于路由复用，也便于测试替换依赖。
@@ -175,7 +192,7 @@ export const createAssetService = (
         contentDisposition,
       });
 
-      return repository.createFileAsset({
+      const createdAsset = await repository.createFileAsset({
         id: assetId,
         title: input.title,
         fileName: input.file.name,
@@ -183,6 +200,12 @@ export const createAssetService = (
         mimeType: input.file.type || "application/pdf",
         rawR2Key,
       });
+
+      return dependencies.processPdfAsset(
+        repository,
+        blobStore,
+        createdAsset.id
+      );
     },
 
     async reprocessAsset(
@@ -198,6 +221,15 @@ export const createAssetService = (
           return dependencies.getProcessTextAssetForced(repository, asset.id);
         case "url":
           return dependencies.getProcessUrlAssetForced(repository, asset.id);
+        case "pdf": {
+          const blobStore = await dependencies.getBlobStore(bindings);
+
+          return dependencies.getProcessPdfAssetForced(
+            repository,
+            blobStore,
+            asset.id
+          );
+        }
         default:
           throw new Error(
             `Asset type "${asset.type}" is not supported for reprocess.`

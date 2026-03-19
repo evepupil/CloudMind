@@ -5,8 +5,16 @@ export interface PutBlobInput {
   contentDisposition?: string | undefined;
 }
 
+export interface BlobObject {
+  key: string;
+  body: ArrayBuffer;
+  size: number;
+  contentType?: string | undefined;
+}
+
 export interface BlobStore {
   put(input: PutBlobInput): Promise<void>;
+  get(key: string): Promise<BlobObject | null>;
 }
 
 export class BlobStoreConfigError extends Error {
@@ -54,5 +62,20 @@ export class R2BlobStore implements BlobStore {
     await this.bucket.put(input.key, input.body, {
       httpMetadata,
     });
+  }
+
+  public async get(key: string): Promise<BlobObject | null> {
+    const object = await this.bucket.get(key);
+
+    if (!object) {
+      return null;
+    }
+
+    return {
+      key,
+      body: await object.arrayBuffer(),
+      size: object.size,
+      contentType: object.httpMetadata?.contentType,
+    };
   }
 }

@@ -133,6 +133,8 @@ export class D1AssetRepository implements AssetRepository {
     return {
       ...mapAssetSummary(assetRecord),
       contentText: assetRecord.contentText,
+      rawR2Key: assetRecord.rawR2Key,
+      contentR2Key: assetRecord.contentR2Key,
       mimeType: assetRecord.mimeType,
       language: assetRecord.language,
       errorMessage: assetRecord.errorMessage,
@@ -339,21 +341,24 @@ export class D1AssetRepository implements AssetRepository {
 
   public async completeAssetProcessing(
     id: string,
-    summary: string
+    summary: string,
+    contentText?: string | null
   ): Promise<void> {
     const now = new Date().toISOString();
+    const updatePayload: Partial<typeof assets.$inferInsert> = {
+      status: "ready",
+      summary,
+      errorMessage: null,
+      failedAt: null,
+      processedAt: now,
+      updatedAt: now,
+    };
 
-    await this.db
-      .update(assets)
-      .set({
-        status: "ready",
-        summary,
-        errorMessage: null,
-        failedAt: null,
-        processedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(assets.id, id));
+    if (contentText !== undefined) {
+      updatePayload.contentText = contentText;
+    }
+
+    await this.db.update(assets).set(updatePayload).where(eq(assets.id, id));
   }
 
   public async failAssetProcessing(id: string, message: string): Promise<void> {

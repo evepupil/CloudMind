@@ -32,6 +32,8 @@ const createAssetDetail = (
     createdAt: "2026-03-19T00:00:00.000Z",
     updatedAt: "2026-03-19T00:02:00.000Z",
     contentText: "CloudMind note body",
+    rawR2Key: null,
+    contentR2Key: null,
     mimeType: "text/plain",
     language: null,
     errorMessage: null,
@@ -297,11 +299,11 @@ describe("asset routes", () => {
       id: "asset-file-1",
       type: "pdf",
       title: "CloudMind Spec",
-      status: "pending",
+      status: "ready",
       mimeType: "application/pdf",
-      contentText: null,
-      processedAt: null,
-      summary: null,
+      contentText: "PDF placeholder content",
+      rawR2Key: "assets/asset-file-1/raw/cloudmind-spec.pdf",
+      summary: "Verified PDF asset in R2 (9 bytes).",
     });
     const formData = new FormData();
 
@@ -332,7 +334,7 @@ describe("asset routes", () => {
         id: "asset-file-1",
         type: "pdf",
         title: "CloudMind Spec",
-        status: "pending",
+        status: "ready",
         createdAt: "2026-03-19T00:00:00.000Z",
       },
     });
@@ -379,7 +381,10 @@ describe("asset routes", () => {
       id: "asset-file-form-1",
       type: "pdf",
       title: "CloudMind Whitepaper",
-      status: "pending",
+      status: "ready",
+      contentText: "PDF placeholder content",
+      rawR2Key: "assets/asset-file-form-1/raw/cloudmind-whitepaper.pdf",
+      summary: "Verified PDF asset in R2 (9 bytes).",
     });
     const formData = new FormData();
 
