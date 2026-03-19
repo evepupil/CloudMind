@@ -1,6 +1,6 @@
-import type { AssetDetail } from "@/features/assets/model/types";
 import type { AssetRepository } from "@/core/assets/ports";
 import type { BlobStore } from "@/core/blob/ports";
+import type { AssetDetail } from "@/features/assets/model/types";
 
 const normalizeContent = (content: string): string => {
   return content.replace(/\s+/g, " ").trim();
@@ -102,7 +102,7 @@ const createPdfPlaceholderContent = (
   ].join("\n");
 };
 
-// 这里实现最小处理器：先把文本资产从 pending 推到 ready，后续再拆成真正的异步流水线。
+// 这里实现最小处理器，让采集和重处理共享统一状态流转。
 export const processTextAsset = async (
   repository: AssetRepository,
   assetId: string,

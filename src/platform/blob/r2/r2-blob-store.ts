@@ -1,8 +1,4 @@
-import type {
-  BlobObject,
-  BlobStore,
-  PutBlobInput,
-} from "@/core/blob/ports";
+import type { BlobObject, BlobStore, PutBlobInput } from "@/core/blob/ports";
 
 // 这里封装最小 R2 适配器，后续切到 S3-compatible storage 时只替换这一层。
 export class R2BlobStore implements BlobStore {

@@ -1,24 +1,23 @@
 import { describe, expect, it } from "vitest";
 
 import type {
+  AssetRepository,
+  CreateFileAssetInput,
+  CreateTextAssetInput,
+  CreateUrlAssetInput,
+} from "@/core/assets/ports";
+import type { BlobObject, BlobStore } from "@/core/blob/ports";
+import type {
   AssetDetail,
   AssetListQuery,
   AssetListResult,
   IngestJobSummary,
 } from "@/features/assets/model/types";
-import type {
-  BlobObject,
-  BlobStore,
-} from "@/core/blob/ports";
-import type {
-  AssetRepository,
-  CreateFileAssetInput,
-  CreateTextAssetInput,
-} from "@/core/assets/ports";
 import {
   processPdfAsset,
   processTextAsset,
-} from "@/features/assets/server/processor";
+  processUrlAsset,
+} from "@/features/ingest/server/processor";
 
 const createJob = (
   overrides: Partial<IngestJobSummary> = {}
@@ -73,7 +72,6 @@ const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
   };
 };
 
-// 这里用内存版仓储替代 D1，专注验证处理器的状态流转而不是基础设施。
 class InMemoryAssetRepository implements AssetRepository {
   private asset: AssetDetail;
 
@@ -83,7 +81,7 @@ class InMemoryAssetRepository implements AssetRepository {
 
   public async listAssets(_query?: AssetListQuery): Promise<AssetListResult> {
     return {
-      items: [this.asset],
+      items: [structuredClone(this.asset)],
       pagination: {
         page: 1,
         pageSize: 20,
@@ -107,7 +105,9 @@ class InMemoryAssetRepository implements AssetRepository {
     return structuredClone(this.asset);
   }
 
-  public async createUrlAsset(): Promise<AssetDetail> {
+  public async createUrlAsset(
+    _input: CreateUrlAssetInput
+  ): Promise<AssetDetail> {
     return structuredClone(this.asset);
   }
 
@@ -153,6 +153,7 @@ class InMemoryAssetRepository implements AssetRepository {
 
   public async markIngestJobRunning(jobId: string): Promise<void> {
     const job = this.getJob(jobId);
+
     job.status = "running";
     job.errorMessage = null;
     job.updatedAt = "2026-03-19T00:01:00.000Z";
@@ -160,6 +161,7 @@ class InMemoryAssetRepository implements AssetRepository {
 
   public async completeIngestJob(jobId: string): Promise<void> {
     const job = this.getJob(jobId);
+
     job.status = "succeeded";
     job.errorMessage = null;
     job.updatedAt = "2026-03-19T00:02:00.000Z";
@@ -167,6 +169,7 @@ class InMemoryAssetRepository implements AssetRepository {
 
   public async failIngestJob(jobId: string, message: string): Promise<void> {
     const job = this.getJob(jobId);
+
     job.status = "failed";
     job.errorMessage = message;
     job.updatedAt = "2026-03-19T00:03:00.000Z";
@@ -260,6 +263,28 @@ describe("processTextAsset", () => {
 
     expect(result.status).toBe("ready");
     expect(result.summary).toBe("Existing summary");
+    expect(result.jobs[0]?.status).toBe("succeeded");
+  });
+});
+
+describe("processUrlAsset", () => {
+  it("summarizes the saved URL and completes the latest job", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-url-1",
+        type: "url",
+        title: "Cloudflare Docs",
+        contentText: null,
+        sourceUrl: "https://developers.cloudflare.com",
+      })
+    );
+
+    const result = await processUrlAsset(repository, "asset-url-1");
+
+    expect(result.status).toBe("ready");
+    expect(result.summary).toBe(
+      "Saved URL asset for https://developers.cloudflare.com"
+    );
     expect(result.jobs[0]?.status).toBe("succeeded");
   });
 });
