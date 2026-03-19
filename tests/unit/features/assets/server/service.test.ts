@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AssetDetail,
   AssetListQuery,
-  AssetSummary,
+  AssetListResult,
   IngestJobSummary,
 } from "@/features/assets/model/types";
 import type {
@@ -61,8 +61,16 @@ class InMemoryAssetRepository implements AssetRepository {
     this.asset = asset;
   }
 
-  public async listAssets(_query?: AssetListQuery): Promise<AssetSummary[]> {
-    return [this.asset];
+  public async listAssets(_query?: AssetListQuery): Promise<AssetListResult> {
+    return {
+      items: [this.asset],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 1,
+        totalPages: 1,
+      },
+    };
   }
 
   public async getAssetById(id: string): Promise<AssetDetail> {
@@ -146,6 +154,8 @@ describe("asset service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
       processUrlAsset: vi.fn(),
+      getProcessTextAssetForced: vi.fn(),
+      getProcessUrlAssetForced: vi.fn(),
     });
 
     const result = await service.ingestTextAsset(
@@ -183,16 +193,26 @@ describe("asset service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       processTextAsset: processTextAssetMock,
       processUrlAsset: vi.fn(),
+      getProcessTextAssetForced: vi.fn(),
+      getProcessUrlAssetForced: vi.fn(),
     });
 
     const result = await service.listAssets({ APP_NAME: "cloudmind-test" });
 
-    expect(result).toEqual([
-      expect.objectContaining({
-        id: "asset-list-1",
-        title: "Asset list item",
-      }),
-    ]);
+    expect(result).toEqual({
+      items: [
+        expect.objectContaining({
+          id: "asset-list-1",
+          title: "Asset list item",
+        }),
+      ],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 1,
+        totalPages: 1,
+      },
+    });
     expect(processTextAssetMock).not.toHaveBeenCalled();
   });
 });

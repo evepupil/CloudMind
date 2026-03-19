@@ -3,7 +3,7 @@ import type { AppBindings } from "@/env";
 import type {
   AssetDetail,
   AssetListQuery,
-  AssetSummary,
+  AssetListResult,
 } from "@/features/assets/model/types";
 
 import { processTextAsset, processUrlAsset } from "./processor";
@@ -40,12 +40,24 @@ interface AssetServiceDependencies {
     repository: AssetRepository,
     assetId: string
   ) => Promise<AssetDetail>;
+  getProcessTextAssetForced: (
+    repository: AssetRepository,
+    assetId: string
+  ) => Promise<AssetDetail>;
+  getProcessUrlAssetForced: (
+    repository: AssetRepository,
+    assetId: string
+  ) => Promise<AssetDetail>;
 }
 
 const defaultDependencies: AssetServiceDependencies = {
   getAssetRepository,
   processTextAsset,
   processUrlAsset,
+  getProcessTextAssetForced: (repository, assetId) =>
+    processTextAsset(repository, assetId, { force: true }),
+  getProcessUrlAssetForced: (repository, assetId) =>
+    processUrlAsset(repository, assetId, { force: true }),
 };
 
 // 这里通过 service 层收敛仓储和处理器入口，便于路由复用，也便于测试替换依赖。
@@ -56,7 +68,7 @@ export const createAssetService = (
     async listAssets(
       bindings: AppBindings | undefined,
       query?: AssetListQuery
-    ): Promise<AssetSummary[]> {
+    ): Promise<AssetListResult> {
       const repository = await dependencies.getAssetRepository(bindings);
 
       return repository.listAssets(query);
@@ -108,6 +120,43 @@ export const createAssetService = (
 
       return dependencies.processUrlAsset(repository, createdAsset.id);
     },
+
+    async reprocessAsset(
+      bindings: AppBindings | undefined,
+      id: string
+    ): Promise<AssetDetail> {
+      const repository = await dependencies.getAssetRepository(bindings);
+      const asset = await repository.getAssetById(id);
+
+      switch (asset.type) {
+        case "note":
+        case "chat":
+          return dependencies.getProcessTextAssetForced(repository, asset.id);
+        case "url":
+          return dependencies.getProcessUrlAssetForced(repository, asset.id);
+        default:
+          throw new Error(
+            `Asset type "${asset.type}" is not supported for reprocess.`
+          );
+      }
+    },
+
+    async searchAssets(
+      bindings: AppBindings | undefined,
+      query: {
+        query: string;
+        page?: number | undefined;
+        pageSize?: number | undefined;
+      }
+    ): Promise<AssetListResult> {
+      const repository = await dependencies.getAssetRepository(bindings);
+
+      return repository.listAssets({
+        query: query.query,
+        page: query.page,
+        pageSize: query.pageSize,
+      });
+    },
   };
 };
 
@@ -120,4 +169,6 @@ export const {
   createUrlAsset,
   ingestTextAsset,
   ingestUrlAsset,
+  reprocessAsset,
+  searchAssets,
 } = assetService;

@@ -1,5 +1,6 @@
 import type {
   AssetListQuery,
+  AssetListResult,
   AssetStatus,
   AssetSummary,
   AssetType,
@@ -34,15 +35,45 @@ const formatDate = (value: string): string => {
 // 这里提供资产列表页，先覆盖文本资产写入和资产状态查看两个 MVP 场景。
 export const AssetsPage = ({
   items,
+  pagination,
   filters,
   errorMessage,
   flashMessage,
 }: {
   items: AssetSummary[];
+  pagination: AssetListResult["pagination"];
   filters: AssetListQuery;
   errorMessage?: string | undefined;
   flashMessage?: string | undefined;
 }) => {
+  const previousPage = pagination.page > 1 ? pagination.page - 1 : null;
+  const nextPage =
+    pagination.page < pagination.totalPages ? pagination.page + 1 : null;
+  const currentParams = new URLSearchParams();
+
+  if (filters.status) {
+    currentParams.set("status", filters.status);
+  }
+
+  if (filters.type) {
+    currentParams.set("type", filters.type);
+  }
+
+  if (filters.query) {
+    currentParams.set("query", filters.query);
+  }
+
+  if (filters.pageSize) {
+    currentParams.set("pageSize", String(filters.pageSize));
+  }
+
+  const buildPageHref = (page: number) => {
+    const params = new URLSearchParams(currentParams);
+    params.set("page", String(page));
+
+    return `/assets?${params.toString()}`;
+  };
+
   return (
     <PageShell
       title="Assets"
@@ -227,7 +258,7 @@ export const AssetsPage = ({
         >
           <h2 style={{ margin: 0, fontSize: "24px" }}>Asset Library</h2>
           <span style={{ color: "#64748b", fontSize: "14px" }}>
-            {items.length} assets
+            {pagination.total} assets
           </span>
         </div>
         <form
@@ -328,6 +359,51 @@ export const AssetsPage = ({
             </a>
           </div>
         </form>
+        {pagination.totalPages > 1 ? (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "12px",
+              marginBottom: "18px",
+            }}
+          >
+            <span style={{ color: "#64748b", fontSize: "14px" }}>
+              Page {pagination.page} / {pagination.totalPages}
+            </span>
+            <div style={{ display: "flex", gap: "12px" }}>
+              {previousPage ? (
+                <a
+                  href={buildPageHref(previousPage)}
+                  style={{
+                    color: "#0f172a",
+                    textDecoration: "none",
+                    fontWeight: 700,
+                  }}
+                >
+                  Previous
+                </a>
+              ) : (
+                <span style={{ color: "#94a3b8" }}>Previous</span>
+              )}
+              {nextPage ? (
+                <a
+                  href={buildPageHref(nextPage)}
+                  style={{
+                    color: "#0f172a",
+                    textDecoration: "none",
+                    fontWeight: 700,
+                  }}
+                >
+                  Next
+                </a>
+              ) : (
+                <span style={{ color: "#94a3b8" }}>Next</span>
+              )}
+            </div>
+          </div>
+        ) : null}
         {items.length === 0 ? (
           <article
             style={{

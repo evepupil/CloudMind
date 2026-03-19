@@ -1,10 +1,11 @@
-import { and, desc, eq, like, or } from "drizzle-orm";
+import { and, count, desc, eq, like, or } from "drizzle-orm";
 
 import { createDb } from "@/db/client";
 import { assetSources, assets, ingestJobs } from "@/db/schema";
 import type {
   AssetDetail,
   AssetListQuery,
+  AssetListResult,
   AssetSourceKind,
   AssetSummary,
   AssetType,
@@ -52,8 +53,11 @@ export class D1AssetRepository implements AssetRepository {
     this.db = createDb(database);
   }
 
-  public async listAssets(query?: AssetListQuery): Promise<AssetSummary[]> {
+  public async listAssets(query?: AssetListQuery): Promise<AssetListResult> {
     const conditions = [];
+    const page = query?.page ?? 1;
+    const pageSize = query?.pageSize ?? 20;
+    const offset = (page - 1) * pageSize;
 
     if (query?.status) {
       conditions.push(eq(assets.status, query.status));
@@ -74,13 +78,31 @@ export class D1AssetRepository implements AssetRepository {
       );
     }
 
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     const records = await this.db
       .select()
       .from(assets)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(assets.createdAt));
+      .where(whereClause)
+      .orderBy(desc(assets.createdAt))
+      .limit(pageSize)
+      .offset(offset);
 
-    return records.map(mapAssetSummary);
+    const [totalResult] = await this.db
+      .select({ value: count() })
+      .from(assets)
+      .where(whereClause);
+
+    const total = totalResult?.value ?? 0;
+
+    return {
+      items: records.map(mapAssetSummary),
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: total === 0 ? 0 : Math.ceil(total / pageSize),
+      },
+    };
   }
 
   public async getAssetById(id: string): Promise<AssetDetail> {

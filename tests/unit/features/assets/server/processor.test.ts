@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type {
   AssetDetail,
   AssetListQuery,
-  AssetSummary,
+  AssetListResult,
   IngestJobSummary,
 } from "@/features/assets/model/types";
 import { processTextAsset } from "@/features/assets/server/processor";
@@ -62,8 +62,16 @@ class InMemoryAssetRepository implements AssetRepository {
     this.asset = asset;
   }
 
-  public async listAssets(_query?: AssetListQuery): Promise<AssetSummary[]> {
-    return [this.asset];
+  public async listAssets(_query?: AssetListQuery): Promise<AssetListResult> {
+    return {
+      items: [this.asset],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 1,
+        totalPages: 1,
+      },
+    };
   }
 
   public async getAssetById(id: string): Promise<AssetDetail> {

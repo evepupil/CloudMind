@@ -11,6 +11,8 @@ export const assetListQuerySchema = z.object({
   status: assetStatusSchema.optional(),
   type: assetTypeSchema.optional(),
   query: z.string().trim().max(200, "Query is too long").optional(),
+  page: z.coerce.number().int().min(1).max(9999).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).optional(),
 });
 
 export const ingestTextPayloadSchema = z.object({
@@ -25,6 +27,16 @@ export const ingestTextPayloadSchema = z.object({
 export const ingestUrlPayloadSchema = z.object({
   title: z.string().trim().max(200, "Title is too long").optional(),
   url: z.url("A valid URL is required").max(2000, "URL is too long"),
+});
+
+export const assetSearchPayloadSchema = z.object({
+  query: z
+    .string()
+    .trim()
+    .min(1, "Query is required")
+    .max(200, "Query is too long"),
+  page: z.number().int().min(1).max(9999).optional(),
+  pageSize: z.number().int().min(1).max(100).optional(),
 });
 
 export type AssetListQueryInput = z.infer<typeof assetListQuerySchema>;

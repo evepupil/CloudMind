@@ -13,6 +13,8 @@ vi.mock("@/features/assets/server/service", () => {
     ingestTextAsset: vi.fn(),
     ingestUrlAsset: vi.fn(),
     listAssets: vi.fn(),
+    reprocessAsset: vi.fn(),
+    searchAssets: vi.fn(),
   };
 });
 
@@ -229,16 +231,24 @@ describe("asset routes", () => {
     const app = createApp();
     const env = { APP_NAME: "cloudmind-test" };
 
-    vi.mocked(assetService.listAssets).mockResolvedValue([
-      createAssetDetail({
-        id: "asset-filter-1",
-        type: "url",
-        title: "Filtered asset",
-      }),
-    ]);
+    vi.mocked(assetService.listAssets).mockResolvedValue({
+      items: [
+        createAssetDetail({
+          id: "asset-filter-1",
+          type: "url",
+          title: "Filtered asset",
+        }),
+      ],
+      pagination: {
+        page: 2,
+        pageSize: 10,
+        total: 21,
+        totalPages: 3,
+      },
+    });
 
     const response = await app.request(
-      "/api/assets?status=ready&type=url&query=cloudflare",
+      "/api/assets?status=ready&type=url&query=cloudflare&page=2&pageSize=10",
       undefined,
       env
     );
@@ -252,11 +262,108 @@ describe("asset routes", () => {
           title: "Filtered asset",
         }),
       ],
+      pagination: {
+        page: 2,
+        pageSize: 10,
+        total: 21,
+        totalPages: 3,
+      },
     });
     expect(assetService.listAssets).toHaveBeenCalledWith(env, {
       status: "ready",
       type: "url",
       query: "cloudflare",
+      page: 2,
+      pageSize: 10,
+    });
+  });
+
+  it("POST /api/assets/:id/process returns the reprocessed asset", async () => {
+    const app = createApp();
+    const env = { APP_NAME: "cloudmind-test" };
+    const item = createAssetDetail({
+      id: "asset-reprocess-1",
+      status: "ready",
+      summary: "Reprocessed summary",
+    });
+
+    vi.mocked(assetService.reprocessAsset).mockResolvedValue(item);
+
+    const response = await app.request(
+      "/api/assets/asset-reprocess-1/process",
+      {
+        method: "POST",
+      },
+      env
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      ok: true,
+      item,
+    });
+    expect(assetService.reprocessAsset).toHaveBeenCalledWith(
+      env,
+      "asset-reprocess-1"
+    );
+  });
+
+  it("POST /api/search returns keyword search results", async () => {
+    const app = createApp();
+    const env = { APP_NAME: "cloudmind-test" };
+
+    vi.mocked(assetService.searchAssets).mockResolvedValue({
+      items: [
+        createAssetDetail({
+          id: "asset-search-1",
+          title: "Search result asset",
+        }),
+      ],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 1,
+        totalPages: 1,
+      },
+    });
+
+    const response = await app.request(
+      "/api/search",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query: "cloudmind",
+          page: 1,
+          pageSize: 20,
+        }),
+      },
+      env
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      items: [
+        expect.objectContaining({
+          id: "asset-search-1",
+          title: "Search result asset",
+        }),
+      ],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 1,
+        totalPages: 1,
+      },
+    });
+    expect(assetService.searchAssets).toHaveBeenCalledWith(env, {
+      query: "cloudmind",
+      page: 1,
+      pageSize: 20,
     });
   });
 });

@@ -9,13 +9,14 @@ export default createRoute(async (context) => {
   try {
     const parsedQuery = assetListQuerySchema.safeParse(context.req.query());
     const filters = parsedQuery.success ? parsedQuery.data : {};
-    const items = await listAssets(context.env, filters);
+    const result = await listAssets(context.env, filters);
     const errorMessage = context.req.query("error");
     const flashMessage = context.req.query("created");
 
     return context.render(
       <AssetsPage
-        items={items}
+        items={result.items}
+        pagination={result.pagination}
         filters={filters}
         errorMessage={errorMessage ?? undefined}
         flashMessage={flashMessage ?? undefined}
@@ -25,6 +26,7 @@ export default createRoute(async (context) => {
     return context.render(
       <AssetsPage
         items={[]}
+        pagination={{ page: 1, pageSize: 20, total: 0, totalPages: 0 }}
         filters={{}}
         errorMessage={
           error instanceof Error ? error.message : "Failed to load assets."

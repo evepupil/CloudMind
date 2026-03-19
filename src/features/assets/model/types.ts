@@ -31,6 +31,20 @@ export interface AssetListQuery {
   status?: AssetStatus | undefined;
   type?: AssetType | undefined;
   query?: string | undefined;
+  page?: number | undefined;
+  pageSize?: number | undefined;
+}
+
+export interface PaginationInfo {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface AssetListResult {
+  items: AssetSummary[];
+  pagination: PaginationInfo;
 }
 
 // 这里定义列表页用的资产摘要结构。

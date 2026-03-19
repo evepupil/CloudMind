@@ -1,7 +1,7 @@
 import type {
   AssetDetail,
   AssetListQuery,
-  AssetSummary,
+  AssetListResult,
 } from "@/features/assets/model/types";
 
 export interface CreateTextAssetInput {
@@ -15,7 +15,7 @@ export interface CreateUrlAssetInput {
 }
 
 export interface AssetRepository {
-  listAssets(query?: AssetListQuery): Promise<AssetSummary[]>;
+  listAssets(query?: AssetListQuery): Promise<AssetListResult>;
   getAssetById(id: string): Promise<AssetDetail>;
   createTextAsset(input: CreateTextAssetInput): Promise<AssetDetail>;
   createUrlAsset(input: CreateUrlAssetInput): Promise<AssetDetail>;

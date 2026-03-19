@@ -7,6 +7,7 @@ import { AssetNotFoundError } from "./repository";
 import {
   assetIdParamsSchema,
   assetListQuerySchema,
+  assetSearchPayloadSchema,
   ingestTextPayloadSchema,
   ingestUrlPayloadSchema,
 } from "./schemas";
@@ -15,6 +16,8 @@ import {
   ingestTextAsset,
   ingestUrlAsset,
   listAssets,
+  reprocessAsset,
+  searchAssets,
 } from "./service";
 
 const getValidationErrorBody = (error: z.ZodError) => {
@@ -36,9 +39,9 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
       return context.json(getValidationErrorBody(parsedQuery.error), 400);
     }
 
-    const items = await listAssets(context.env, parsedQuery.data);
+    const result = await listAssets(context.env, parsedQuery.data);
 
-    return context.json({ items });
+    return context.json(result);
   });
 
   app.get("/api/assets/:id", async (context) => {
@@ -117,6 +120,50 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
       },
       201
     );
+  });
+
+  app.post("/api/assets/:id/process", async (context) => {
+    const parsedParams = assetIdParamsSchema.safeParse(context.req.param());
+
+    if (!parsedParams.success) {
+      return context.json(getValidationErrorBody(parsedParams.error), 400);
+    }
+
+    try {
+      const item = await reprocessAsset(context.env, parsedParams.data.id);
+
+      return context.json({
+        ok: true,
+        item,
+      });
+    } catch (error) {
+      if (error instanceof AssetNotFoundError) {
+        return context.json(
+          {
+            error: {
+              code: "ASSET_NOT_FOUND",
+              message: "Asset not found",
+            },
+          },
+          404
+        );
+      }
+
+      throw error;
+    }
+  });
+
+  app.post("/api/search", async (context) => {
+    const rawPayload = await context.req.json().catch(() => null);
+    const parsedPayload = assetSearchPayloadSchema.safeParse(rawPayload);
+
+    if (!parsedPayload.success) {
+      return context.json(getValidationErrorBody(parsedPayload.error), 400);
+    }
+
+    const result = await searchAssets(context.env, parsedPayload.data);
+
+    return context.json(result);
   });
 
   app.post("/assets/actions/ingest-text", async (context) => {
