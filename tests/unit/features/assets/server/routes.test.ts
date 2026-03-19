@@ -10,6 +10,7 @@ import * as assetService from "@/features/assets/server/service";
 vi.mock("@/features/assets/server/service", () => {
   return {
     getAssetById: vi.fn(),
+    ingestFileAsset: vi.fn(),
     ingestTextAsset: vi.fn(),
     ingestUrlAsset: vi.fn(),
     listAssets: vi.fn(),
@@ -287,6 +288,88 @@ describe("asset routes", () => {
       title: "Cloudflare Docs",
       url: "https://developers.cloudflare.com",
     });
+  });
+
+  it("POST /api/ingest/file stores a PDF asset", async () => {
+    const app = createApp();
+    const env = { APP_NAME: "cloudmind-test" };
+    const item = createAssetDetail({
+      id: "asset-file-1",
+      type: "pdf",
+      title: "CloudMind Spec",
+      status: "pending",
+      mimeType: "application/pdf",
+      contentText: null,
+      processedAt: null,
+      summary: null,
+    });
+    const formData = new FormData();
+
+    formData.set("title", "CloudMind Spec");
+    formData.set(
+      "file",
+      new File(["pdf-bytes"], "cloudmind-spec.pdf", {
+        type: "application/pdf",
+      })
+    );
+
+    vi.mocked(assetService.ingestFileAsset).mockResolvedValue(item);
+
+    const response = await app.request(
+      "/api/ingest/file",
+      {
+        method: "POST",
+        body: formData,
+      },
+      env
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(payload).toEqual({
+      ok: true,
+      item: {
+        id: "asset-file-1",
+        type: "pdf",
+        title: "CloudMind Spec",
+        status: "pending",
+        createdAt: "2026-03-19T00:00:00.000Z",
+      },
+    });
+    expect(assetService.ingestFileAsset).toHaveBeenCalledWith(
+      env,
+      expect.objectContaining({
+        title: "CloudMind Spec",
+        file: expect.any(File),
+      })
+    );
+  });
+
+  it("POST /api/ingest/file returns 400 for non-PDF uploads", async () => {
+    const app = createApp();
+    const formData = new FormData();
+
+    formData.set(
+      "file",
+      new File(["plain-text"], "notes.txt", {
+        type: "text/plain",
+      })
+    );
+
+    const response = await app.request("/api/ingest/file", {
+      method: "POST",
+      body: formData,
+    });
+    const payload = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(payload).toEqual({
+      error: {
+        code: "INVALID_INPUT",
+        message: "Only PDF files are supported right now.",
+      },
+    });
+    expect(assetService.ingestFileAsset).not.toHaveBeenCalled();
   });
 
   it("GET /api/assets passes list filters to the service", async () => {

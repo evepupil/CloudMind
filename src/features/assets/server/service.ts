@@ -6,9 +6,16 @@ import type {
   AssetListResult,
 } from "@/features/assets/model/types";
 
+import {
+  type BlobStore,
+  BlobStoreConfigError,
+  createRawAssetBlobKey,
+  R2BlobStore,
+} from "./blob-store";
 import { processTextAsset, processUrlAsset } from "./processor";
 import type {
   AssetRepository,
+  CreateFileAssetInput,
   CreateTextAssetInput,
   CreateUrlAssetInput,
 } from "./repository";
@@ -28,10 +35,24 @@ const getAssetRepository = (bindings: AppBindings | undefined) => {
   return new D1AssetRepository(getDatabaseBinding(bindings));
 };
 
+const getBlobStore = (bindings: AppBindings | undefined): BlobStore => {
+  if (!bindings?.ASSET_FILES) {
+    throw new BlobStoreConfigError(
+      'Cloudflare R2 binding "ASSET_FILES" is not configured. ' +
+        "Create the bucket and bind it in wrangler.jsonc before using file ingest."
+    );
+  }
+
+  return new R2BlobStore(bindings.ASSET_FILES);
+};
+
 interface AssetServiceDependencies {
   getAssetRepository: (
     bindings: AppBindings | undefined
   ) => AssetRepository | Promise<AssetRepository>;
+  getBlobStore: (
+    bindings: AppBindings | undefined
+  ) => BlobStore | Promise<BlobStore>;
   processTextAsset: (
     repository: AssetRepository,
     assetId: string
@@ -52,6 +73,7 @@ interface AssetServiceDependencies {
 
 const defaultDependencies: AssetServiceDependencies = {
   getAssetRepository,
+  getBlobStore,
   processTextAsset,
   processUrlAsset,
   getProcessTextAssetForced: (repository, assetId) =>
@@ -101,6 +123,15 @@ export const createAssetService = (
       return repository.createUrlAsset(input);
     },
 
+    async createFileAsset(
+      bindings: AppBindings | undefined,
+      input: CreateFileAssetInput
+    ): Promise<AssetDetail> {
+      const repository = await dependencies.getAssetRepository(bindings);
+
+      return repository.createFileAsset(input);
+    },
+
     async ingestTextAsset(
       bindings: AppBindings | undefined,
       input: CreateTextAssetInput
@@ -119,6 +150,39 @@ export const createAssetService = (
       const createdAsset = await repository.createUrlAsset(input);
 
       return dependencies.processUrlAsset(repository, createdAsset.id);
+    },
+
+    async ingestFileAsset(
+      bindings: AppBindings | undefined,
+      input: {
+        title?: string | undefined;
+        file: File;
+      }
+    ): Promise<AssetDetail> {
+      const repository = await dependencies.getAssetRepository(bindings);
+      const blobStore = await dependencies.getBlobStore(bindings);
+      const assetId = crypto.randomUUID();
+      const rawR2Key = createRawAssetBlobKey(assetId, input.file.name);
+      const contentDisposition = `inline; filename="${input.file.name.replace(
+        /"/g,
+        '\\"'
+      )}"`;
+
+      await blobStore.put({
+        key: rawR2Key,
+        body: await input.file.arrayBuffer(),
+        contentType: input.file.type || "application/pdf",
+        contentDisposition,
+      });
+
+      return repository.createFileAsset({
+        id: assetId,
+        title: input.title,
+        fileName: input.file.name,
+        fileSize: input.file.size,
+        mimeType: input.file.type || "application/pdf",
+        rawR2Key,
+      });
     },
 
     async reprocessAsset(
@@ -167,8 +231,10 @@ export const {
   getAssetById,
   createTextAsset,
   createUrlAsset,
+  createFileAsset,
   ingestTextAsset,
   ingestUrlAsset,
+  ingestFileAsset,
   reprocessAsset,
   searchAssets,
 } = assetService;

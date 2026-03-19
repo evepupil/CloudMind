@@ -13,6 +13,7 @@ import {
 } from "./schemas";
 import {
   getAssetById,
+  ingestFileAsset,
   ingestTextAsset,
   ingestUrlAsset,
   listAssets,
@@ -37,6 +38,23 @@ const getAssetNotFoundBody = () => {
       message: "Asset not found",
     },
   };
+};
+
+const getInvalidInputBody = (message: string) => {
+  return {
+    error: {
+      code: "INVALID_INPUT",
+      message,
+    },
+  };
+};
+
+const isPdfFile = (file: File): boolean => {
+  if (file.type === "application/pdf") {
+    return true;
+  }
+
+  return file.name.toLowerCase().endsWith(".pdf");
 };
 
 // 这里注册资产相关 API，并补上页面表单 action，保持 Web UI 和 API 走同一套 service。
@@ -129,6 +147,58 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
     }
 
     const item = await ingestUrlAsset(context.env, parsedPayload.data);
+
+    return context.json(
+      {
+        ok: true,
+        item: {
+          id: item.id,
+          type: item.type,
+          title: item.title,
+          status: item.status,
+          createdAt: item.createdAt,
+        },
+      },
+      201
+    );
+  });
+
+  app.post("/api/ingest/file", async (context) => {
+    const formData = await context.req.formData();
+    const titleValue = formData.get("title");
+    const parsedTitle = ingestTextPayloadSchema
+      .pick({ title: true })
+      .safeParse({
+        title: typeof titleValue === "string" ? titleValue : undefined,
+      });
+
+    if (!parsedTitle.success) {
+      return context.json(getValidationErrorBody(parsedTitle.error), 400);
+    }
+
+    const fileValue = formData.get("file");
+
+    if (fileValue === null || typeof fileValue === "string") {
+      return context.json(getInvalidInputBody("File is required."), 400);
+    }
+
+    const file = fileValue as File;
+
+    if (file.size === 0) {
+      return context.json(getInvalidInputBody("File must not be empty."), 400);
+    }
+
+    if (!isPdfFile(file)) {
+      return context.json(
+        getInvalidInputBody("Only PDF files are supported right now."),
+        400
+      );
+    }
+
+    const item = await ingestFileAsset(context.env, {
+      title: parsedTitle.data.title,
+      file,
+    });
 
     return context.json(
       {

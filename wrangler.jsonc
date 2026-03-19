@@ -12,5 +12,11 @@
       "migrations_dir": "drizzle",
       "remote": true
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "ASSET_FILES",
+      "bucket_name": "cloudmind-assets"
+    }
   ]
 }

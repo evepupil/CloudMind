@@ -14,11 +14,21 @@ export interface CreateUrlAssetInput {
   url: string;
 }
 
+export interface CreateFileAssetInput {
+  id: string;
+  title?: string | undefined;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  rawR2Key: string;
+}
+
 export interface AssetRepository {
   listAssets(query?: AssetListQuery): Promise<AssetListResult>;
   getAssetById(id: string): Promise<AssetDetail>;
   createTextAsset(input: CreateTextAssetInput): Promise<AssetDetail>;
   createUrlAsset(input: CreateUrlAssetInput): Promise<AssetDetail>;
+  createFileAsset(input: CreateFileAssetInput): Promise<AssetDetail>;
   markAssetProcessing(id: string): Promise<void>;
   completeAssetProcessing(id: string, summary: string): Promise<void>;
   failAssetProcessing(id: string, message: string): Promise<void>;

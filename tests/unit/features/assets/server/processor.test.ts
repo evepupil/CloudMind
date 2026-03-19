@@ -9,6 +9,7 @@ import type {
 import { processTextAsset } from "@/features/assets/server/processor";
 import type {
   AssetRepository,
+  CreateFileAssetInput,
   CreateTextAssetInput,
 } from "@/features/assets/server/repository";
 
@@ -89,6 +90,12 @@ class InMemoryAssetRepository implements AssetRepository {
   }
 
   public async createUrlAsset(): Promise<AssetDetail> {
+    return structuredClone(this.asset);
+  }
+
+  public async createFileAsset(
+    _input: CreateFileAssetInput
+  ): Promise<AssetDetail> {
     return structuredClone(this.asset);
   }
 

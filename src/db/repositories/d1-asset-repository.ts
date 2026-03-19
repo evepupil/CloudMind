@@ -14,6 +14,7 @@ import type {
 import {
   AssetNotFoundError,
   type AssetRepository,
+  type CreateFileAssetInput,
   type CreateTextAssetInput,
   type CreateUrlAssetInput,
 } from "@/features/assets/server/repository";
@@ -262,6 +263,66 @@ export class D1AssetRepository implements AssetRepository {
     });
 
     return this.getAssetById(assetId);
+  }
+
+  public async createFileAsset(
+    input: CreateFileAssetInput
+  ): Promise<AssetDetail> {
+    const now = new Date().toISOString();
+    const sourceId = crypto.randomUUID();
+    const jobId = crypto.randomUUID();
+    const title = input.title?.trim() || input.fileName;
+
+    await this.db.insert(assets).values({
+      id: input.id,
+      type: "pdf" satisfies AssetType,
+      title,
+      summary: null,
+      sourceUrl: null,
+      status: "pending",
+      contentText: null,
+      rawR2Key: input.rawR2Key,
+      contentR2Key: null,
+      mimeType: input.mimeType,
+      language: null,
+      errorMessage: null,
+      processedAt: null,
+      failedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await this.db.insert(assetSources).values({
+      id: sourceId,
+      assetId: input.id,
+      kind: "upload",
+      sourceUrl: null,
+      metadataJson: JSON.stringify({
+        fileName: input.fileName,
+        fileSize: input.fileSize,
+      }),
+      createdAt: now,
+    });
+
+    await this.db.insert(ingestJobs).values({
+      id: jobId,
+      assetId: input.id,
+      jobType: "extract_content",
+      status: "queued",
+      attempt: 0,
+      errorMessage: null,
+      payloadJson: JSON.stringify({
+        assetType: "pdf",
+        rawR2Key: input.rawR2Key,
+        fileName: input.fileName,
+        fileSize: input.fileSize,
+      }),
+      finishedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return this.getAssetById(input.id);
   }
 
   public async markAssetProcessing(id: string): Promise<void> {

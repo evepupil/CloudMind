@@ -6,8 +6,10 @@ import type {
   AssetListResult,
   IngestJobSummary,
 } from "@/features/assets/model/types";
+import type { BlobStore } from "@/features/assets/server/blob-store";
 import type {
   AssetRepository,
+  CreateFileAssetInput,
   CreateTextAssetInput,
 } from "@/features/assets/server/repository";
 import { createAssetService } from "@/features/assets/server/service";
@@ -96,13 +98,46 @@ class InMemoryAssetRepository implements AssetRepository {
   public async createUrlAsset(input: {
     title?: string | undefined;
     url: string;
-  }) {
+  }): Promise<AssetDetail> {
     this.asset = {
       ...this.asset,
       type: "url",
       title: input.title?.trim() || input.url,
       sourceUrl: input.url,
       contentText: null,
+    };
+
+    return structuredClone(this.asset);
+  }
+
+  public async createFileAsset(
+    input: CreateFileAssetInput
+  ): Promise<AssetDetail> {
+    this.asset = {
+      ...this.asset,
+      id: input.id,
+      type: "pdf",
+      title: input.title?.trim() || input.fileName,
+      sourceUrl: null,
+      status: "pending",
+      contentText: null,
+      mimeType: input.mimeType,
+      source: {
+        kind: "upload",
+        sourceUrl: null,
+        metadataJson: JSON.stringify({
+          fileName: input.fileName,
+          fileSize: input.fileSize,
+          rawR2Key: input.rawR2Key,
+        }),
+        createdAt: "2026-03-19T00:00:00.000Z",
+      },
+      jobs: [
+        createJob({
+          jobType: "extract_content",
+          status: "queued",
+        }),
+      ],
     };
 
     return structuredClone(this.asset);
@@ -129,6 +164,9 @@ class InMemoryAssetRepository implements AssetRepository {
 
 describe("asset service", () => {
   const processTextAssetMock = vi.fn();
+  const blobStoreMock: BlobStore = {
+    put: vi.fn(),
+  };
   const getAssetRepositoryMock = vi.fn();
 
   beforeEach(() => {
@@ -152,6 +190,7 @@ describe("asset service", () => {
     });
     const service = createAssetService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: vi.fn().mockResolvedValue(blobStoreMock),
       processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
       processUrlAsset: vi.fn(),
       getProcessTextAssetForced: vi.fn(),
@@ -191,6 +230,7 @@ describe("asset service", () => {
     );
     const service = createAssetService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: vi.fn().mockResolvedValue(blobStoreMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: vi.fn(),
       getProcessTextAssetForced: vi.fn(),
@@ -214,5 +254,50 @@ describe("asset service", () => {
       },
     });
     expect(processTextAssetMock).not.toHaveBeenCalled();
+  });
+
+  it("ingestFileAsset uploads the file to blob storage before creating the asset", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-original",
+      })
+    );
+    const getBlobStoreMock = vi.fn().mockResolvedValue(blobStoreMock);
+    const service = createAssetService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock,
+      processTextAsset: processTextAssetMock,
+      processUrlAsset: vi.fn(),
+      getProcessTextAssetForced: vi.fn(),
+      getProcessUrlAssetForced: vi.fn(),
+    });
+    const file = new File(["%PDF-1.7"], "cloudmind.pdf", {
+      type: "application/pdf",
+    });
+
+    const result = await service.ingestFileAsset(
+      { APP_NAME: "cloudmind-test" },
+      {
+        title: "CloudMind PDF",
+        file,
+      }
+    );
+
+    expect(getBlobStoreMock).toHaveBeenCalledWith({
+      APP_NAME: "cloudmind-test",
+    });
+    expect(blobStoreMock.put).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: expect.stringMatching(/^assets\/.+\/raw\/cloudmind\.pdf$/),
+        contentType: "application/pdf",
+        contentDisposition: 'inline; filename="cloudmind.pdf"',
+      })
+    );
+    expect(result).toMatchObject({
+      type: "pdf",
+      title: "CloudMind PDF",
+      status: "pending",
+      mimeType: "application/pdf",
+    });
   });
 });
