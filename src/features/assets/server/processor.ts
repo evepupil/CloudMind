@@ -20,10 +20,10 @@ const getLatestJob = (asset: AssetDetail) => {
   return asset.jobs[0] ?? null;
 };
 
-// 这里实现最小处理器：先把文本资产从 pending 推到 ready，后续再拆成真正的异步流水线。
-export const processTextAsset = async (
+const processAsset = async (
   repository: AssetRepository,
-  assetId: string
+  assetId: string,
+  getSummary: (asset: AssetDetail) => string
 ): Promise<AssetDetail> => {
   const asset = await repository.getAssetById(assetId);
   const latestJob = getLatestJob(asset);
@@ -45,9 +45,9 @@ export const processTextAsset = async (
       throw new Error("Asset content is empty and cannot be processed.");
     }
 
-    const summary = createTextSummary(content);
+    const summary = getSummary(asset);
 
-    await repository.completeTextAssetProcessing(asset.id, summary);
+    await repository.completeAssetProcessing(asset.id, summary);
 
     if (latestJob) {
       await repository.completeIngestJob(latestJob.id);
@@ -68,4 +68,35 @@ export const processTextAsset = async (
 
     return repository.getAssetById(asset.id);
   }
+};
+
+// 这里实现最小处理器：先把文本资产从 pending 推到 ready，后续再拆成真正的异步流水线。
+export const processTextAsset = async (
+  repository: AssetRepository,
+  assetId: string
+): Promise<AssetDetail> => {
+  return processAsset(repository, assetId, (asset) => {
+    const content = asset.contentText?.trim();
+
+    if (!content) {
+      throw new Error("Asset content is empty and cannot be processed.");
+    }
+
+    return createTextSummary(content);
+  });
+};
+
+export const processUrlAsset = async (
+  repository: AssetRepository,
+  assetId: string
+): Promise<AssetDetail> => {
+  return processAsset(repository, assetId, (asset) => {
+    const sourceUrl = asset.sourceUrl?.trim();
+
+    if (!sourceUrl) {
+      throw new Error("Asset URL is empty and cannot be processed.");
+    }
+
+    return `Saved URL asset for ${sourceUrl}`;
+  });
 };

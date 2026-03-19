@@ -1,7 +1,29 @@
-import type { AssetSummary } from "@/features/assets/model/types";
+import type {
+  AssetListQuery,
+  AssetStatus,
+  AssetSummary,
+  AssetType,
+} from "@/features/assets/model/types";
 import { PageShell } from "@/features/layout/components/page-shell";
 
 import { AssetStatusBadge } from "./asset-status-badge";
+
+const assetStatusOptions: Array<{ label: string; value: AssetStatus | "" }> = [
+  { label: "All status", value: "" },
+  { label: "Pending", value: "pending" },
+  { label: "Processing", value: "processing" },
+  { label: "Ready", value: "ready" },
+  { label: "Failed", value: "failed" },
+];
+
+const assetTypeOptions: Array<{ label: string; value: AssetType | "" }> = [
+  { label: "All types", value: "" },
+  { label: "URL", value: "url" },
+  { label: "PDF", value: "pdf" },
+  { label: "Note", value: "note" },
+  { label: "Image", value: "image" },
+  { label: "Chat", value: "chat" },
+];
 
 const formatDate = (value: string): string => {
   return new Date(value).toLocaleString("zh-CN", {
@@ -12,10 +34,12 @@ const formatDate = (value: string): string => {
 // 这里提供资产列表页，先覆盖文本资产写入和资产状态查看两个 MVP 场景。
 export const AssetsPage = ({
   items,
+  filters,
   errorMessage,
   flashMessage,
 }: {
   items: AssetSummary[];
+  filters: AssetListQuery;
   errorMessage?: string | undefined;
   flashMessage?: string | undefined;
 }) => {
@@ -125,6 +149,72 @@ export const AssetsPage = ({
         </form>
       </section>
 
+      <section
+        style={{
+          marginBottom: "32px",
+          padding: "24px",
+          border: "1px solid #e2e8f0",
+          borderRadius: "20px",
+          backgroundColor: "#ffffff",
+        }}
+      >
+        <h2 style={{ marginTop: 0, marginBottom: "12px", fontSize: "24px" }}>
+          Save URL Asset
+        </h2>
+        <form
+          action="/assets/actions/ingest-url"
+          method="post"
+          style={{ display: "grid", gap: "14px" }}
+        >
+          <label style={{ display: "grid", gap: "8px" }}>
+            <span style={{ fontWeight: 600 }}>Title</span>
+            <input
+              name="title"
+              type="text"
+              placeholder="Optional title"
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: "12px",
+                border: "1px solid #cbd5e1",
+                fontSize: "15px",
+              }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: "8px" }}>
+            <span style={{ fontWeight: 600 }}>URL</span>
+            <input
+              name="url"
+              type="url"
+              placeholder="https://example.com/article"
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: "12px",
+                border: "1px solid #cbd5e1",
+                fontSize: "15px",
+              }}
+            />
+          </label>
+          <button
+            type="submit"
+            style={{
+              justifySelf: "start",
+              padding: "12px 18px",
+              borderRadius: "999px",
+              border: "none",
+              backgroundColor: "#0f766e",
+              color: "#ffffff",
+              fontSize: "14px",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Save URL
+          </button>
+        </form>
+      </section>
+
       <section>
         <div
           style={{
@@ -140,6 +230,104 @@ export const AssetsPage = ({
             {items.length} assets
           </span>
         </div>
+        <form
+          method="get"
+          action="/assets"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: "12px",
+            marginBottom: "18px",
+            padding: "18px",
+            borderRadius: "18px",
+            backgroundColor: "#f8fafc",
+            border: "1px solid #e2e8f0",
+          }}
+        >
+          <label style={{ display: "grid", gap: "8px" }}>
+            <span style={{ fontWeight: 600 }}>Status</span>
+            <select
+              name="status"
+              defaultValue={filters.status ?? ""}
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: "12px",
+                border: "1px solid #cbd5e1",
+                fontSize: "15px",
+              }}
+            >
+              {assetStatusOptions.map((option) => (
+                <option key={option.label} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: "8px" }}>
+            <span style={{ fontWeight: 600 }}>Type</span>
+            <select
+              name="type"
+              defaultValue={filters.type ?? ""}
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: "12px",
+                border: "1px solid #cbd5e1",
+                fontSize: "15px",
+              }}
+            >
+              {assetTypeOptions.map((option) => (
+                <option key={option.label} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: "8px" }}>
+            <span style={{ fontWeight: 600 }}>Search</span>
+            <input
+              name="query"
+              type="search"
+              defaultValue={filters.query ?? ""}
+              placeholder="Title, summary, or URL"
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: "12px",
+                border: "1px solid #cbd5e1",
+                fontSize: "15px",
+              }}
+            />
+          </label>
+          <div style={{ display: "flex", alignItems: "end", gap: "10px" }}>
+            <button
+              type="submit"
+              style={{
+                padding: "12px 18px",
+                borderRadius: "999px",
+                border: "none",
+                backgroundColor: "#0f172a",
+                color: "#ffffff",
+                fontSize: "14px",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Apply Filters
+            </button>
+            <a
+              href="/assets"
+              style={{
+                color: "#475569",
+                textDecoration: "none",
+                fontWeight: 600,
+              }}
+            >
+              Reset
+            </a>
+          </div>
+        </form>
         {items.length === 0 ? (
           <article
             style={{

@@ -1,16 +1,26 @@
-import type { AssetDetail, AssetSummary } from "@/features/assets/model/types";
+import type {
+  AssetDetail,
+  AssetListQuery,
+  AssetSummary,
+} from "@/features/assets/model/types";
 
 export interface CreateTextAssetInput {
   title?: string | undefined;
   content: string;
 }
 
+export interface CreateUrlAssetInput {
+  title?: string | undefined;
+  url: string;
+}
+
 export interface AssetRepository {
-  listAssets(): Promise<AssetSummary[]>;
+  listAssets(query?: AssetListQuery): Promise<AssetSummary[]>;
   getAssetById(id: string): Promise<AssetDetail>;
   createTextAsset(input: CreateTextAssetInput): Promise<AssetDetail>;
+  createUrlAsset(input: CreateUrlAssetInput): Promise<AssetDetail>;
   markAssetProcessing(id: string): Promise<void>;
-  completeTextAssetProcessing(id: string, summary: string): Promise<void>;
+  completeAssetProcessing(id: string, summary: string): Promise<void>;
   failAssetProcessing(id: string, message: string): Promise<void>;
   markIngestJobRunning(jobId: string): Promise<void>;
   completeIngestJob(jobId: string): Promise<void>;

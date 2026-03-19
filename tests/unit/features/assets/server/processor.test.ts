@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type {
   AssetDetail,
+  AssetListQuery,
   AssetSummary,
   IngestJobSummary,
 } from "@/features/assets/model/types";
@@ -61,7 +62,7 @@ class InMemoryAssetRepository implements AssetRepository {
     this.asset = asset;
   }
 
-  public async listAssets(): Promise<AssetSummary[]> {
+  public async listAssets(_query?: AssetListQuery): Promise<AssetSummary[]> {
     return [this.asset];
   }
 
@@ -79,6 +80,10 @@ class InMemoryAssetRepository implements AssetRepository {
     return structuredClone(this.asset);
   }
 
+  public async createUrlAsset(): Promise<AssetDetail> {
+    return structuredClone(this.asset);
+  }
+
   public async markAssetProcessing(id: string): Promise<void> {
     this.assertId(id);
     this.asset.status = "processing";
@@ -87,7 +92,7 @@ class InMemoryAssetRepository implements AssetRepository {
     this.asset.updatedAt = "2026-03-19T00:01:00.000Z";
   }
 
-  public async completeTextAssetProcessing(
+  public async completeAssetProcessing(
     id: string,
     summary: string
   ): Promise<void> {

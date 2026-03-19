@@ -1,9 +1,10 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, like, or } from "drizzle-orm";
 
 import { createDb } from "@/db/client";
 import { assetSources, assets, ingestJobs } from "@/db/schema";
 import type {
   AssetDetail,
+  AssetListQuery,
   AssetSourceKind,
   AssetSummary,
   AssetType,
@@ -13,6 +14,7 @@ import {
   AssetNotFoundError,
   type AssetRepository,
   type CreateTextAssetInput,
+  type CreateUrlAssetInput,
 } from "@/features/assets/server/repository";
 
 const mapAssetSummary = (record: typeof assets.$inferSelect): AssetSummary => {
@@ -50,10 +52,32 @@ export class D1AssetRepository implements AssetRepository {
     this.db = createDb(database);
   }
 
-  public async listAssets(): Promise<AssetSummary[]> {
+  public async listAssets(query?: AssetListQuery): Promise<AssetSummary[]> {
+    const conditions = [];
+
+    if (query?.status) {
+      conditions.push(eq(assets.status, query.status));
+    }
+
+    if (query?.type) {
+      conditions.push(eq(assets.type, query.type));
+    }
+
+    if (query?.query) {
+      const search = `%${query.query}%`;
+      conditions.push(
+        or(
+          like(assets.title, search),
+          like(assets.summary, search),
+          like(assets.sourceUrl, search)
+        )
+      );
+    }
+
     const records = await this.db
       .select()
       .from(assets)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(assets.createdAt));
 
     return records.map(mapAssetSummary);
@@ -160,6 +184,64 @@ export class D1AssetRepository implements AssetRepository {
     return this.getAssetById(assetId);
   }
 
+  public async createUrlAsset(
+    input: CreateUrlAssetInput
+  ): Promise<AssetDetail> {
+    const now = new Date().toISOString();
+    const assetId = crypto.randomUUID();
+    const sourceId = crypto.randomUUID();
+    const jobId = crypto.randomUUID();
+    const title = input.title?.trim() || input.url;
+
+    await this.db.insert(assets).values({
+      id: assetId,
+      type: "url" satisfies AssetType,
+      title,
+      summary: null,
+      sourceUrl: input.url,
+      status: "pending",
+      contentText: null,
+      rawR2Key: null,
+      contentR2Key: null,
+      mimeType: "text/html",
+      language: null,
+      errorMessage: null,
+      processedAt: null,
+      failedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await this.db.insert(assetSources).values({
+      id: sourceId,
+      assetId,
+      kind: "manual",
+      sourceUrl: input.url,
+      metadataJson: JSON.stringify({
+        titleProvided: Boolean(input.title?.trim()),
+      }),
+      createdAt: now,
+    });
+
+    await this.db.insert(ingestJobs).values({
+      id: jobId,
+      assetId,
+      jobType: "fetch_source",
+      status: "queued",
+      attempt: 0,
+      errorMessage: null,
+      payloadJson: JSON.stringify({
+        assetType: "url",
+        sourceUrl: input.url,
+      }),
+      finishedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return this.getAssetById(assetId);
+  }
+
   public async markAssetProcessing(id: string): Promise<void> {
     await this.db
       .update(assets)
@@ -172,7 +254,7 @@ export class D1AssetRepository implements AssetRepository {
       .where(eq(assets.id, id));
   }
 
-  public async completeTextAssetProcessing(
+  public async completeAssetProcessing(
     id: string,
     summary: string
   ): Promise<void> {

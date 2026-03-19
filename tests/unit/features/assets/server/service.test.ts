@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   AssetDetail,
+  AssetListQuery,
   AssetSummary,
   IngestJobSummary,
 } from "@/features/assets/model/types";
@@ -60,7 +61,7 @@ class InMemoryAssetRepository implements AssetRepository {
     this.asset = asset;
   }
 
-  public async listAssets(): Promise<AssetSummary[]> {
+  public async listAssets(_query?: AssetListQuery): Promise<AssetSummary[]> {
     return [this.asset];
   }
 
@@ -84,9 +85,24 @@ class InMemoryAssetRepository implements AssetRepository {
     return structuredClone(this.asset);
   }
 
+  public async createUrlAsset(input: {
+    title?: string | undefined;
+    url: string;
+  }) {
+    this.asset = {
+      ...this.asset,
+      type: "url",
+      title: input.title?.trim() || input.url,
+      sourceUrl: input.url,
+      contentText: null,
+    };
+
+    return structuredClone(this.asset);
+  }
+
   public async markAssetProcessing(_id: string): Promise<void> {}
 
-  public async completeTextAssetProcessing(
+  public async completeAssetProcessing(
     _id: string,
     _summary: string
   ): Promise<void> {}
@@ -129,6 +145,7 @@ describe("asset service", () => {
     const service = createAssetService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
+      processUrlAsset: vi.fn(),
     });
 
     const result = await service.ingestTextAsset(
@@ -165,6 +182,7 @@ describe("asset service", () => {
     const service = createAssetService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       processTextAsset: processTextAssetMock,
+      processUrlAsset: vi.fn(),
     });
 
     const result = await service.listAssets({ APP_NAME: "cloudmind-test" });

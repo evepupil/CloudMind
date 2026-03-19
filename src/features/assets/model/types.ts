@@ -27,6 +27,12 @@ export type IngestJobType =
   | "index"
   | "finalize";
 
+export interface AssetListQuery {
+  status?: AssetStatus | undefined;
+  type?: AssetType | undefined;
+  query?: string | undefined;
+}
+
 // 这里定义列表页用的资产摘要结构。
 export interface AssetSummary {
   id: string;

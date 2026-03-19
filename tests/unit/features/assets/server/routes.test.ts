@@ -11,6 +11,7 @@ vi.mock("@/features/assets/server/service", () => {
   return {
     getAssetById: vi.fn(),
     ingestTextAsset: vi.fn(),
+    ingestUrlAsset: vi.fn(),
     listAssets: vi.fn(),
   };
 });
@@ -175,6 +176,87 @@ describe("asset routes", () => {
         code: "ASSET_NOT_FOUND",
         message: "Asset not found",
       },
+    });
+  });
+
+  it("POST /api/ingest/url returns 201 with the created URL asset payload", async () => {
+    const app = createApp();
+    const item = createAssetDetail({
+      id: "asset-url-1",
+      type: "url",
+      title: "Cloudflare Docs",
+      sourceUrl: "https://developers.cloudflare.com",
+    });
+    const env = { APP_NAME: "cloudmind-test" };
+
+    vi.mocked(assetService.ingestUrlAsset).mockResolvedValue(item);
+
+    const response = await app.request(
+      "/api/ingest/url",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: "Cloudflare Docs",
+          url: "https://developers.cloudflare.com",
+        }),
+      },
+      env
+    );
+
+    const payload = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(payload).toEqual({
+      ok: true,
+      item: {
+        id: "asset-url-1",
+        type: "url",
+        title: "Cloudflare Docs",
+        status: "ready",
+        createdAt: "2026-03-19T00:00:00.000Z",
+      },
+    });
+    expect(assetService.ingestUrlAsset).toHaveBeenCalledWith(env, {
+      title: "Cloudflare Docs",
+      url: "https://developers.cloudflare.com",
+    });
+  });
+
+  it("GET /api/assets passes list filters to the service", async () => {
+    const app = createApp();
+    const env = { APP_NAME: "cloudmind-test" };
+
+    vi.mocked(assetService.listAssets).mockResolvedValue([
+      createAssetDetail({
+        id: "asset-filter-1",
+        type: "url",
+        title: "Filtered asset",
+      }),
+    ]);
+
+    const response = await app.request(
+      "/api/assets?status=ready&type=url&query=cloudflare",
+      undefined,
+      env
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      items: [
+        expect.objectContaining({
+          id: "asset-filter-1",
+          title: "Filtered asset",
+        }),
+      ],
+    });
+    expect(assetService.listAssets).toHaveBeenCalledWith(env, {
+      status: "ready",
+      type: "url",
+      query: "cloudflare",
     });
   });
 });

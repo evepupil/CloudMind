@@ -4,8 +4,18 @@ import type { z } from "zod";
 import type { AppEnv } from "@/env";
 
 import { AssetNotFoundError } from "./repository";
-import { assetIdParamsSchema, ingestTextPayloadSchema } from "./schemas";
-import { getAssetById, ingestTextAsset, listAssets } from "./service";
+import {
+  assetIdParamsSchema,
+  assetListQuerySchema,
+  ingestTextPayloadSchema,
+  ingestUrlPayloadSchema,
+} from "./schemas";
+import {
+  getAssetById,
+  ingestTextAsset,
+  ingestUrlAsset,
+  listAssets,
+} from "./service";
 
 const getValidationErrorBody = (error: z.ZodError) => {
   return {
@@ -20,7 +30,13 @@ const getValidationErrorBody = (error: z.ZodError) => {
 // 这里注册资产相关 API，为后续知识库入口预留统一路径。
 export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
   app.get("/api/assets", async (context) => {
-    const items = await listAssets(context.env);
+    const parsedQuery = assetListQuerySchema.safeParse(context.req.query());
+
+    if (!parsedQuery.success) {
+      return context.json(getValidationErrorBody(parsedQuery.error), 400);
+    }
+
+    const items = await listAssets(context.env, parsedQuery.data);
 
     return context.json({ items });
   });
@@ -78,6 +94,31 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
     );
   });
 
+  app.post("/api/ingest/url", async (context) => {
+    const rawPayload = await context.req.json().catch(() => null);
+    const parsedPayload = ingestUrlPayloadSchema.safeParse(rawPayload);
+
+    if (!parsedPayload.success) {
+      return context.json(getValidationErrorBody(parsedPayload.error), 400);
+    }
+
+    const item = await ingestUrlAsset(context.env, parsedPayload.data);
+
+    return context.json(
+      {
+        ok: true,
+        item: {
+          id: item.id,
+          type: item.type,
+          title: item.title,
+          status: item.status,
+          createdAt: item.createdAt,
+        },
+      },
+      201
+    );
+  });
+
   app.post("/assets/actions/ingest-text", async (context) => {
     const formData = await context.req.formData();
     const parsedPayload = ingestTextPayloadSchema.safeParse({
@@ -92,6 +133,24 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
     }
 
     const item = await ingestTextAsset(context.env, parsedPayload.data);
+
+    return context.redirect(`/assets/${item.id}?created=1`);
+  });
+
+  app.post("/assets/actions/ingest-url", async (context) => {
+    const formData = await context.req.formData();
+    const parsedPayload = ingestUrlPayloadSchema.safeParse({
+      title: formData.get("title"),
+      url: formData.get("url"),
+    });
+
+    if (!parsedPayload.success) {
+      return context.redirect(
+        `/assets?error=${encodeURIComponent("请输入格式正确的 URL 资产。")}`
+      );
+    }
+
+    const item = await ingestUrlAsset(context.env, parsedPayload.data);
 
     return context.redirect(`/assets/${item.id}?created=1`);
   });
