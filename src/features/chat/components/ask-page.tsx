@@ -1,3 +1,4 @@
+import type { AskLibraryResult } from "@/features/chat/model/types";
 import { PageShell } from "@/features/layout/components/page-shell";
 
 const suggestionPrompts = [
@@ -6,23 +7,22 @@ const suggestionPrompts = [
   "Which assets mention Cloudflare deployment choices?",
 ];
 
-const evidenceCards = [
-  {
-    title: "CloudMind Pages 全栈原型",
-    snippet:
-      "The current MVP keeps pages and API in one HonoX project so deployment stays simple.",
-    href: "/assets",
-  },
-  {
-    title: "知识采集闭环",
-    snippet:
-      "Capture should prioritize URL, PDF, and text first before expanding into heavier workflows.",
-    href: "/assets",
-  },
-];
+const buildSuggestionHref = (prompt: string): string => {
+  return `/ask?question=${encodeURIComponent(prompt)}`;
+};
 
-// 这里提供 Ask 页原型，先把对话区和证据区的产品结构立起来。
-export const AskPage = () => {
+// 这里提供 Ask 页最小可用界面，直接展示问答结果与来源卡片。
+export const AskPage = ({
+  question,
+  result,
+  errorMessage,
+}: {
+  question: string;
+  result: AskLibraryResult | null;
+  errorMessage: string | null;
+}) => {
+  const hasQuestion = question.trim().length > 0;
+
   return (
     <PageShell
       title="Ask your library"
@@ -66,20 +66,20 @@ export const AskPage = () => {
               gap: "14px",
             }}
           >
-            <article
-              style={{
-                padding: "18px",
-                borderRadius: "18px",
-                backgroundColor: "#eef6ff",
-              }}
-            >
-              <strong style={{ display: "block", marginBottom: "8px" }}>
-                You
-              </strong>
-              <p style={{ margin: 0, lineHeight: 1.75 }}>
-                What changed in the product direction for the frontend?
-              </p>
-            </article>
+            {hasQuestion ? (
+              <article
+                style={{
+                  padding: "18px",
+                  borderRadius: "18px",
+                  backgroundColor: "#eef6ff",
+                }}
+              >
+                <strong style={{ display: "block", marginBottom: "8px" }}>
+                  You
+                </strong>
+                <p style={{ margin: 0, lineHeight: 1.75 }}>{question}</p>
+              </article>
+            ) : null}
             <article
               style={{
                 padding: "18px",
@@ -91,21 +91,41 @@ export const AskPage = () => {
               <strong style={{ display: "block", marginBottom: "8px" }}>
                 CloudMind
               </strong>
-              <p style={{ margin: 0, color: "#445160", lineHeight: 1.85 }}>
-                The direction shifted away from a backend-shaped admin panel and
-                toward a knowledge workspace with four primary areas: Overview,
-                Library, Capture, and Ask. The frontend should emphasize
-                browsing assets, understanding processing state, and grounding
-                answers in evidence.
-              </p>
+              {errorMessage ? (
+                <p
+                  style={{
+                    margin: 0,
+                    color: "#b91c1c",
+                    lineHeight: 1.85,
+                  }}
+                >
+                  {errorMessage}
+                </p>
+              ) : result ? (
+                <p style={{ margin: 0, color: "#445160", lineHeight: 1.85 }}>
+                  {result.answer}
+                </p>
+              ) : (
+                <p style={{ margin: 0, color: "#445160", lineHeight: 1.85 }}>
+                  Ask a question grounded in your saved assets. CloudMind will
+                  retrieve relevant chunks first, then answer with cited
+                  evidence.
+                </p>
+              )}
             </article>
           </div>
 
-          <form style={{ marginTop: "22px", display: "grid", gap: "12px" }}>
+          <form
+            method="get"
+            action="/ask"
+            style={{ marginTop: "22px", display: "grid", gap: "12px" }}
+          >
             <label style={{ display: "grid", gap: "8px" }}>
               <span style={{ fontWeight: 700 }}>Ask a follow-up</span>
               <textarea
+                name="question"
                 rows={5}
+                defaultValue={question}
                 placeholder="Ask a question grounded in your saved library..."
                 style={{
                   width: "100%",
@@ -141,18 +161,20 @@ export const AskPage = () => {
                 Ask Library
               </button>
               {suggestionPrompts.map((prompt) => (
-                <span
+                <a
                   key={prompt}
+                  href={buildSuggestionHref(prompt)}
                   style={{
                     padding: "10px 12px",
                     borderRadius: "999px",
                     backgroundColor: "#eef2f7",
                     color: "#526071",
                     fontSize: "13px",
+                    textDecoration: "none",
                   }}
                 >
                   {prompt}
-                </span>
+                </a>
               ))}
             </div>
           </form>
@@ -173,37 +195,54 @@ export const AskPage = () => {
               response.
             </p>
             <div style={{ display: "grid", gap: "12px" }}>
-              {evidenceCards.map((card) => (
+              {result?.sources.length ? (
+                result.sources.map((source) => (
+                  <article
+                    key={`${source.assetId}:${source.chunkId ?? "source"}`}
+                    style={{
+                      padding: "16px",
+                      borderRadius: "18px",
+                      backgroundColor: "#f8fbfc",
+                      border: "1px solid rgba(15, 23, 42, 0.06)",
+                    }}
+                  >
+                    <a
+                      href={`/assets/${source.assetId}`}
+                      style={{
+                        color: "#102033",
+                        textDecoration: "none",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {source.title}
+                    </a>
+                    <p
+                      style={{
+                        marginBottom: "8px",
+                        color: "#526071",
+                        lineHeight: 1.75,
+                      }}
+                    >
+                      {source.snippet}
+                    </p>
+                    <div style={{ color: "#64748b", fontSize: "13px" }}>
+                      {source.sourceUrl ?? `Asset ID: ${source.assetId}`}
+                    </div>
+                  </article>
+                ))
+              ) : (
                 <article
-                  key={card.title}
                   style={{
                     padding: "16px",
                     borderRadius: "18px",
                     backgroundColor: "#f8fbfc",
-                    border: "1px solid rgba(15, 23, 42, 0.06)",
+                    border: "1px dashed rgba(15, 23, 42, 0.12)",
+                    color: "#526071",
                   }}
                 >
-                  <a
-                    href={card.href}
-                    style={{
-                      color: "#102033",
-                      textDecoration: "none",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {card.title}
-                  </a>
-                  <p
-                    style={{
-                      marginBottom: 0,
-                      color: "#526071",
-                      lineHeight: 1.75,
-                    }}
-                  >
-                    {card.snippet}
-                  </p>
+                  Submit a question to see the retrieved evidence here.
                 </article>
-              ))}
+              )}
             </div>
           </article>
 
@@ -218,9 +257,8 @@ export const AskPage = () => {
           >
             <h3 style={{ marginTop: 0, fontSize: "20px" }}>Context Scope</h3>
             <p style={{ margin: 0, color: "#526071", lineHeight: 1.8 }}>
-              Future versions should let users ask within selected assets, tags,
-              or recent captures instead of searching the whole library by
-              default.
+              Right now every question searches the whole library. The next step
+              is letting users limit scope by asset, type, or tag before asking.
             </p>
           </article>
         </aside>
