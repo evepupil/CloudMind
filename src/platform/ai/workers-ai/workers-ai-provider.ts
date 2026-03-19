@@ -7,9 +7,20 @@ import type {
 } from "@/core/ai/ports";
 
 const EMBEDDING_MODEL = "@cf/baai/bge-m3";
+const TEXT_GENERATION_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
+
+interface WorkersAITextGenerationChoice {
+  message?:
+    | {
+        content?: string | undefined;
+      }
+    | undefined;
+  text?: string | undefined;
+}
 
 interface WorkersAITextGenerationOutput {
   response?: string | undefined;
+  choices?: WorkersAITextGenerationChoice[] | undefined;
 }
 
 interface WorkersAIEmbeddingsOutput {
@@ -17,6 +28,34 @@ interface WorkersAIEmbeddingsOutput {
   response?: number[][] | undefined;
   shape?: number[] | undefined;
 }
+
+export const extractGeneratedText = (output: unknown): string => {
+  if (typeof output === "string") {
+    return output;
+  }
+
+  if (!output || typeof output !== "object") {
+    return "";
+  }
+
+  const parsedOutput = output as WorkersAITextGenerationOutput;
+
+  if (typeof parsedOutput.response === "string") {
+    return parsedOutput.response;
+  }
+
+  const firstChoice = parsedOutput.choices?.[0];
+
+  if (typeof firstChoice?.message?.content === "string") {
+    return firstChoice.message.content;
+  }
+
+  if (typeof firstChoice?.text === "string") {
+    return firstChoice.text;
+  }
+
+  return "";
+};
 
 // 这里封装 Workers AI，避免业务层直接依赖 Cloudflare 运行时细节。
 export class WorkersAIProvider implements AIProvider {
@@ -48,14 +87,11 @@ export class WorkersAIProvider implements AIProvider {
       modelInput.max_tokens = input.maxOutputTokens;
     }
 
-    const output = (await this.ai.run(
-      "@cf/qwen/qwen3-30b-a3b-fp8",
-      modelInput
-    )) as WorkersAITextGenerationOutput;
+    const output = await this.ai.run(TEXT_GENERATION_MODEL, modelInput);
 
     return {
-      text: output.response ?? "",
-      model: "@cf/qwen/qwen3-30b-a3b-fp8",
+      text: extractGeneratedText(output),
+      model: TEXT_GENERATION_MODEL,
     };
   }
 
