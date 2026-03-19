@@ -160,9 +160,9 @@ describe("ingest routes", () => {
       type: "pdf",
       title: "CloudMind Spec",
       mimeType: "application/pdf",
-      contentText: "PDF placeholder content",
+      contentText: "Hello CloudMind PDF",
       rawR2Key: "assets/asset-file-1/raw/cloudmind-spec.pdf",
-      summary: "Verified PDF asset in R2 (9 bytes).",
+      summary: "Hello CloudMind PDF",
     });
     const formData = new FormData();
 
@@ -330,9 +330,9 @@ describe("ingest routes", () => {
       id: "asset-file-form-1",
       type: "pdf",
       title: "CloudMind Whitepaper",
-      contentText: "PDF placeholder content",
+      contentText: "Hello CloudMind PDF",
       rawR2Key: "assets/asset-file-form-1/raw/cloudmind-whitepaper.pdf",
-      summary: "Verified PDF asset in R2 (9 bytes).",
+      summary: "Hello CloudMind PDF",
     });
     const formData = new FormData();
 

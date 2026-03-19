@@ -1,6 +1,8 @@
-import type { AssetRepository } from "@/core/assets/ports";
+import type { AssetIngestRepository } from "@/core/assets/ports";
 import type { BlobStore } from "@/core/blob/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
+
+import { extractPdfText } from "./pdf-extractor";
 
 const normalizeContent = (content: string): string => {
   return content.replace(/\s+/g, " ").trim();
@@ -26,7 +28,7 @@ interface ProcessResult {
 }
 
 const processAsset = async (
-  repository: AssetRepository,
+  repository: AssetIngestRepository,
   assetId: string,
   execute: (asset: AssetDetail) => Promise<ProcessResult> | ProcessResult,
   options?: {
@@ -85,26 +87,9 @@ const decodePdfSignature = (body: ArrayBuffer): string => {
   return new TextDecoder().decode(signatureBytes);
 };
 
-const createPdfPlaceholderContent = (
-  asset: AssetDetail,
-  size: number,
-  contentType: string | undefined
-): string => {
-  return [
-    `PDF asset: ${asset.title}`,
-    `Storage: R2`,
-    `Raw key: ${asset.rawR2Key ?? "N/A"}`,
-    `Detected MIME type: ${contentType ?? asset.mimeType ?? "unknown"}`,
-    `Detected size: ${size} bytes`,
-    "",
-    "This is placeholder content produced by the minimal PDF processor.",
-    "A real text extraction pipeline will replace this field later.",
-  ].join("\n");
-};
-
 // 这里实现最小处理器，让采集和重处理共享统一状态流转。
 export const processTextAsset = async (
-  repository: AssetRepository,
+  repository: AssetIngestRepository,
   assetId: string,
   options?: {
     force?: boolean;
@@ -129,7 +114,7 @@ export const processTextAsset = async (
 };
 
 export const processUrlAsset = async (
-  repository: AssetRepository,
+  repository: AssetIngestRepository,
   assetId: string,
   options?: {
     force?: boolean;
@@ -154,7 +139,7 @@ export const processUrlAsset = async (
 };
 
 export const processPdfAsset = async (
-  repository: AssetRepository,
+  repository: AssetIngestRepository,
   blobStore: BlobStore,
   assetId: string,
   options?: {
@@ -185,13 +170,21 @@ export const processPdfAsset = async (
         throw new Error("Uploaded file is not a valid PDF.");
       }
 
+      let extractedText: Awaited<ReturnType<typeof extractPdfText>>;
+
+      try {
+        extractedText = await extractPdfText(object.body);
+      } catch {
+        throw new Error("Failed to extract text from PDF.");
+      }
+
+      if (!extractedText.text) {
+        throw new Error("No extractable text was found in the PDF.");
+      }
+
       return {
-        summary: `Verified PDF asset in R2 (${object.size} bytes).`,
-        contentText: createPdfPlaceholderContent(
-          asset,
-          object.size,
-          object.contentType
-        ),
+        summary: createTextSummary(extractedText.text),
+        contentText: extractedText.text,
       };
     },
     options

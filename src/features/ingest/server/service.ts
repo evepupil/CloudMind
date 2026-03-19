@@ -1,5 +1,5 @@
 import type {
-  AssetRepository,
+  AssetIngestRepository,
   CreateTextAssetInput,
   CreateUrlAssetInput,
 } from "@/core/assets/ports";
@@ -8,7 +8,7 @@ import type { BlobStore } from "@/core/blob/ports";
 import type { AppBindings } from "@/env";
 import type { AssetDetail } from "@/features/assets/model/types";
 import { getBlobStoreFromBindings } from "@/platform/blob/r2/get-blob-store";
-import { getAssetRepositoryFromBindings } from "@/platform/db/d1/get-asset-repository";
+import { getAssetIngestRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
 
 import {
   processPdfAsset,
@@ -19,40 +19,40 @@ import {
 interface IngestServiceDependencies {
   getAssetRepository: (
     bindings: AppBindings | undefined
-  ) => AssetRepository | Promise<AssetRepository>;
+  ) => AssetIngestRepository | Promise<AssetIngestRepository>;
   getBlobStore: (
     bindings: AppBindings | undefined
   ) => BlobStore | Promise<BlobStore>;
   processTextAsset: (
-    repository: AssetRepository,
+    repository: AssetIngestRepository,
     assetId: string
   ) => Promise<AssetDetail>;
   processUrlAsset: (
-    repository: AssetRepository,
+    repository: AssetIngestRepository,
     assetId: string
   ) => Promise<AssetDetail>;
   processPdfAsset: (
-    repository: AssetRepository,
+    repository: AssetIngestRepository,
     blobStore: BlobStore,
     assetId: string
   ) => Promise<AssetDetail>;
   getProcessTextAssetForced: (
-    repository: AssetRepository,
+    repository: AssetIngestRepository,
     assetId: string
   ) => Promise<AssetDetail>;
   getProcessUrlAssetForced: (
-    repository: AssetRepository,
+    repository: AssetIngestRepository,
     assetId: string
   ) => Promise<AssetDetail>;
   getProcessPdfAssetForced: (
-    repository: AssetRepository,
+    repository: AssetIngestRepository,
     blobStore: BlobStore,
     assetId: string
   ) => Promise<AssetDetail>;
 }
 
 const defaultDependencies: IngestServiceDependencies = {
-  getAssetRepository: getAssetRepositoryFromBindings,
+  getAssetRepository: getAssetIngestRepositoryFromBindings,
   getBlobStore: getBlobStoreFromBindings,
   processTextAsset,
   processUrlAsset,
@@ -65,7 +65,7 @@ const defaultDependencies: IngestServiceDependencies = {
     processPdfAsset(repository, blobStore, assetId, { force: true }),
 };
 
-// 这里集中采集与重处理用例，避免继续和资产读取能力耦合。
+// 这里集中采集与重处理用例，避免继续和资产读模型耦合。
 export const createIngestService = (
   dependencies: IngestServiceDependencies = defaultDependencies
 ) => {

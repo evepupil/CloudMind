@@ -20,6 +20,7 @@
     "drizzle-zod": "^0.8.3",
     "hono": "^4.12.8",
     "honox": "^0.1.55",
+    "unpdf": "^1.4.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

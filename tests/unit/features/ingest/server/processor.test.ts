@@ -1,3 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import type {
@@ -40,6 +44,19 @@ const encodeArrayBuffer = (value: string): ArrayBuffer => {
   return encoded.buffer.slice(
     encoded.byteOffset,
     encoded.byteOffset + encoded.byteLength
+  ) as ArrayBuffer;
+};
+
+const currentDir = dirname(fileURLToPath(import.meta.url));
+
+const loadPdfFixture = async (name: string): Promise<ArrayBuffer> => {
+  const file = await readFile(
+    resolve(currentDir, "../../../../fixtures/ingest", name)
+  );
+
+  return file.buffer.slice(
+    file.byteOffset,
+    file.byteOffset + file.byteLength
   ) as ArrayBuffer;
 };
 
@@ -89,6 +106,10 @@ class InMemoryAssetRepository implements AssetRepository {
         totalPages: 1,
       },
     };
+  }
+
+  public async searchAssets(): Promise<AssetListResult> {
+    return this.listAssets();
   }
 
   public async getAssetById(id: string): Promise<AssetDetail> {
@@ -290,7 +311,7 @@ describe("processUrlAsset", () => {
 });
 
 describe("processPdfAsset", () => {
-  it("verifies the PDF in R2 and promotes the asset to ready", async () => {
+  it("extracts real text from the PDF in R2 and promotes the asset to ready", async () => {
     const repository = new InMemoryAssetRepository(
       createAsset({
         id: "asset-pdf-1",
@@ -301,11 +322,12 @@ describe("processPdfAsset", () => {
         mimeType: "application/pdf",
       })
     );
+    const pdfBody = await loadPdfFixture("hello-cloudmind.pdf");
     const blobStore = new InMemoryBlobStore([
       {
         key: "assets/asset-pdf-1/raw/cloudmind.pdf",
-        body: encodeArrayBuffer("%PDF-1.7 sample"),
-        size: 15,
+        body: pdfBody,
+        size: pdfBody.byteLength,
         contentType: "application/pdf",
       },
     ]);
@@ -313,11 +335,8 @@ describe("processPdfAsset", () => {
     const result = await processPdfAsset(repository, blobStore, "asset-pdf-1");
 
     expect(result.status).toBe("ready");
-    expect(result.summary).toBe("Verified PDF asset in R2 (15 bytes).");
-    expect(result.contentText).toContain("PDF asset: CloudMind Whitepaper");
-    expect(result.contentText).toContain(
-      "Raw key: assets/asset-pdf-1/raw/cloudmind.pdf"
-    );
+    expect(result.summary).toBe("Hello CloudMind PDF");
+    expect(result.contentText).toBe("Hello CloudMind PDF");
     expect(result.jobs[0]?.status).toBe("succeeded");
   });
 
@@ -373,6 +392,36 @@ describe("processPdfAsset", () => {
 
     expect(result.status).toBe("failed");
     expect(result.errorMessage).toBe("Uploaded file is not a valid PDF.");
+    expect(result.jobs[0]?.status).toBe("failed");
+  });
+
+  it("marks the asset as failed when PDF text extraction fails", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-pdf-broken",
+        type: "pdf",
+        contentText: null,
+        rawR2Key: "assets/asset-pdf-broken/raw/broken.pdf",
+        mimeType: "application/pdf",
+      })
+    );
+    const blobStore = new InMemoryBlobStore([
+      {
+        key: "assets/asset-pdf-broken/raw/broken.pdf",
+        body: encodeArrayBuffer("%PDF-broken"),
+        size: 11,
+        contentType: "application/pdf",
+      },
+    ]);
+
+    const result = await processPdfAsset(
+      repository,
+      blobStore,
+      "asset-pdf-broken"
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.errorMessage).toBe("Failed to extract text from PDF.");
     expect(result.jobs[0]?.status).toBe("failed");
   });
 });

@@ -78,6 +78,10 @@ class InMemoryAssetRepository implements AssetRepository {
     };
   }
 
+  public async searchAssets(): Promise<AssetListResult> {
+    return this.listAssets();
+  }
+
   public async getAssetById(id: string): Promise<AssetDetail> {
     if (id !== this.asset.id) {
       throw new Error(`Asset "${id}" not found.`);
@@ -272,8 +276,8 @@ describe("ingest service", () => {
       type: "pdf",
       title: "CloudMind PDF",
       status: "ready",
-      summary: "Verified PDF asset in R2 (8 bytes).",
-      contentText: "PDF placeholder content",
+      summary: "Hello CloudMind PDF",
+      contentText: "Hello CloudMind PDF",
       rawR2Key: "assets/asset-file-1/raw/cloudmind.pdf",
       mimeType: "application/pdf",
       jobs: [createJob({ status: "succeeded" })],
@@ -359,7 +363,8 @@ describe("ingest service", () => {
       id: "asset-pdf-1",
       type: "pdf",
       status: "ready",
-      summary: "Verified PDF asset in R2 (8 bytes).",
+      summary: "Hello CloudMind PDF",
+      contentText: "Hello CloudMind PDF",
       rawR2Key: "assets/asset-pdf-1/raw/cloudmind.pdf",
       mimeType: "application/pdf",
     });
