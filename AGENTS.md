@@ -446,6 +446,88 @@ MVP 队列任务可拆成以下步骤：
 
 ---
 
+## 技术栈选型
+
+以下技术栈选择是当前项目的默认方向，用于指导后续实现与依赖控制。
+
+### 必选
+
+- **Framework:** `HonoX + Hono`
+- **Language:** `TypeScript`（strict mode，禁止 `any`）
+- **Styling:** `Tailwind CSS 4`
+- **UI:** `shadcn/ui`、`Radix UI`
+- **Animation:** `Motion`（按需引入）
+- **Database:** `Cloudflare D1`
+- **ORM:** `Drizzle ORM` + `drizzle-kit`
+- **Validation:** `Zod` + `drizzle-zod`
+- **Forms:** `React Hook Form`
+- **Storage:** `Cloudflare R2`，并保留 `S3-compatible` 抽象
+- **AI:** `Workers AI / OpenAI / DeepSeek / Xiaomi MiMo`，通过统一 `AIProvider` 抽象切换
+- **Async Processing:** `Cloudflare Queues`
+- **Lint / Format:** `Biome`
+- **Testing:** `Vitest`
+- **Package Manager:** `pnpm`
+
+### 可选
+
+- **AI Gateway:** `Cloudflare AI Gateway`
+- **Rate Limiting:** `Upstash Redis`（未配置时必须优雅降级）
+- **Monitoring:** `Sentry`
+- **Cloud Logging:** `Axiom`
+- **Storage SDK:** `@aws-sdk/client-s3`
+
+### 暂缓
+
+- **Auth:** `Better Auth`
+  - 技术上可用，但当前阶段不是 MVP 必需能力
+  - 仅在需要账号体系或第三方 OAuth 时再引入
+- **Advanced Workflow Engine:** `Inngest`
+  - 当前优先使用 `Cloudflare Queues`
+  - 如后续出现复杂长流程编排需求，再评估引入
+- **Payments:** `Creem`
+  - 当前项目定位为开源、自部署、非 SaaS
+  - 暂不进入 MVP 技术栈
+
+### 禁用 / 不采用
+
+- **`Next.js`**
+  - 当前项目不是 Next.js 应用
+  - 不使用 App Router / `pages/` / Server Actions 体系
+- **`next-safe-action`**
+  - 仅适用于 Next.js Server Actions 生态
+  - 当前项目不采用
+- **`next-intl`**
+  - 当前项目不是 Next.js 应用
+  - 后续如需国际化，选择更通用方案
+- **`Fumadocs` 作为主应用运行时依赖**
+  - 可作为独立文档站方案单独评估
+  - 不进入主应用技术栈
+
+### 当前推荐组合
+
+当前 CloudMind 的推荐组合如下：
+
+- 全栈框架：`HonoX + Hono`
+- 语言：`TypeScript` strict
+- UI：`Tailwind CSS 4 + shadcn/ui + Radix UI + Motion`
+- 数据层：`D1 + Drizzle ORM + drizzle-kit + Zod + drizzle-zod`
+- 存储层：`R2` + `@aws-sdk/client-s3` 抽象
+- 异步处理：`Cloudflare Queues`
+- AI：`Workers AI / OpenAI / DeepSeek / Xiaomi MiMo` 多 provider 抽象
+- 表单：`React Hook Form + Zod`
+- 可观测性：`Sentry` / `Axiom` 可选
+- 工具链：`Biome + pnpm + Vitest`
+
+### 架构判断
+
+- 当前项目以 **Cloudflare 原生 MVP** 为优先目标
+- 数据库层优先选择 `D1`，而不是一开始引入外部 `PostgreSQL`
+- ORM 与校验统一采用 `Drizzle + Zod` 体系
+- 所有 AI provider 必须通过统一抽象层接入，不允许在业务代码中直接散落具体厂商 SDK
+- 所有可选基础设施必须支持“未配置时优雅降级”
+
+---
+
 ## 工程初始化约束
 
 ### 目录结构
