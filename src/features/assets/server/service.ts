@@ -3,7 +3,7 @@ import type { AppBindings } from "@/env";
 import type { AssetDetail, AssetSummary } from "@/features/assets/model/types";
 
 import { processTextAsset } from "./processor";
-import type { CreateTextAssetInput } from "./repository";
+import type { AssetRepository, CreateTextAssetInput } from "./repository";
 
 const getDatabaseBinding = (bindings: AppBindings | undefined): D1Database => {
   if (!bindings?.DB) {
@@ -20,33 +20,65 @@ const getAssetRepository = (bindings: AppBindings | undefined) => {
   return new D1AssetRepository(getDatabaseBinding(bindings));
 };
 
-// 这里通过 service 层收敛仓储入口，避免页面和路由直接 new 基础设施实现。
-export const listAssets = async (
-  bindings: AppBindings | undefined
-): Promise<AssetSummary[]> => {
-  return getAssetRepository(bindings).listAssets();
+interface AssetServiceDependencies {
+  getAssetRepository: (
+    bindings: AppBindings | undefined
+  ) => AssetRepository | Promise<AssetRepository>;
+  processTextAsset: (
+    repository: AssetRepository,
+    assetId: string
+  ) => Promise<AssetDetail>;
+}
+
+const defaultDependencies: AssetServiceDependencies = {
+  getAssetRepository,
+  processTextAsset,
 };
 
-export const getAssetById = async (
-  bindings: AppBindings | undefined,
-  id: string
-): Promise<AssetDetail> => {
-  return getAssetRepository(bindings).getAssetById(id);
+// 这里通过 service 层收敛仓储和处理器入口，便于路由复用，也便于测试替换依赖。
+export const createAssetService = (
+  dependencies: AssetServiceDependencies = defaultDependencies
+) => {
+  return {
+    async listAssets(
+      bindings: AppBindings | undefined
+    ): Promise<AssetSummary[]> {
+      const repository = await dependencies.getAssetRepository(bindings);
+
+      return repository.listAssets();
+    },
+
+    async getAssetById(
+      bindings: AppBindings | undefined,
+      id: string
+    ): Promise<AssetDetail> {
+      const repository = await dependencies.getAssetRepository(bindings);
+
+      return repository.getAssetById(id);
+    },
+
+    async createTextAsset(
+      bindings: AppBindings | undefined,
+      input: CreateTextAssetInput
+    ): Promise<AssetDetail> {
+      const repository = await dependencies.getAssetRepository(bindings);
+
+      return repository.createTextAsset(input);
+    },
+
+    async ingestTextAsset(
+      bindings: AppBindings | undefined,
+      input: CreateTextAssetInput
+    ): Promise<AssetDetail> {
+      const repository = await dependencies.getAssetRepository(bindings);
+      const createdAsset = await repository.createTextAsset(input);
+
+      return dependencies.processTextAsset(repository, createdAsset.id);
+    },
+  };
 };
 
-export const createTextAsset = async (
-  bindings: AppBindings | undefined,
-  input: CreateTextAssetInput
-): Promise<AssetDetail> => {
-  return getAssetRepository(bindings).createTextAsset(input);
-};
+const assetService = createAssetService();
 
-export const ingestTextAsset = async (
-  bindings: AppBindings | undefined,
-  input: CreateTextAssetInput
-): Promise<AssetDetail> => {
-  const repository = getAssetRepository(bindings);
-  const createdAsset = await repository.createTextAsset(input);
-
-  return processTextAsset(repository, createdAsset.id);
-};
+export const { listAssets, getAssetById, createTextAsset, ingestTextAsset } =
+  assetService;
