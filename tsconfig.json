@@ -1,8 +1,19 @@
 {
-  "files": [],
-  "references": [
-    { "path": "./packages/shared" },
-    { "path": "./apps/api" },
-    { "path": "./apps/web" }
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "types": ["node", "vite/client", "@cloudflare/workers-types"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "vite.config.ts"
   ]
 }

@@ -2,20 +2,36 @@
 
 CloudMind 是一个开源、个人可控、serverless-first 的 AI 个人知识库。
 
-## 工作区结构
+当前项目采用 **单个 HonoX 全栈应用** 结构：
 
-- `apps/api`：基于 Hono 的后端 API 与 MCP 入口
-- `apps/web`：基于 HonoX 的前端界面
-- `packages/shared`：前后端共享类型与常量
+- 页面与 API 在同一个项目中维护
+- 直接构建到 `dist/`
+- 可直接部署到 Cloudflare Pages
 
-## 快速开始
+## 技术栈
+
+- 全栈框架：`HonoX`
+- 路由与 API：`Hono`
+- 语言：`TypeScript`
+- 格式化与 lint：`Biome`
+- 部署目标：`Cloudflare Pages`
+
+## 开发命令
 
 ```bash
 npm install
-npm run dev:web
-npm run dev:api
+npm run dev
+npm run typecheck
+npm run lint
+npm run build
 ```
 
-## 开发规范
+## Pages 部署
 
-请先阅读根目录下的 `AGENTS.md`。
+```bash
+npm run build
+npm run pages:dev
+npm run pages:deploy
+```
+
+更多约束请查看 `AGENTS.md`。

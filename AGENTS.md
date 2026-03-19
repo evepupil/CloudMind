@@ -60,8 +60,9 @@ CloudMind 可以理解为一个“全自动知识库”：
 
 ### 推荐默认栈
 
-- 计算/API：`Cloudflare Workers`
-- 前端：`Cloudflare Pages` 或基于 `Workers` 的前端托管
+- 全栈框架：`HonoX`
+- 路由与 API：`Hono`
+- 部署平台：`Cloudflare Pages`
 - 结构化元数据：`Cloudflare D1`
 - 原始文件/快照：`Cloudflare R2`
 - 向量索引：`Cloudflare Vectorize`
@@ -69,6 +70,8 @@ CloudMind 可以理解为一个“全自动知识库”：
 - AI 能力：`Cloudflare Workers AI`
 - 可选网页渲染：`Cloudflare Browser Rendering`
 - 可选缓存/临时状态：`Cloudflare KV`
+
+当前项目代码结构采用 **单个 HonoX 全栈项目**，而不是前后端分离的 monorepo。
 
 ### 为什么当前不用 PostgreSQL + pgvector 作为 MVP 默认
 
@@ -447,13 +450,21 @@ MVP 队列任务可拆成以下步骤：
 
 ### 目录结构
 
-项目采用前后端分离的 monorepo：
+项目采用 **单个 HonoX 全栈项目**：
 
-- `apps/api`：后端，基于 `Hono`
-- `apps/web`：前端，基于 `HonoX`
-- `packages/*`：共享类型、基础能力与后续可复用模块
+- `app/*`：HonoX 入口、页面路由与渲染层
+- `src/features/*`：按 feature 划分的业务代码
+- `src/env.ts`：运行环境类型
 
 代码组织优先采用 **feature-first** 目录结构，而不是只按 controller / service / util 做纯技术分层。
+
+推荐目录约定：
+
+- `app/routes/*`：页面 route
+- `app/server.ts`：全栈应用入口
+- `src/features/<feature>/components/*`：页面组件
+- `src/features/<feature>/server/*`：API / 服务端逻辑
+- `src/features/<feature>/model/*`：领域类型与模型
 
 ### 语言与类型系统
 
@@ -470,7 +481,7 @@ MVP 队列任务可拆成以下步骤：
 
 ### 路径别名
 
-- 每个工作区内统一使用路径别名：`@/* -> src/*`
+- 项目统一使用路径别名：`@/* -> src/*`
 
 ### 格式化规范
 
