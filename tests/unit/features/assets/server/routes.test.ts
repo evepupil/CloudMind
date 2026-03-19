@@ -372,6 +372,72 @@ describe("asset routes", () => {
     expect(assetService.ingestFileAsset).not.toHaveBeenCalled();
   });
 
+  it("POST /assets/actions/ingest-file redirects to the detail page after upload", async () => {
+    const app = createApp();
+    const env = { APP_NAME: "cloudmind-test" };
+    const item = createAssetDetail({
+      id: "asset-file-form-1",
+      type: "pdf",
+      title: "CloudMind Whitepaper",
+      status: "pending",
+    });
+    const formData = new FormData();
+
+    formData.set("title", "CloudMind Whitepaper");
+    formData.set(
+      "file",
+      new File(["pdf-bytes"], "cloudmind-whitepaper.pdf", {
+        type: "application/pdf",
+      })
+    );
+
+    vi.mocked(assetService.ingestFileAsset).mockResolvedValue(item);
+
+    const response = await app.request(
+      "/assets/actions/ingest-file",
+      {
+        method: "POST",
+        body: formData,
+      },
+      env
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe(
+      "/assets/asset-file-form-1?created=1"
+    );
+    expect(assetService.ingestFileAsset).toHaveBeenCalledWith(
+      env,
+      expect.objectContaining({
+        title: "CloudMind Whitepaper",
+        file: expect.any(File),
+      })
+    );
+  });
+
+  it("POST /assets/actions/ingest-file redirects with an error for non-PDF uploads", async () => {
+    const app = createApp();
+    const formData = new FormData();
+
+    formData.set(
+      "file",
+      new File(["plain-text"], "notes.txt", {
+        type: "text/plain",
+      })
+    );
+
+    const response = await app.request("/assets/actions/ingest-file", {
+      method: "POST",
+      body: formData,
+    });
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe(
+      "/assets?error=Only%20PDF%20files%20are%20supported%20right%20now."
+    );
+    expect(assetService.ingestFileAsset).not.toHaveBeenCalled();
+  });
+
   it("GET /api/assets passes list filters to the service", async () => {
     const app = createApp();
     const env = { APP_NAME: "cloudmind-test" };

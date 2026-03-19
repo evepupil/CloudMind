@@ -32,7 +32,7 @@ const formatDate = (value: string): string => {
   });
 };
 
-// 这里提供资产列表页，先覆盖文本资产写入和资产状态查看两个 MVP 场景。
+// 这里提供最小资产列表页，把文本、URL 和 PDF 采集入口收敛到一个管理页面。
 export const AssetsPage = ({
   items,
   pagination,
@@ -77,7 +77,7 @@ export const AssetsPage = ({
   return (
     <PageShell
       title="Assets"
-      subtitle="用 D1 持久化资产元数据，先把文本采集、列表和状态展示跑通。"
+      subtitle="Use D1 for asset metadata and keep ingest flows visible while the MVP grows."
     >
       {flashMessage ? (
         <section
@@ -123,7 +123,8 @@ export const AssetsPage = ({
           Save Text Asset
         </h2>
         <p style={{ marginTop: 0, marginBottom: "20px", color: "#475569" }}>
-          第一版直接通过表单提交文本资产，落库后会生成一条 queued job。
+          Submit raw text directly from the dashboard and create a queued ingest
+          job immediately.
         </p>
         <form
           action="/assets/actions/ingest-text"
@@ -176,6 +177,78 @@ export const AssetsPage = ({
             }}
           >
             Save Asset
+          </button>
+        </form>
+      </section>
+
+      <section
+        style={{
+          marginBottom: "32px",
+          padding: "24px",
+          border: "1px solid #e2e8f0",
+          borderRadius: "20px",
+          backgroundColor: "#ffffff",
+        }}
+      >
+        <h2 style={{ marginTop: 0, marginBottom: "12px", fontSize: "24px" }}>
+          Upload PDF Asset
+        </h2>
+        <p style={{ marginTop: 0, marginBottom: "20px", color: "#475569" }}>
+          Upload a PDF into R2 and create a pending asset record in D1 for the
+          next processing step.
+        </p>
+        <form
+          action="/assets/actions/ingest-file"
+          method="post"
+          encType="multipart/form-data"
+          style={{ display: "grid", gap: "14px" }}
+        >
+          <label style={{ display: "grid", gap: "8px" }}>
+            <span style={{ fontWeight: 600 }}>Title</span>
+            <input
+              name="title"
+              type="text"
+              placeholder="Optional title"
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: "12px",
+                border: "1px solid #cbd5e1",
+                fontSize: "15px",
+              }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: "8px" }}>
+            <span style={{ fontWeight: 600 }}>PDF File</span>
+            <input
+              name="file"
+              type="file"
+              accept="application/pdf,.pdf"
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: "12px",
+                border: "1px solid #cbd5e1",
+                fontSize: "15px",
+                backgroundColor: "#ffffff",
+              }}
+            />
+          </label>
+          <button
+            type="submit"
+            style={{
+              justifySelf: "start",
+              padding: "12px 18px",
+              borderRadius: "999px",
+              border: "none",
+              backgroundColor: "#7c3aed",
+              color: "#ffffff",
+              fontSize: "14px",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Upload PDF
           </button>
         </form>
       </section>
@@ -414,7 +487,8 @@ export const AssetsPage = ({
               color: "#475569",
             }}
           >
-            还没有资产。先提交一条文本内容，把第一条记录写进 D1。
+            No assets yet. Start with text, URL, or PDF upload and write the
+            first record into D1.
           </article>
         ) : (
           <div style={{ display: "grid", gap: "14px" }}>
@@ -451,7 +525,7 @@ export const AssetsPage = ({
                       {asset.title}
                     </a>
                     <div style={{ marginTop: "6px", color: "#64748b" }}>
-                      {asset.type} · 创建于 {formatDate(asset.createdAt)}
+                      {asset.type} · Created at {formatDate(asset.createdAt)}
                     </div>
                   </div>
                   <AssetStatusBadge status={asset.status} />
@@ -463,7 +537,8 @@ export const AssetsPage = ({
                     color: "#334155",
                   }}
                 >
-                  {asset.summary ?? "摘要尚未生成，当前展示原始元数据。"}
+                  {asset.summary ??
+                    "Summary has not been generated yet. The list is showing raw metadata for now."}
                 </p>
                 <div style={{ color: "#64748b", fontSize: "14px" }}>
                   {asset.sourceUrl ?? `Asset ID: ${asset.id}`}

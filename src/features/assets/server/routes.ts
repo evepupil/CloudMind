@@ -57,6 +57,68 @@ const isPdfFile = (file: File): boolean => {
   return file.name.toLowerCase().endsWith(".pdf");
 };
 
+const parseFileUploadFormData = (
+  formData: FormData
+):
+  | {
+      ok: true;
+      data: {
+        title?: string | undefined;
+        file: File;
+      };
+    }
+  | {
+      ok: false;
+      message: string;
+      validationError?: z.ZodError | undefined;
+    } => {
+  const titleValue = formData.get("title");
+  const parsedTitle = ingestTextPayloadSchema.pick({ title: true }).safeParse({
+    title: typeof titleValue === "string" ? titleValue : undefined,
+  });
+
+  if (!parsedTitle.success) {
+    return {
+      ok: false,
+      message: "Please provide a valid title.",
+      validationError: parsedTitle.error,
+    };
+  }
+
+  const fileValue = formData.get("file");
+
+  if (fileValue === null || typeof fileValue === "string") {
+    return {
+      ok: false,
+      message: "File is required.",
+    };
+  }
+
+  const file = fileValue as File;
+
+  if (file.size === 0) {
+    return {
+      ok: false,
+      message: "File must not be empty.",
+    };
+  }
+
+  if (!isPdfFile(file)) {
+    return {
+      ok: false,
+      message: "Only PDF files are supported right now.",
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      title: parsedTitle.data.title,
+      file,
+    },
+  };
+};
+
 // 这里注册资产相关 API，并补上页面表单 action，保持 Web UI 和 API 走同一套 service。
 export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
   app.get("/api/assets", async (context) => {
@@ -165,39 +227,22 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
 
   app.post("/api/ingest/file", async (context) => {
     const formData = await context.req.formData();
-    const titleValue = formData.get("title");
-    const parsedTitle = ingestTextPayloadSchema
-      .pick({ title: true })
-      .safeParse({
-        title: typeof titleValue === "string" ? titleValue : undefined,
-      });
+    const parsedFormData = parseFileUploadFormData(formData);
 
-    if (!parsedTitle.success) {
-      return context.json(getValidationErrorBody(parsedTitle.error), 400);
-    }
+    if (!parsedFormData.ok) {
+      if (parsedFormData.validationError) {
+        return context.json(
+          getValidationErrorBody(parsedFormData.validationError),
+          400
+        );
+      }
 
-    const fileValue = formData.get("file");
-
-    if (fileValue === null || typeof fileValue === "string") {
-      return context.json(getInvalidInputBody("File is required."), 400);
-    }
-
-    const file = fileValue as File;
-
-    if (file.size === 0) {
-      return context.json(getInvalidInputBody("File must not be empty."), 400);
-    }
-
-    if (!isPdfFile(file)) {
-      return context.json(
-        getInvalidInputBody("Only PDF files are supported right now."),
-        400
-      );
+      return context.json(getInvalidInputBody(parsedFormData.message), 400);
     }
 
     const item = await ingestFileAsset(context.env, {
-      title: parsedTitle.data.title,
-      file,
+      title: parsedFormData.data.title,
+      file: parsedFormData.data.file,
     });
 
     return context.json(
@@ -285,6 +330,21 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
     }
 
     const item = await ingestUrlAsset(context.env, parsedPayload.data);
+
+    return context.redirect(`/assets/${item.id}?created=1`);
+  });
+
+  app.post("/assets/actions/ingest-file", async (context) => {
+    const formData = await context.req.formData();
+    const parsedFormData = parseFileUploadFormData(formData);
+
+    if (!parsedFormData.ok) {
+      return context.redirect(
+        `/assets?error=${encodeURIComponent(parsedFormData.message)}`
+      );
+    }
+
+    const item = await ingestFileAsset(context.env, parsedFormData.data);
 
     return context.redirect(`/assets/${item.id}?created=1`);
   });
