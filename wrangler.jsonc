@@ -18,5 +18,14 @@
       "binding": "ASSET_FILES",
       "bucket_name": "cloudmind-assets"
     }
-  ]
+  ],
+  "vectorize": [
+    {
+      "binding": "ASSET_VECTORS",
+      "index_name": "cloudmind-asset-chunks"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  }
 }

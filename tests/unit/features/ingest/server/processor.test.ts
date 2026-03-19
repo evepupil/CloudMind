@@ -4,14 +4,23 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import type { AIProvider } from "@/core/ai/ports";
 import type {
   AssetRepository,
+  AssetSearchInput,
   CreateFileAssetInput,
   CreateTextAssetInput,
   CreateUrlAssetInput,
 } from "@/core/assets/ports";
 import type { BlobObject, BlobStore } from "@/core/blob/ports";
 import type {
+  VectorRecord,
+  VectorSearchInput,
+  VectorSearchMatch,
+  VectorStore,
+} from "@/core/vector/ports";
+import type {
+  AssetChunkMatch,
   AssetDetail,
   AssetListQuery,
   AssetListResult,
@@ -109,8 +118,14 @@ class InMemoryAssetRepository implements AssetRepository {
     };
   }
 
-  public async searchAssets(): Promise<AssetListResult> {
+  public async searchAssets(
+    _input?: AssetSearchInput
+  ): Promise<AssetListResult> {
     return this.listAssets();
+  }
+
+  public async getChunkMatchesByVectorIds(): Promise<AssetChunkMatch[]> {
+    return [];
   }
 
   public async getAssetById(id: string): Promise<AssetDetail> {
@@ -264,6 +279,38 @@ class InMemoryBlobStore implements BlobStore {
   }
 }
 
+class InMemoryVectorStore implements VectorStore {
+  public readonly upsertCalls: VectorRecord[][] = [];
+
+  public readonly deletedIds: string[][] = [];
+
+  public async upsert(records: VectorRecord[]): Promise<void> {
+    this.upsertCalls.push(records);
+  }
+
+  public async search(_input: VectorSearchInput): Promise<VectorSearchMatch[]> {
+    return [];
+  }
+
+  public async deleteByIds(ids: string[]): Promise<void> {
+    this.deletedIds.push(ids);
+  }
+}
+
+class InMemoryAIProvider implements AIProvider {
+  public async generateText(): Promise<{ text: string }> {
+    return { text: "" };
+  }
+
+  public async createEmbeddings(input: {
+    texts: string[];
+  }): Promise<{ embeddings: number[][] }> {
+    return {
+      embeddings: input.texts.map((_, index) => [index + 0.1, index + 0.2]),
+    };
+  }
+}
+
 describe("processTextAsset", () => {
   it("promotes a pending text asset to ready and completes the latest job", async () => {
     const repository = new InMemoryAssetRepository(
@@ -273,8 +320,16 @@ describe("processTextAsset", () => {
       })
     );
     const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new InMemoryAIProvider();
 
-    const result = await processTextAsset(repository, blobStore, "asset-1");
+    const result = await processTextAsset(
+      repository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      "asset-1"
+    );
 
     expect(result.status).toBe("ready");
     expect(result.summary).toBe(
@@ -290,12 +345,19 @@ describe("processTextAsset", () => {
         chunkIndex: 0,
         textPreview:
           "CloudMind keeps the original content and generates a concise summary.",
-        vectorId: null,
+        vectorId: "asset-1:0",
       },
     ]);
     expect(result.processedAt).toBe("2026-03-19T00:02:00.000Z");
     expect(result.jobs[0]?.status).toBe("succeeded");
     expect(result.jobs[0]?.errorMessage).toBeNull();
+    expect(vectorStore.upsertCalls).toEqual([
+      [
+        expect.objectContaining({
+          id: "asset-1:0",
+        }),
+      ],
+    ]);
   });
 
   it("marks the asset and job as failed when content is empty", async () => {
@@ -305,8 +367,16 @@ describe("processTextAsset", () => {
       })
     );
     const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new InMemoryAIProvider();
 
-    const result = await processTextAsset(repository, blobStore, "asset-1");
+    const result = await processTextAsset(
+      repository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      "asset-1"
+    );
 
     expect(result.status).toBe("failed");
     expect(result.summary).toBeNull();
@@ -328,8 +398,16 @@ describe("processTextAsset", () => {
       })
     );
     const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new InMemoryAIProvider();
 
-    const result = await processTextAsset(repository, blobStore, "asset-1");
+    const result = await processTextAsset(
+      repository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      "asset-1"
+    );
 
     expect(result.status).toBe("ready");
     expect(result.summary).toBe("Existing summary");
@@ -380,8 +458,16 @@ describe("processPdfAsset", () => {
         contentType: "application/pdf",
       },
     ]);
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new InMemoryAIProvider();
 
-    const result = await processPdfAsset(repository, blobStore, "asset-pdf-1");
+    const result = await processPdfAsset(
+      repository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      "asset-pdf-1"
+    );
 
     expect(result.status).toBe("ready");
     expect(result.summary).toBe("Hello CloudMind PDF");
@@ -392,10 +478,17 @@ describe("processPdfAsset", () => {
         id: "chunk-1",
         chunkIndex: 0,
         textPreview: "Hello CloudMind PDF",
-        vectorId: null,
+        vectorId: "asset-pdf-1:0",
       },
     ]);
     expect(result.jobs[0]?.status).toBe("succeeded");
+    expect(vectorStore.upsertCalls).toEqual([
+      [
+        expect.objectContaining({
+          id: "asset-pdf-1:0",
+        }),
+      ],
+    ]);
   });
 
   it("marks the asset as failed when the R2 object is missing", async () => {
@@ -409,10 +502,14 @@ describe("processPdfAsset", () => {
       })
     );
     const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new InMemoryAIProvider();
 
     const result = await processPdfAsset(
       repository,
       blobStore,
+      vectorStore,
+      aiProvider,
       "asset-pdf-missing"
     );
 
@@ -441,10 +538,14 @@ describe("processPdfAsset", () => {
         contentType: "application/pdf",
       },
     ]);
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new InMemoryAIProvider();
 
     const result = await processPdfAsset(
       repository,
       blobStore,
+      vectorStore,
+      aiProvider,
       "asset-pdf-invalid"
     );
 
@@ -471,10 +572,14 @@ describe("processPdfAsset", () => {
         contentType: "application/pdf",
       },
     ]);
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new InMemoryAIProvider();
 
     const result = await processPdfAsset(
       repository,
       blobStore,
+      vectorStore,
+      aiProvider,
       "asset-pdf-broken"
     );
 

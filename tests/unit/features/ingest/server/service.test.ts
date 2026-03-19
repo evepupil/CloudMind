@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { AIProvider } from "@/core/ai/ports";
 import type {
   AssetRepository,
   CreateFileAssetInput,
@@ -7,7 +8,9 @@ import type {
   CreateUrlAssetInput,
 } from "@/core/assets/ports";
 import type { BlobStore } from "@/core/blob/ports";
+import type { VectorStore } from "@/core/vector/ports";
 import type {
+  AssetChunkMatch,
   AssetDetail,
   AssetListQuery,
   AssetListResult,
@@ -81,6 +84,10 @@ class InMemoryAssetRepository implements AssetRepository {
 
   public async searchAssets(): Promise<AssetListResult> {
     return this.listAssets();
+  }
+
+  public async getChunkMatchesByVectorIds(): Promise<AssetChunkMatch[]> {
+    return [];
   }
 
   public async getAssetById(id: string): Promise<AssetDetail> {
@@ -167,8 +174,23 @@ describe("ingest service", () => {
     put: vi.fn(async () => undefined),
     get: vi.fn(async () => null),
   };
+  const vectorStoreMock: VectorStore = {
+    upsert: vi.fn(async () => undefined),
+    search: vi.fn(async () => []),
+    deleteByIds: vi.fn(async () => undefined),
+  };
+  const aiProviderMock: AIProvider = {
+    generateText: vi.fn(async () => ({
+      text: "",
+    })),
+    createEmbeddings: vi.fn(async () => ({
+      embeddings: [[0.11, 0.22]],
+    })),
+  };
   const getAssetRepositoryMock = vi.fn();
   const getBlobStoreMock = vi.fn();
+  const getVectorStoreMock = vi.fn();
+  const getAIProviderMock = vi.fn();
   const processTextAssetMock = vi.fn();
   const processUrlAssetMock = vi.fn();
   const processPdfAssetMock = vi.fn();
@@ -202,6 +224,8 @@ describe("ingest service", () => {
     const service = createIngestService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
       processUrlAsset: processUrlAssetMock,
       processPdfAsset: processPdfAssetMock,
@@ -217,9 +241,14 @@ describe("ingest service", () => {
 
     expect(result).toEqual(processedAsset);
     expect(getAssetRepositoryMock).toHaveBeenCalledWith(env);
+    expect(getBlobStoreMock).toHaveBeenCalledWith(env);
+    expect(getVectorStoreMock).toHaveBeenCalledWith(env);
+    expect(getAIProviderMock).toHaveBeenCalledWith(env);
     expect(processTextAssetMock).toHaveBeenCalledWith(
       repository,
       blobStoreMock,
+      vectorStoreMock,
+      aiProviderMock,
       "asset-text-1"
     );
     expect(await repository.getAssetById("asset-text-1")).toMatchObject({
@@ -245,6 +274,8 @@ describe("ingest service", () => {
     const service = createIngestService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock.mockResolvedValue(processedAsset),
       processPdfAsset: processPdfAssetMock,
@@ -291,13 +322,15 @@ describe("ingest service", () => {
           id: "chunk-1",
           chunkIndex: 0,
           textPreview: "Hello CloudMind PDF",
-          vectorId: null,
+          vectorId: "asset-file-1:0",
         },
       ],
     });
     const service = createIngestService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
       processPdfAsset: processPdfAssetMock.mockResolvedValue(processedAsset),
@@ -315,6 +348,8 @@ describe("ingest service", () => {
     });
 
     expect(getBlobStoreMock).toHaveBeenCalledWith(env);
+    expect(getVectorStoreMock).toHaveBeenCalledWith(env);
+    expect(getAIProviderMock).toHaveBeenCalledWith(env);
     expect(blobStoreMock.put).toHaveBeenCalledWith(
       expect.objectContaining({
         key: "assets/asset-file-1/raw/cloudmind.pdf",
@@ -325,6 +360,8 @@ describe("ingest service", () => {
     expect(processPdfAssetMock).toHaveBeenCalledWith(
       repository,
       blobStoreMock,
+      vectorStoreMock,
+      aiProviderMock,
       "asset-file-1"
     );
     expect(result).toEqual(processedAsset);
@@ -345,6 +382,8 @@ describe("ingest service", () => {
     const service = createIngestService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
       processPdfAsset: processPdfAssetMock,
@@ -359,6 +398,8 @@ describe("ingest service", () => {
     expect(processTextAssetForcedMock).toHaveBeenCalledWith(
       repository,
       blobStoreMock,
+      vectorStoreMock,
+      aiProviderMock,
       "asset-note-1"
     );
     expect(result).toEqual(processedAsset);
@@ -387,13 +428,15 @@ describe("ingest service", () => {
           id: "chunk-1",
           chunkIndex: 0,
           textPreview: "Hello CloudMind PDF",
-          vectorId: null,
+          vectorId: "asset-pdf-1:0",
         },
       ],
     });
     const service = createIngestService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
       processPdfAsset: processPdfAssetMock,
@@ -406,9 +449,13 @@ describe("ingest service", () => {
     const result = await service.reprocessAsset(env, "asset-pdf-1");
 
     expect(getBlobStoreMock).toHaveBeenCalledWith(env);
+    expect(getVectorStoreMock).toHaveBeenCalledWith(env);
+    expect(getAIProviderMock).toHaveBeenCalledWith(env);
     expect(processPdfAssetForcedMock).toHaveBeenCalledWith(
       repository,
       blobStoreMock,
+      vectorStoreMock,
+      aiProviderMock,
       "asset-pdf-1"
     );
     expect(result).toEqual(processedAsset);
@@ -424,6 +471,8 @@ describe("ingest service", () => {
     const service = createIngestService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
       processPdfAsset: processPdfAssetMock,

@@ -1,6 +1,7 @@
 import { createRoute } from "honox/factory";
 
 import { SearchPage } from "@/features/search/components/search-page";
+import type { SearchResult } from "@/features/search/model/types";
 import { searchAssets } from "@/features/search/server/service";
 
 export default createRoute(async (context) => {
@@ -8,7 +9,7 @@ export default createRoute(async (context) => {
   const pageValue = Number(context.req.query("page") ?? "1");
   const page = Number.isFinite(pageValue) && pageValue > 0 ? pageValue : 1;
 
-  const result =
+  const result: SearchResult =
     query.length > 0
       ? await searchAssets(context.env, {
           query,

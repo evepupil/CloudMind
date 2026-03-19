@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, like, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, like, or } from "drizzle-orm";
 
 import { AssetNotFoundError } from "@/core/assets/errors";
 import type {
@@ -11,6 +11,7 @@ import type {
   CreateUrlAssetInput,
 } from "@/core/assets/ports";
 import type {
+  AssetChunkMatch,
   AssetChunkSummary,
   AssetDetail,
   AssetListQuery,
@@ -63,6 +64,16 @@ const mapChunkSummary = (
     chunkIndex: record.chunkIndex,
     textPreview: record.textPreview,
     vectorId: record.vectorId,
+  };
+};
+
+const mapChunkMatch = (record: {
+  chunk: typeof assetChunks.$inferSelect;
+  asset: typeof assets.$inferSelect;
+}): AssetChunkMatch => {
+  return {
+    ...mapChunkSummary(record.chunk),
+    asset: mapAssetSummary(record.asset),
   };
 };
 
@@ -136,6 +147,25 @@ export class D1AssetRepository implements AssetRepository {
       page: input.page,
       pageSize: input.pageSize,
     });
+  }
+
+  public async getChunkMatchesByVectorIds(
+    vectorIds: string[]
+  ): Promise<AssetChunkMatch[]> {
+    if (vectorIds.length === 0) {
+      return [];
+    }
+
+    const records = await this.db
+      .select({
+        chunk: assetChunks,
+        asset: assets,
+      })
+      .from(assetChunks)
+      .innerJoin(assets, eq(assetChunks.assetId, assets.id))
+      .where(inArray(assetChunks.vectorId, vectorIds));
+
+    return records.map(mapChunkMatch);
   }
 
   public async getAssetById(id: string): Promise<AssetDetail> {

@@ -1,9 +1,12 @@
+import type { AIProvider } from "@/core/ai/ports";
 import type {
   AssetIngestRepository,
   CreateAssetChunkInput,
 } from "@/core/assets/ports";
 import { createProcessedContentBlobKey } from "@/core/blob/keys";
 import type { BlobStore } from "@/core/blob/ports";
+import { createChunkVectorId } from "@/core/vector/keys";
+import type { VectorStore } from "@/core/vector/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
 
 import { chunkAssetContent } from "./chunking";
@@ -37,6 +40,12 @@ const getLatestJob = (asset: AssetDetail) => {
   return asset.jobs[0] ?? null;
 };
 
+interface PreparedChunk {
+  chunkIndex: number;
+  text: string;
+  textPreview: string;
+}
+
 interface ProcessResult {
   summary: string;
   contentText?: string | null;
@@ -51,7 +60,7 @@ const persistProcessedContent = async (
 ): Promise<{
   contentText: string;
   contentR2Key: string;
-  chunks: CreateAssetChunkInput[];
+  chunks: PreparedChunk[];
 }> => {
   const normalizedContent = content.trim();
 
@@ -60,11 +69,7 @@ const persistProcessedContent = async (
   }
 
   const contentR2Key = createProcessedContentBlobKey(assetId, "txt");
-  const chunks = chunkAssetContent(normalizedContent).map((chunk) => ({
-    chunkIndex: chunk.chunkIndex,
-    textPreview: chunk.textPreview,
-    vectorId: null,
-  }));
+  const chunks = chunkAssetContent(normalizedContent);
 
   await blobStore.put({
     key: contentR2Key,
@@ -81,7 +86,57 @@ const persistProcessedContent = async (
   };
 };
 
-const processAsset = async (
+const indexPreparedChunks = async (
+  aiProvider: AIProvider,
+  vectorStore: VectorStore,
+  asset: AssetDetail,
+  chunks: PreparedChunk[]
+): Promise<CreateAssetChunkInput[]> => {
+  if (chunks.length === 0) {
+    return [];
+  }
+
+  const { embeddings } = await aiProvider.createEmbeddings({
+    texts: chunks.map((chunk) => chunk.text),
+    purpose: "document",
+  });
+
+  if (embeddings.length !== chunks.length) {
+    throw new Error("Embedding count does not match processed chunk count.");
+  }
+
+  const vectorRecords = chunks.map((chunk, index) => {
+    const vectorId = createChunkVectorId(asset.id, chunk.chunkIndex);
+
+    return {
+      id: vectorId,
+      values: embeddings[index] ?? [],
+      metadataJson: JSON.stringify({
+        assetId: asset.id,
+        chunkIndex: chunk.chunkIndex,
+        textPreview: chunk.textPreview,
+      }),
+    };
+  });
+
+  await vectorStore.upsert(vectorRecords);
+
+  const nextVectorIds = new Set(vectorRecords.map((record) => record.id));
+  const staleVectorIds = asset.chunks
+    .map((chunk) => chunk.vectorId)
+    .filter((value): value is string => Boolean(value))
+    .filter((value) => !nextVectorIds.has(value));
+
+  await vectorStore.deleteByIds(staleVectorIds);
+
+  return chunks.map((chunk) => ({
+    chunkIndex: chunk.chunkIndex,
+    textPreview: chunk.textPreview,
+    vectorId: createChunkVectorId(asset.id, chunk.chunkIndex),
+  }));
+};
+
+const runAssetProcessing = async (
   repository: AssetIngestRepository,
   assetId: string,
   execute: (asset: AssetDetail) => Promise<ProcessResult> | ProcessResult,
@@ -158,12 +213,14 @@ const decodePdfSignature = (body: ArrayBuffer): string => {
 export const processTextAsset = async (
   repository: AssetIngestRepository,
   blobStore: BlobStore,
+  vectorStore: VectorStore,
+  aiProvider: AIProvider,
   assetId: string,
   options?: {
     force?: boolean;
   }
 ): Promise<AssetDetail> => {
-  return processAsset(
+  return runAssetProcessing(
     repository,
     assetId,
     async (asset) => {
@@ -178,12 +235,18 @@ export const processTextAsset = async (
         asset.id,
         normalizeContent(content)
       );
+      const indexedChunks = await indexPreparedChunks(
+        aiProvider,
+        vectorStore,
+        asset,
+        persistedContent.chunks
+      );
 
       return {
         summary: createTextSummary(content),
         contentText: persistedContent.contentText,
         contentR2Key: persistedContent.contentR2Key,
-        chunks: persistedContent.chunks,
+        chunks: indexedChunks,
       };
     },
     options
@@ -197,7 +260,7 @@ export const processUrlAsset = async (
     force?: boolean;
   }
 ): Promise<AssetDetail> => {
-  return processAsset(
+  return runAssetProcessing(
     repository,
     assetId,
     (asset) => {
@@ -218,12 +281,14 @@ export const processUrlAsset = async (
 export const processPdfAsset = async (
   repository: AssetIngestRepository,
   blobStore: BlobStore,
+  vectorStore: VectorStore,
+  aiProvider: AIProvider,
   assetId: string,
   options?: {
     force?: boolean;
   }
 ): Promise<AssetDetail> => {
-  return processAsset(
+  return runAssetProcessing(
     repository,
     assetId,
     async (asset) => {
@@ -264,12 +329,18 @@ export const processPdfAsset = async (
         asset.id,
         extractedText.text
       );
+      const indexedChunks = await indexPreparedChunks(
+        aiProvider,
+        vectorStore,
+        asset,
+        persistedContent.chunks
+      );
 
       return {
         summary: createTextSummary(extractedText.text),
         contentText: persistedContent.contentText,
         contentR2Key: persistedContent.contentR2Key,
-        chunks: persistedContent.chunks,
+        chunks: indexedChunks,
       };
     },
     options

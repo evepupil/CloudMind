@@ -24,21 +24,30 @@ describe("search routes", () => {
     vi.clearAllMocks();
   });
 
-  it("POST /api/search returns keyword search results", async () => {
+  it("POST /api/search returns semantic search results", async () => {
     const app = createApp();
     const env = { APP_NAME: "cloudmind-test" };
 
     vi.mocked(searchService.searchAssets).mockResolvedValue({
       items: [
         {
-          id: "asset-search-1",
-          type: "note",
-          title: "Search result asset",
-          summary: "Search summary",
-          sourceUrl: null,
-          status: "ready",
-          createdAt: "2026-03-19T00:00:00.000Z",
-          updatedAt: "2026-03-19T00:00:00.000Z",
+          score: 0.96,
+          chunk: {
+            id: "chunk-1",
+            chunkIndex: 0,
+            textPreview: "Search result excerpt",
+            vectorId: "asset-search-1:0",
+            asset: {
+              id: "asset-search-1",
+              type: "note",
+              title: "Search result asset",
+              summary: "Search summary",
+              sourceUrl: null,
+              status: "ready",
+              createdAt: "2026-03-19T00:00:00.000Z",
+              updatedAt: "2026-03-19T00:00:00.000Z",
+            },
+          },
         },
       ],
       pagination: {
@@ -69,8 +78,14 @@ describe("search routes", () => {
     await expect(response.json()).resolves.toEqual({
       items: [
         expect.objectContaining({
-          id: "asset-search-1",
-          title: "Search result asset",
+          score: 0.96,
+          chunk: expect.objectContaining({
+            id: "chunk-1",
+            asset: expect.objectContaining({
+              id: "asset-search-1",
+              title: "Search result asset",
+            }),
+          }),
         }),
       ],
       pagination: {

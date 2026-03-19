@@ -1,4 +1,5 @@
 import type {
+  AssetChunkMatch,
   AssetDetail,
   AssetListQuery,
   AssetListResult,
@@ -41,7 +42,7 @@ export interface CreateAssetChunkInput {
   vectorId?: string | null;
 }
 
-// 这里定义资产读取侧端口，供列表与详情等读模型复用。
+// 这里定义资产读取侧接口，供列表与详情等读模型复用。
 export interface AssetQueryRepository {
   listAssets(query?: AssetListQuery): Promise<AssetListResult>;
   getAssetById(id: string): Promise<AssetDetail>;
@@ -50,9 +51,10 @@ export interface AssetQueryRepository {
 // 这里单独抽出搜索端口，避免未来把语义检索继续堆进列表接口。
 export interface AssetSearchRepository {
   searchAssets(input: AssetSearchInput): Promise<AssetListResult>;
+  getChunkMatchesByVectorIds(vectorIds: string[]): Promise<AssetChunkMatch[]>;
 }
 
-// 这里保留采集与处理链路需要的写侧端口。
+// 这里保留采集与处理链路需要的写侧接口。
 export interface AssetIngestRepository {
   getAssetById(id: string): Promise<AssetDetail>;
   createTextAsset(input: CreateTextAssetInput): Promise<AssetDetail>;

@@ -1,3 +1,4 @@
+import type { AIProvider } from "@/core/ai/ports";
 import type {
   AssetIngestRepository,
   CreateTextAssetInput,
@@ -5,10 +6,13 @@ import type {
 } from "@/core/assets/ports";
 import { createRawAssetBlobKey } from "@/core/blob/keys";
 import type { BlobStore } from "@/core/blob/ports";
+import type { VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
 import type { AssetDetail } from "@/features/assets/model/types";
+import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getBlobStoreFromBindings } from "@/platform/blob/r2/get-blob-store";
 import { getAssetIngestRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
+import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 
 import {
   processPdfAsset,
@@ -23,9 +27,17 @@ interface IngestServiceDependencies {
   getBlobStore: (
     bindings: AppBindings | undefined
   ) => BlobStore | Promise<BlobStore>;
+  getVectorStore: (
+    bindings: AppBindings | undefined
+  ) => VectorStore | Promise<VectorStore>;
+  getAIProvider: (
+    bindings: AppBindings | undefined
+  ) => AIProvider | Promise<AIProvider>;
   processTextAsset: (
     repository: AssetIngestRepository,
     blobStore: BlobStore,
+    vectorStore: VectorStore,
+    aiProvider: AIProvider,
     assetId: string
   ) => Promise<AssetDetail>;
   processUrlAsset: (
@@ -35,11 +47,15 @@ interface IngestServiceDependencies {
   processPdfAsset: (
     repository: AssetIngestRepository,
     blobStore: BlobStore,
+    vectorStore: VectorStore,
+    aiProvider: AIProvider,
     assetId: string
   ) => Promise<AssetDetail>;
   getProcessTextAssetForced: (
     repository: AssetIngestRepository,
     blobStore: BlobStore,
+    vectorStore: VectorStore,
+    aiProvider: AIProvider,
     assetId: string
   ) => Promise<AssetDetail>;
   getProcessUrlAssetForced: (
@@ -49,6 +65,8 @@ interface IngestServiceDependencies {
   getProcessPdfAssetForced: (
     repository: AssetIngestRepository,
     blobStore: BlobStore,
+    vectorStore: VectorStore,
+    aiProvider: AIProvider,
     assetId: string
   ) => Promise<AssetDetail>;
 }
@@ -56,15 +74,33 @@ interface IngestServiceDependencies {
 const defaultDependencies: IngestServiceDependencies = {
   getAssetRepository: getAssetIngestRepositoryFromBindings,
   getBlobStore: getBlobStoreFromBindings,
+  getVectorStore: getVectorStoreFromBindings,
+  getAIProvider: getAIProviderFromBindings,
   processTextAsset,
   processUrlAsset,
   processPdfAsset,
-  getProcessTextAssetForced: (repository, blobStore, assetId) =>
-    processTextAsset(repository, blobStore, assetId, { force: true }),
+  getProcessTextAssetForced: (
+    repository,
+    blobStore,
+    vectorStore,
+    aiProvider,
+    assetId
+  ) =>
+    processTextAsset(repository, blobStore, vectorStore, aiProvider, assetId, {
+      force: true,
+    }),
   getProcessUrlAssetForced: (repository, assetId) =>
     processUrlAsset(repository, assetId, { force: true }),
-  getProcessPdfAssetForced: (repository, blobStore, assetId) =>
-    processPdfAsset(repository, blobStore, assetId, { force: true }),
+  getProcessPdfAssetForced: (
+    repository,
+    blobStore,
+    vectorStore,
+    aiProvider,
+    assetId
+  ) =>
+    processPdfAsset(repository, blobStore, vectorStore, aiProvider, assetId, {
+      force: true,
+    }),
 };
 
 // 这里集中采集与重处理用例，避免继续和资产读模型耦合。
@@ -78,11 +114,15 @@ export const createIngestService = (
     ): Promise<AssetDetail> {
       const repository = await dependencies.getAssetRepository(bindings);
       const blobStore = await dependencies.getBlobStore(bindings);
+      const vectorStore = await dependencies.getVectorStore(bindings);
+      const aiProvider = await dependencies.getAIProvider(bindings);
       const createdAsset = await repository.createTextAsset(input);
 
       return dependencies.processTextAsset(
         repository,
         blobStore,
+        vectorStore,
+        aiProvider,
         createdAsset.id
       );
     },
@@ -106,6 +146,8 @@ export const createIngestService = (
     ): Promise<AssetDetail> {
       const repository = await dependencies.getAssetRepository(bindings);
       const blobStore = await dependencies.getBlobStore(bindings);
+      const vectorStore = await dependencies.getVectorStore(bindings);
+      const aiProvider = await dependencies.getAIProvider(bindings);
       const assetId = crypto.randomUUID();
       const rawR2Key = createRawAssetBlobKey(assetId, input.file.name);
       const contentDisposition = `inline; filename="${input.file.name.replace(
@@ -132,6 +174,8 @@ export const createIngestService = (
       return dependencies.processPdfAsset(
         repository,
         blobStore,
+        vectorStore,
+        aiProvider,
         createdAsset.id
       );
     },
@@ -145,20 +189,35 @@ export const createIngestService = (
 
       switch (asset.type) {
         case "note":
-        case "chat":
+        case "chat": {
+          const [blobStore, vectorStore, aiProvider] = await Promise.all([
+            dependencies.getBlobStore(bindings),
+            dependencies.getVectorStore(bindings),
+            dependencies.getAIProvider(bindings),
+          ]);
+
           return dependencies.getProcessTextAssetForced(
             repository,
-            await dependencies.getBlobStore(bindings),
+            blobStore,
+            vectorStore,
+            aiProvider,
             asset.id
           );
+        }
         case "url":
           return dependencies.getProcessUrlAssetForced(repository, asset.id);
         case "pdf": {
-          const blobStore = await dependencies.getBlobStore(bindings);
+          const [blobStore, vectorStore, aiProvider] = await Promise.all([
+            dependencies.getBlobStore(bindings),
+            dependencies.getVectorStore(bindings),
+            dependencies.getAIProvider(bindings),
+          ]);
 
           return dependencies.getProcessPdfAssetForced(
             repository,
             blobStore,
+            vectorStore,
+            aiProvider,
             asset.id
           );
         }

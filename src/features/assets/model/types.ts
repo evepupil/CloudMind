@@ -83,6 +83,10 @@ export interface AssetChunkSummary {
   vectorId: string | null;
 }
 
+export interface AssetChunkMatch extends AssetChunkSummary {
+  asset: AssetSummary;
+}
+
 // 这里定义详情页与详情 API 需要的完整资产结构。
 export interface AssetDetail extends AssetSummary {
   contentText: string | null;
