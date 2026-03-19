@@ -16,6 +16,8 @@
     "format": "biome format --write ."
   },
   "dependencies": {
+    "@hono/mcp": "^0.1.5",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "drizzle-orm": "^0.45.1",
     "drizzle-zod": "^0.8.3",
     "hono": "^4.12.8",

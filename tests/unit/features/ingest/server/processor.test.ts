@@ -24,6 +24,7 @@ import type {
   AssetDetail,
   AssetListQuery,
   AssetListResult,
+  AssetSourceKind,
   IngestJobSummary,
 } from "@/features/assets/model/types";
 import {
@@ -141,14 +142,26 @@ class InMemoryAssetRepository implements AssetRepository {
   }
 
   public async createTextAsset(
-    _input: CreateTextAssetInput
+    input: CreateTextAssetInput
   ): Promise<AssetDetail> {
+    this.asset.source = {
+      kind: input.sourceKind ?? ("manual" satisfies AssetSourceKind),
+      sourceUrl: null,
+      metadataJson: null,
+      createdAt: "2026-03-19T00:00:00.000Z",
+    };
     return structuredClone(this.asset);
   }
 
   public async createUrlAsset(
-    _input: CreateUrlAssetInput
+    input: CreateUrlAssetInput
   ): Promise<AssetDetail> {
+    this.asset.source = {
+      kind: input.sourceKind ?? ("manual" satisfies AssetSourceKind),
+      sourceUrl: input.url,
+      metadataJson: null,
+      createdAt: "2026-03-19T00:00:00.000Z",
+    };
     return structuredClone(this.asset);
   }
 

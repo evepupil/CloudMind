@@ -14,6 +14,7 @@ import type {
   AssetDetail,
   AssetListQuery,
   AssetListResult,
+  AssetSourceKind,
   IngestJobSummary,
 } from "@/features/assets/model/types";
 import { createIngestService } from "@/features/ingest/server/service";
@@ -111,6 +112,12 @@ class InMemoryAssetRepository implements AssetRepository {
       ...this.asset,
       title: input.title?.trim() || this.asset.title,
       contentText: input.content,
+      source: {
+        kind: input.sourceKind ?? "manual",
+        sourceUrl: null,
+        metadataJson: null,
+        createdAt: "2026-03-19T00:00:00.000Z",
+      },
     };
 
     return structuredClone(this.asset);
@@ -125,6 +132,12 @@ class InMemoryAssetRepository implements AssetRepository {
       title: input.title?.trim() || input.url,
       sourceUrl: input.url,
       contentText: null,
+      source: {
+        kind: input.sourceKind ?? "manual",
+        sourceUrl: input.url,
+        metadataJson: null,
+        createdAt: "2026-03-19T00:00:00.000Z",
+      },
     };
 
     return structuredClone(this.asset);
@@ -260,6 +273,9 @@ describe("ingest service", () => {
     expect(await repository.getAssetById("asset-text-1")).toMatchObject({
       title: "Service test asset",
       contentText: "Service layer should create then process this note.",
+      source: {
+        kind: "manual" satisfies AssetSourceKind,
+      },
     });
   });
 
@@ -301,6 +317,94 @@ describe("ingest service", () => {
       type: "url",
       title: "Cloudflare Docs",
       sourceUrl: "https://developers.cloudflare.com",
+      source: {
+        kind: "manual" satisfies AssetSourceKind,
+      },
+    });
+  });
+
+  it("ingestTextAsset keeps an explicit source kind for non-web entrypoints", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-text-mcp-1",
+      })
+    );
+    const processedAsset = createAsset({
+      id: "asset-text-mcp-1",
+      status: "ready",
+      source: {
+        kind: "mcp",
+        sourceUrl: null,
+        metadataJson: null,
+        createdAt: "2026-03-19T00:00:00.000Z",
+      },
+    });
+    const service = createIngestService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
+      processUrlAsset: processUrlAssetMock,
+      processPdfAsset: processPdfAssetMock,
+      getProcessTextAssetForced: processTextAssetForcedMock,
+      getProcessUrlAssetForced: processUrlAssetForcedMock,
+      getProcessPdfAssetForced: processPdfAssetForcedMock,
+    });
+
+    await service.ingestTextAsset(env, {
+      title: "Saved from MCP",
+      content: "Saved by remote AI tool",
+      sourceKind: "mcp",
+    });
+
+    expect(await repository.getAssetById("asset-text-mcp-1")).toMatchObject({
+      source: {
+        kind: "mcp" satisfies AssetSourceKind,
+      },
+    });
+  });
+
+  it("ingestUrlAsset keeps an explicit source kind for non-web entrypoints", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-url-mcp-1",
+      })
+    );
+    const processedAsset = createAsset({
+      id: "asset-url-mcp-1",
+      type: "url",
+      status: "ready",
+      source: {
+        kind: "mcp",
+        sourceUrl: "https://modelcontextprotocol.io",
+        metadataJson: null,
+        createdAt: "2026-03-19T00:00:00.000Z",
+      },
+    });
+    const service = createIngestService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      processTextAsset: processTextAssetMock,
+      processUrlAsset: processUrlAssetMock.mockResolvedValue(processedAsset),
+      processPdfAsset: processPdfAssetMock,
+      getProcessTextAssetForced: processTextAssetForcedMock,
+      getProcessUrlAssetForced: processUrlAssetForcedMock,
+      getProcessPdfAssetForced: processPdfAssetForcedMock,
+    });
+
+    await service.ingestUrlAsset(env, {
+      title: "MCP Docs",
+      url: "https://modelcontextprotocol.io",
+      sourceKind: "mcp",
+    });
+
+    expect(await repository.getAssetById("asset-url-mcp-1")).toMatchObject({
+      source: {
+        kind: "mcp" satisfies AssetSourceKind,
+      },
     });
   });
 

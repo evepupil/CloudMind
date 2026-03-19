@@ -1,13 +1,4 @@
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  inArray,
-  like,
-  or,
-} from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, like, or } from "drizzle-orm";
 
 import { AssetNotFoundError } from "@/core/assets/errors";
 import type {
@@ -268,6 +259,7 @@ export class D1AssetRepository implements AssetRepository {
     const sourceId = crypto.randomUUID();
     const jobId = crypto.randomUUID();
     const title = input.title?.trim() || "Untitled Note";
+    const sourceKind = input.sourceKind ?? "manual";
 
     await this.db.insert(assets).values({
       id: assetId,
@@ -291,7 +283,7 @@ export class D1AssetRepository implements AssetRepository {
     await this.db.insert(assetSources).values({
       id: sourceId,
       assetId,
-      kind: "manual",
+      kind: sourceKind,
       sourceUrl: null,
       metadataJson: JSON.stringify({
         titleProvided: Boolean(input.title?.trim()),
@@ -325,6 +317,7 @@ export class D1AssetRepository implements AssetRepository {
     const sourceId = crypto.randomUUID();
     const jobId = crypto.randomUUID();
     const title = input.title?.trim() || input.url;
+    const sourceKind = input.sourceKind ?? "manual";
 
     await this.db.insert(assets).values({
       id: assetId,
@@ -348,7 +341,7 @@ export class D1AssetRepository implements AssetRepository {
     await this.db.insert(assetSources).values({
       id: sourceId,
       assetId,
-      kind: "manual",
+      kind: sourceKind,
       sourceUrl: input.url,
       metadataJson: JSON.stringify({
         titleProvided: Boolean(input.title?.trim()),

@@ -3,16 +3,19 @@ import type {
   AssetDetail,
   AssetListQuery,
   AssetListResult,
+  AssetSourceKind,
 } from "@/features/assets/model/types";
 
 export interface CreateTextAssetInput {
   title?: string | undefined;
   content: string;
+  sourceKind?: AssetSourceKind | undefined;
 }
 
 export interface CreateUrlAssetInput {
   title?: string | undefined;
   url: string;
+  sourceKind?: AssetSourceKind | undefined;
 }
 
 export interface CreateFileAssetInput {
