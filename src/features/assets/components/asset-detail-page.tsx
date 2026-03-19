@@ -1,7 +1,9 @@
-import type { AssetDetail } from "@/features/assets/model/types";
+import type { AssetDetail, AssetType } from "@/features/assets/model/types";
 import { PageShell } from "@/features/layout/components/page-shell";
 
 import { AssetStatusBadge } from "./asset-status-badge";
+
+const reprocessableAssetTypes: AssetType[] = ["note", "chat", "url"];
 
 const formatDate = (value: string | null): string => {
   if (!value) {
@@ -13,40 +15,82 @@ const formatDate = (value: string | null): string => {
   });
 };
 
-// 这里提供最小资产详情页，用于确认写入 D1 的记录、来源和任务状态。
+const canReprocessAsset = (type: AssetType): boolean => {
+  return reprocessableAssetTypes.includes(type);
+};
+
+const MessageBanner = ({
+  children,
+  tone,
+}: {
+  children: string;
+  tone: "success" | "error";
+}) => {
+  const styles =
+    tone === "success"
+      ? {
+          backgroundColor: "#ecfeff",
+          border: "1px solid #a5f3fc",
+          color: "#155e75",
+        }
+      : {
+          backgroundColor: "#fef2f2",
+          border: "1px solid #fecaca",
+          color: "#991b1b",
+        };
+
+  return (
+    <section
+      style={{
+        marginBottom: "24px",
+        padding: "14px 16px",
+        borderRadius: "14px",
+        ...styles,
+      }}
+    >
+      {children}
+    </section>
+  );
+};
+
+// 这里提供最小资产详情页，覆盖正文、来源、任务记录和手动重处理入口。
 export const AssetDetailPage = ({
   item,
   errorMessage,
+  flashMessage,
 }: {
   item?: AssetDetail | undefined;
   errorMessage?: string | undefined;
+  flashMessage?: string | undefined;
 }) => {
   if (!item) {
     return (
       <PageShell
         title="Asset Detail"
-        subtitle="查看单个资产的元数据、正文与处理任务状态。"
+        subtitle="查看单个资产的元数据、正文和处理任务状态。"
       >
-        <section
-          style={{
-            padding: "20px",
-            borderRadius: "18px",
-            border: "1px solid #fecaca",
-            backgroundColor: "#fef2f2",
-            color: "#991b1b",
-          }}
-        >
+        <MessageBanner tone="error">
           {errorMessage ?? "Asset not found."}
-        </section>
+        </MessageBanner>
       </PageShell>
     );
   }
+
+  const isReprocessable = canReprocessAsset(item.type);
 
   return (
     <PageShell
       title={item.title}
       subtitle="第一版详情页先覆盖正文、来源和任务列表，方便验证 ingest 闭环。"
     >
+      {flashMessage ? (
+        <MessageBanner tone="success">{flashMessage}</MessageBanner>
+      ) : null}
+
+      {errorMessage ? (
+        <MessageBanner tone="error">{errorMessage}</MessageBanner>
+      ) : null}
+
       <section
         style={{
           display: "grid",
@@ -64,12 +108,45 @@ export const AssetDetailPage = ({
             justifyContent: "space-between",
             alignItems: "center",
             gap: "12px",
+            flexWrap: "wrap",
           }}
         >
           <div style={{ color: "#64748b" }}>
-            {item.type} · 创建于 {formatDate(item.createdAt)}
+            {item.type} · Created at {formatDate(item.createdAt)}
           </div>
-          <AssetStatusBadge status={item.status} />
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              flexWrap: "wrap",
+            }}
+          >
+            <AssetStatusBadge status={item.status} />
+            {isReprocessable ? (
+              <form action={`/assets/actions/${item.id}/process`} method="post">
+                <button
+                  type="submit"
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: "999px",
+                    border: "none",
+                    backgroundColor: "#0f172a",
+                    color: "#ffffff",
+                    fontSize: "14px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Reprocess Asset
+                </button>
+              </form>
+            ) : (
+              <span style={{ color: "#94a3b8", fontSize: "14px" }}>
+                Reprocess is not available for this asset type yet.
+              </span>
+            )}
+          </div>
         </div>
         <dl
           style={{
@@ -111,7 +188,7 @@ export const AssetDetailPage = ({
       >
         <h2 style={{ marginTop: 0 }}>Summary</h2>
         <p style={{ marginBottom: 0, color: "#334155" }}>
-          {item.summary ?? "摘要尚未生成。"}
+          {item.summary ?? "Summary has not been generated yet."}
         </p>
       </section>
 
@@ -135,7 +212,7 @@ export const AssetDetailPage = ({
             color: "#0f172a",
           }}
         >
-          {item.contentText ?? "正文尚未写入。"}
+          {item.contentText ?? "Content has not been stored yet."}
         </pre>
       </section>
 
@@ -149,10 +226,10 @@ export const AssetDetailPage = ({
         }}
       >
         <h2 style={{ marginTop: 0 }}>Source</h2>
-        <p style={{ color: "#334155" }}>
+        <p style={{ color: "#334155", marginBottom: 0 }}>
           {item.source
             ? `${item.source.kind} · ${item.source.sourceUrl ?? "No URL"}`
-            : "暂无来源记录。"}
+            : "No source record yet."}
         </p>
       </section>
 
@@ -166,7 +243,9 @@ export const AssetDetailPage = ({
       >
         <h2 style={{ marginTop: 0 }}>Jobs</h2>
         {item.jobs.length === 0 ? (
-          <p style={{ marginBottom: 0, color: "#64748b" }}>暂无任务记录。</p>
+          <p style={{ marginBottom: 0, color: "#64748b" }}>
+            No job records yet.
+          </p>
         ) : (
           <div style={{ display: "grid", gap: "12px" }}>
             {item.jobs.map((job) => (

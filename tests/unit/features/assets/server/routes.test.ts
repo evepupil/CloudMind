@@ -162,6 +162,49 @@ describe("asset routes", () => {
     );
   });
 
+  it("GET /api/assets/:id/jobs returns the asset job list", async () => {
+    const app = createApp();
+    const item = createAssetDetail({
+      id: "asset-jobs-1",
+      jobs: [
+        {
+          id: "job-1",
+          jobType: "extract_content",
+          status: "succeeded",
+          attempt: 0,
+          errorMessage: null,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:02:00.000Z",
+        },
+        {
+          id: "job-2",
+          jobType: "summarize",
+          status: "failed",
+          attempt: 1,
+          errorMessage: "AI timeout",
+          createdAt: "2026-03-19T00:03:00.000Z",
+          updatedAt: "2026-03-19T00:04:00.000Z",
+        },
+      ],
+    });
+    const env = { APP_NAME: "cloudmind-test" };
+
+    vi.mocked(assetService.getAssetById).mockResolvedValue(item);
+
+    const response = await app.request(
+      "/api/assets/asset-jobs-1/jobs",
+      {},
+      env
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      items: item.jobs,
+    });
+    expect(assetService.getAssetById).toHaveBeenCalledWith(env, "asset-jobs-1");
+  });
+
   it("GET /api/assets/:id returns 404 when the asset does not exist", async () => {
     const app = createApp();
 
@@ -170,6 +213,25 @@ describe("asset routes", () => {
     );
 
     const response = await app.request("/api/assets/missing-asset");
+    const payload = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(payload).toEqual({
+      error: {
+        code: "ASSET_NOT_FOUND",
+        message: "Asset not found",
+      },
+    });
+  });
+
+  it("GET /api/assets/:id/jobs returns 404 when the asset does not exist", async () => {
+    const app = createApp();
+
+    vi.mocked(assetService.getAssetById).mockRejectedValue(
+      new AssetNotFoundError("missing-asset")
+    );
+
+    const response = await app.request("/api/assets/missing-asset/jobs");
     const payload = await response.json();
 
     expect(response.status).toBe(404);
@@ -306,6 +368,53 @@ describe("asset routes", () => {
     expect(assetService.reprocessAsset).toHaveBeenCalledWith(
       env,
       "asset-reprocess-1"
+    );
+  });
+
+  it("POST /assets/actions/:id/process redirects back to the detail page", async () => {
+    const app = createApp();
+    const env = { APP_NAME: "cloudmind-test" };
+    const item = createAssetDetail({
+      id: "asset-reprocess-form-1",
+    });
+
+    vi.mocked(assetService.reprocessAsset).mockResolvedValue(item);
+
+    const response = await app.request(
+      "/assets/actions/asset-reprocess-form-1/process",
+      {
+        method: "POST",
+      },
+      env
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe(
+      "/assets/asset-reprocess-form-1?reprocessed=1"
+    );
+    expect(assetService.reprocessAsset).toHaveBeenCalledWith(
+      env,
+      "asset-reprocess-form-1"
+    );
+  });
+
+  it("POST /assets/actions/:id/process redirects with an error when the asset is missing", async () => {
+    const app = createApp();
+
+    vi.mocked(assetService.reprocessAsset).mockRejectedValue(
+      new AssetNotFoundError("missing-asset")
+    );
+
+    const response = await app.request(
+      "/assets/actions/missing-asset/process",
+      {
+        method: "POST",
+      }
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe(
+      "/assets/missing-asset?error=Asset%20not%20found."
     );
   });
 

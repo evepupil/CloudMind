@@ -30,7 +30,16 @@ const getValidationErrorBody = (error: z.ZodError) => {
   };
 };
 
-// 这里注册资产相关 API，为后续知识库入口预留统一路径。
+const getAssetNotFoundBody = () => {
+  return {
+    error: {
+      code: "ASSET_NOT_FOUND",
+      message: "Asset not found",
+    },
+  };
+};
+
+// 这里注册资产相关 API，并补上页面表单 action，保持 Web UI 和 API 走同一套 service。
 export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
   app.get("/api/assets", async (context) => {
     const parsedQuery = assetListQuerySchema.safeParse(context.req.query());
@@ -57,15 +66,29 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
       return context.json({ item });
     } catch (error) {
       if (error instanceof AssetNotFoundError) {
-        return context.json(
-          {
-            error: {
-              code: "ASSET_NOT_FOUND",
-              message: "Asset not found",
-            },
-          },
-          404
-        );
+        return context.json(getAssetNotFoundBody(), 404);
+      }
+
+      throw error;
+    }
+  });
+
+  app.get("/api/assets/:id/jobs", async (context) => {
+    const parsedParams = assetIdParamsSchema.safeParse(context.req.param());
+
+    if (!parsedParams.success) {
+      return context.json(getValidationErrorBody(parsedParams.error), 400);
+    }
+
+    try {
+      const item = await getAssetById(context.env, parsedParams.data.id);
+
+      return context.json({
+        items: item.jobs,
+      });
+    } catch (error) {
+      if (error instanceof AssetNotFoundError) {
+        return context.json(getAssetNotFoundBody(), 404);
       }
 
       throw error;
@@ -138,15 +161,7 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
       });
     } catch (error) {
       if (error instanceof AssetNotFoundError) {
-        return context.json(
-          {
-            error: {
-              code: "ASSET_NOT_FOUND",
-              message: "Asset not found",
-            },
-          },
-          404
-        );
+        return context.json(getAssetNotFoundBody(), 404);
       }
 
       throw error;
@@ -175,7 +190,9 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
 
     if (!parsedPayload.success) {
       return context.redirect(
-        `/assets?error=${encodeURIComponent("请输入标题或正文格式正确的文本资产。")}`
+        `/assets?error=${encodeURIComponent(
+          "Please provide valid text content."
+        )}`
       );
     }
 
@@ -193,12 +210,43 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
 
     if (!parsedPayload.success) {
       return context.redirect(
-        `/assets?error=${encodeURIComponent("请输入格式正确的 URL 资产。")}`
+        `/assets?error=${encodeURIComponent("Please provide a valid URL.")}`
       );
     }
 
     const item = await ingestUrlAsset(context.env, parsedPayload.data);
 
     return context.redirect(`/assets/${item.id}?created=1`);
+  });
+
+  app.post("/assets/actions/:id/process", async (context) => {
+    const parsedParams = assetIdParamsSchema.safeParse(context.req.param());
+
+    if (!parsedParams.success) {
+      return context.redirect(
+        `/assets?error=${encodeURIComponent("Invalid asset id.")}`
+      );
+    }
+
+    try {
+      await reprocessAsset(context.env, parsedParams.data.id);
+
+      return context.redirect(`/assets/${parsedParams.data.id}?reprocessed=1`);
+    } catch (error) {
+      if (error instanceof AssetNotFoundError) {
+        return context.redirect(
+          `/assets/${parsedParams.data.id}?error=${encodeURIComponent(
+            "Asset not found."
+          )}`
+        );
+      }
+
+      const message =
+        error instanceof Error ? error.message : "Failed to reprocess asset.";
+
+      return context.redirect(
+        `/assets/${parsedParams.data.id}?error=${encodeURIComponent(message)}`
+      );
+    }
   });
 };
