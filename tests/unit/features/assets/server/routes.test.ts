@@ -51,6 +51,7 @@ const createAssetDetail = (
         updatedAt: "2026-03-19T00:02:00.000Z",
       },
     ],
+    chunks: [],
     ...overrides,
   };
 };

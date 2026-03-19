@@ -13,3 +13,14 @@ export const createRawAssetBlobKey = (
 
   return `assets/${assetId}/raw/${safeFileName}`;
 };
+
+// 这里统一生成清洗后正文的对象 key，避免处理器重复拼接路径。
+export const createProcessedContentBlobKey = (
+  assetId: string,
+  extension = "txt"
+): string => {
+  const safeExtension =
+    extension.replace(/[^a-z0-9]/gi, "").toLowerCase() || "txt";
+
+  return `assets/${assetId}/content/content.${safeExtension}`;
+};

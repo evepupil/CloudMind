@@ -3,7 +3,7 @@ import { PageShell } from "@/features/layout/components/page-shell";
 
 import { AssetStatusBadge } from "./asset-status-badge";
 
-const reprocessableAssetTypes: AssetType[] = ["note", "chat", "url"];
+const reprocessableAssetTypes: AssetType[] = ["note", "chat", "url", "pdf"];
 
 const formatDate = (value: string | null): string => {
   if (!value) {
@@ -174,6 +174,10 @@ export const AssetDetailPage = ({
             <dt style={{ color: "#64748b" }}>Language</dt>
             <dd style={{ margin: "6px 0 0" }}>{item.language ?? "N/A"}</dd>
           </div>
+          <div>
+            <dt style={{ color: "#64748b" }}>Content R2 Key</dt>
+            <dd style={{ margin: "6px 0 0" }}>{item.contentR2Key ?? "N/A"}</dd>
+          </div>
         </dl>
       </section>
 
@@ -214,6 +218,54 @@ export const AssetDetailPage = ({
         >
           {item.contentText ?? "Content has not been stored yet."}
         </pre>
+      </section>
+
+      <section
+        style={{
+          marginBottom: "28px",
+          padding: "24px",
+          borderRadius: "20px",
+          border: "1px solid #e2e8f0",
+          backgroundColor: "#ffffff",
+        }}
+      >
+        <h2 style={{ marginTop: 0 }}>Chunks</h2>
+        {item.chunks.length === 0 ? (
+          <p style={{ marginBottom: 0, color: "#64748b" }}>
+            No chunk records yet.
+          </p>
+        ) : (
+          <div style={{ display: "grid", gap: "12px" }}>
+            {item.chunks.map((chunk) => (
+              <article
+                key={chunk.id}
+                style={{
+                  padding: "16px",
+                  borderRadius: "16px",
+                  backgroundColor: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    color: "#0f172a",
+                    fontWeight: 700,
+                    marginBottom: "8px",
+                  }}
+                >
+                  <span>Chunk #{chunk.chunkIndex}</span>
+                  <span>{chunk.vectorId ?? "No vector"}</span>
+                </div>
+                <p style={{ margin: 0, color: "#334155" }}>
+                  {chunk.textPreview}
+                </p>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section

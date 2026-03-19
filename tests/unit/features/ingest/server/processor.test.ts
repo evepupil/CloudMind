@@ -85,6 +85,7 @@ const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
       createdAt: "2026-03-19T00:00:00.000Z",
     },
     jobs: [createJob()],
+    chunks: [],
     ...overrides,
   };
 };
@@ -148,20 +149,43 @@ class InMemoryAssetRepository implements AssetRepository {
 
   public async completeAssetProcessing(
     id: string,
-    summary: string,
-    contentText?: string | null
+    input: {
+      summary: string;
+      contentText?: string | null;
+      contentR2Key?: string | null;
+    }
   ): Promise<void> {
     this.assertId(id);
     this.asset.status = "ready";
-    this.asset.summary = summary;
+    this.asset.summary = input.summary;
     this.asset.errorMessage = null;
     this.asset.failedAt = null;
     this.asset.processedAt = "2026-03-19T00:02:00.000Z";
     this.asset.updatedAt = "2026-03-19T00:02:00.000Z";
 
-    if (contentText !== undefined) {
-      this.asset.contentText = contentText;
+    if (input.contentText !== undefined) {
+      this.asset.contentText = input.contentText;
     }
+
+    if (input.contentR2Key !== undefined) {
+      this.asset.contentR2Key = input.contentR2Key;
+    }
+  }
+
+  public async replaceAssetChunks(
+    _assetId: string,
+    chunks: Array<{
+      chunkIndex: number;
+      textPreview: string;
+      vectorId?: string | null;
+    }>
+  ): Promise<void> {
+    this.asset.chunks = chunks.map((chunk, index) => ({
+      id: `chunk-${index + 1}`,
+      chunkIndex: chunk.chunkIndex,
+      textPreview: chunk.textPreview,
+      vectorId: chunk.vectorId ?? null,
+    }));
   }
 
   public async failAssetProcessing(id: string, message: string): Promise<void> {
@@ -222,8 +246,17 @@ class InMemoryBlobStore implements BlobStore {
     }
   }
 
-  public async put(): Promise<void> {
-    throw new Error("put is not used in processor tests.");
+  public async put(input: {
+    key: string;
+    body: ArrayBuffer;
+    contentType?: string | undefined;
+  }): Promise<void> {
+    this.objects.set(input.key, {
+      key: input.key,
+      body: input.body,
+      size: input.body.byteLength,
+      contentType: input.contentType,
+    });
   }
 
   public async get(key: string): Promise<BlobObject | null> {
@@ -239,13 +272,27 @@ describe("processTextAsset", () => {
           "  CloudMind keeps the original content and generates a concise summary.  ",
       })
     );
+    const blobStore = new InMemoryBlobStore();
 
-    const result = await processTextAsset(repository, "asset-1");
+    const result = await processTextAsset(repository, blobStore, "asset-1");
 
     expect(result.status).toBe("ready");
     expect(result.summary).toBe(
       "CloudMind keeps the original content and generates a concise summary."
     );
+    expect(result.contentR2Key).toBe("assets/asset-1/content/content.txt");
+    expect(result.contentText).toBe(
+      "CloudMind keeps the original content and generates a concise summary."
+    );
+    expect(result.chunks).toEqual([
+      {
+        id: "chunk-1",
+        chunkIndex: 0,
+        textPreview:
+          "CloudMind keeps the original content and generates a concise summary.",
+        vectorId: null,
+      },
+    ]);
     expect(result.processedAt).toBe("2026-03-19T00:02:00.000Z");
     expect(result.jobs[0]?.status).toBe("succeeded");
     expect(result.jobs[0]?.errorMessage).toBeNull();
@@ -257,8 +304,9 @@ describe("processTextAsset", () => {
         contentText: "   ",
       })
     );
+    const blobStore = new InMemoryBlobStore();
 
-    const result = await processTextAsset(repository, "asset-1");
+    const result = await processTextAsset(repository, blobStore, "asset-1");
 
     expect(result.status).toBe("failed");
     expect(result.summary).toBeNull();
@@ -279,8 +327,9 @@ describe("processTextAsset", () => {
         jobs: [createJob({ status: "succeeded" })],
       })
     );
+    const blobStore = new InMemoryBlobStore();
 
-    const result = await processTextAsset(repository, "asset-1");
+    const result = await processTextAsset(repository, blobStore, "asset-1");
 
     expect(result.status).toBe("ready");
     expect(result.summary).toBe("Existing summary");
@@ -337,6 +386,15 @@ describe("processPdfAsset", () => {
     expect(result.status).toBe("ready");
     expect(result.summary).toBe("Hello CloudMind PDF");
     expect(result.contentText).toBe("Hello CloudMind PDF");
+    expect(result.contentR2Key).toBe("assets/asset-pdf-1/content/content.txt");
+    expect(result.chunks).toEqual([
+      {
+        id: "chunk-1",
+        chunkIndex: 0,
+        textPreview: "Hello CloudMind PDF",
+        vectorId: null,
+      },
+    ]);
     expect(result.jobs[0]?.status).toBe("succeeded");
   });
 

@@ -1,7 +1,12 @@
-import type { AssetIngestRepository } from "@/core/assets/ports";
+import type {
+  AssetIngestRepository,
+  CreateAssetChunkInput,
+} from "@/core/assets/ports";
+import { createProcessedContentBlobKey } from "@/core/blob/keys";
 import type { BlobStore } from "@/core/blob/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
 
+import { chunkAssetContent } from "./chunking";
 import { extractPdfText } from "./pdf-extractor";
 
 const normalizeContent = (content: string): string => {
@@ -18,6 +23,16 @@ const createTextSummary = (content: string): string => {
   return `${normalized.slice(0, 177)}...`;
 };
 
+const createContentPreview = (content: string): string => {
+  const normalized = normalizeContent(content);
+
+  if (normalized.length <= 500) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, 497)}...`;
+};
+
 const getLatestJob = (asset: AssetDetail) => {
   return asset.jobs[0] ?? null;
 };
@@ -25,7 +40,46 @@ const getLatestJob = (asset: AssetDetail) => {
 interface ProcessResult {
   summary: string;
   contentText?: string | null;
+  contentR2Key?: string | null;
+  chunks?: CreateAssetChunkInput[] | undefined;
 }
+
+const persistProcessedContent = async (
+  blobStore: BlobStore,
+  assetId: string,
+  content: string
+): Promise<{
+  contentText: string;
+  contentR2Key: string;
+  chunks: CreateAssetChunkInput[];
+}> => {
+  const normalizedContent = content.trim();
+
+  if (!normalizedContent) {
+    throw new Error("Processed asset content is empty.");
+  }
+
+  const contentR2Key = createProcessedContentBlobKey(assetId, "txt");
+  const chunks = chunkAssetContent(normalizedContent).map((chunk) => ({
+    chunkIndex: chunk.chunkIndex,
+    textPreview: chunk.textPreview,
+    vectorId: null,
+  }));
+
+  await blobStore.put({
+    key: contentR2Key,
+    body: new TextEncoder()
+      .encode(normalizedContent)
+      .buffer.slice(0) as ArrayBuffer,
+    contentType: "text/plain; charset=utf-8",
+  });
+
+  return {
+    contentText: createContentPreview(normalizedContent),
+    contentR2Key,
+    chunks,
+  };
+};
 
 const processAsset = async (
   repository: AssetIngestRepository,
@@ -54,11 +108,24 @@ const processAsset = async (
 
     const result = await execute(asset);
 
-    await repository.completeAssetProcessing(
-      asset.id,
-      result.summary,
-      result.contentText
-    );
+    const processingInput: {
+      summary: string;
+      contentText?: string | null;
+      contentR2Key?: string | null;
+    } = {
+      summary: result.summary,
+    };
+
+    if (result.contentText !== undefined) {
+      processingInput.contentText = result.contentText;
+    }
+
+    if (result.contentR2Key !== undefined) {
+      processingInput.contentR2Key = result.contentR2Key;
+    }
+
+    await repository.completeAssetProcessing(asset.id, processingInput);
+    await repository.replaceAssetChunks(asset.id, result.chunks ?? []);
 
     if (latestJob) {
       await repository.completeIngestJob(latestJob.id);
@@ -90,6 +157,7 @@ const decodePdfSignature = (body: ArrayBuffer): string => {
 // 这里实现最小处理器，让采集和重处理共享统一状态流转。
 export const processTextAsset = async (
   repository: AssetIngestRepository,
+  blobStore: BlobStore,
   assetId: string,
   options?: {
     force?: boolean;
@@ -98,15 +166,24 @@ export const processTextAsset = async (
   return processAsset(
     repository,
     assetId,
-    (asset) => {
+    async (asset) => {
       const content = asset.contentText?.trim();
 
       if (!content) {
         throw new Error("Asset content is empty and cannot be processed.");
       }
 
+      const persistedContent = await persistProcessedContent(
+        blobStore,
+        asset.id,
+        normalizeContent(content)
+      );
+
       return {
         summary: createTextSummary(content),
+        contentText: persistedContent.contentText,
+        contentR2Key: persistedContent.contentR2Key,
+        chunks: persistedContent.chunks,
       };
     },
     options
@@ -182,9 +259,17 @@ export const processPdfAsset = async (
         throw new Error("No extractable text was found in the PDF.");
       }
 
+      const persistedContent = await persistProcessedContent(
+        blobStore,
+        asset.id,
+        extractedText.text
+      );
+
       return {
         summary: createTextSummary(extractedText.text),
-        contentText: extractedText.text,
+        contentText: persistedContent.contentText,
+        contentR2Key: persistedContent.contentR2Key,
+        chunks: persistedContent.chunks,
       };
     },
     options

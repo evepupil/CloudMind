@@ -15,7 +15,7 @@ export type AssetSourceKind =
 // 这里统一异步任务状态，便于详情页和重试能力复用。
 export type IngestJobStatus = "queued" | "running" | "succeeded" | "failed";
 
-// 这里先覆盖 MVP 处理链步骤，后续接 Queues 时直接沿用。
+// 这里先覆盖 MVP 处理链步骤，后续接 Queues 时直接复用。
 export type IngestJobType =
   | "fetch_source"
   | "extract_content"
@@ -76,6 +76,13 @@ export interface IngestJobSummary {
   updatedAt: string;
 }
 
+export interface AssetChunkSummary {
+  id: string;
+  chunkIndex: number;
+  textPreview: string;
+  vectorId: string | null;
+}
+
 // 这里定义详情页与详情 API 需要的完整资产结构。
 export interface AssetDetail extends AssetSummary {
   contentText: string | null;
@@ -88,4 +95,5 @@ export interface AssetDetail extends AssetSummary {
   failedAt: string | null;
   source: AssetSourceInfo | null;
   jobs: IngestJobSummary[];
+  chunks: AssetChunkSummary[];
 }

@@ -25,6 +25,7 @@ interface IngestServiceDependencies {
   ) => BlobStore | Promise<BlobStore>;
   processTextAsset: (
     repository: AssetIngestRepository,
+    blobStore: BlobStore,
     assetId: string
   ) => Promise<AssetDetail>;
   processUrlAsset: (
@@ -38,6 +39,7 @@ interface IngestServiceDependencies {
   ) => Promise<AssetDetail>;
   getProcessTextAssetForced: (
     repository: AssetIngestRepository,
+    blobStore: BlobStore,
     assetId: string
   ) => Promise<AssetDetail>;
   getProcessUrlAssetForced: (
@@ -57,8 +59,8 @@ const defaultDependencies: IngestServiceDependencies = {
   processTextAsset,
   processUrlAsset,
   processPdfAsset,
-  getProcessTextAssetForced: (repository, assetId) =>
-    processTextAsset(repository, assetId, { force: true }),
+  getProcessTextAssetForced: (repository, blobStore, assetId) =>
+    processTextAsset(repository, blobStore, assetId, { force: true }),
   getProcessUrlAssetForced: (repository, assetId) =>
     processUrlAsset(repository, assetId, { force: true }),
   getProcessPdfAssetForced: (repository, blobStore, assetId) =>
@@ -75,9 +77,14 @@ export const createIngestService = (
       input: CreateTextAssetInput
     ): Promise<AssetDetail> {
       const repository = await dependencies.getAssetRepository(bindings);
+      const blobStore = await dependencies.getBlobStore(bindings);
       const createdAsset = await repository.createTextAsset(input);
 
-      return dependencies.processTextAsset(repository, createdAsset.id);
+      return dependencies.processTextAsset(
+        repository,
+        blobStore,
+        createdAsset.id
+      );
     },
 
     async ingestUrlAsset(
@@ -139,7 +146,11 @@ export const createIngestService = (
       switch (asset.type) {
         case "note":
         case "chat":
-          return dependencies.getProcessTextAssetForced(repository, asset.id);
+          return dependencies.getProcessTextAssetForced(
+            repository,
+            await dependencies.getBlobStore(bindings),
+            asset.id
+          );
         case "url":
           return dependencies.getProcessUrlAssetForced(repository, asset.id);
         case "pdf": {

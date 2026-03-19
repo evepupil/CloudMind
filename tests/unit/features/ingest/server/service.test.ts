@@ -55,6 +55,7 @@ const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
       createdAt: "2026-03-19T00:00:00.000Z",
     },
     jobs: [createJob()],
+    chunks: [],
     ...overrides,
   };
 };
@@ -149,6 +150,8 @@ class InMemoryAssetRepository implements AssetRepository {
 
   public async completeAssetProcessing(): Promise<void> {}
 
+  public async replaceAssetChunks(): Promise<void> {}
+
   public async failAssetProcessing(): Promise<void> {}
 
   public async markIngestJobRunning(): Promise<void> {}
@@ -216,6 +219,7 @@ describe("ingest service", () => {
     expect(getAssetRepositoryMock).toHaveBeenCalledWith(env);
     expect(processTextAssetMock).toHaveBeenCalledWith(
       repository,
+      blobStoreMock,
       "asset-text-1"
     );
     expect(await repository.getAssetById("asset-text-1")).toMatchObject({
@@ -279,8 +283,17 @@ describe("ingest service", () => {
       summary: "Hello CloudMind PDF",
       contentText: "Hello CloudMind PDF",
       rawR2Key: "assets/asset-file-1/raw/cloudmind.pdf",
+      contentR2Key: "assets/asset-file-1/content/content.txt",
       mimeType: "application/pdf",
       jobs: [createJob({ status: "succeeded" })],
+      chunks: [
+        {
+          id: "chunk-1",
+          chunkIndex: 0,
+          textPreview: "Hello CloudMind PDF",
+          vectorId: null,
+        },
+      ],
     });
     const service = createIngestService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
@@ -345,6 +358,7 @@ describe("ingest service", () => {
 
     expect(processTextAssetForcedMock).toHaveBeenCalledWith(
       repository,
+      blobStoreMock,
       "asset-note-1"
     );
     expect(result).toEqual(processedAsset);
@@ -366,7 +380,16 @@ describe("ingest service", () => {
       summary: "Hello CloudMind PDF",
       contentText: "Hello CloudMind PDF",
       rawR2Key: "assets/asset-pdf-1/raw/cloudmind.pdf",
+      contentR2Key: "assets/asset-pdf-1/content/content.txt",
       mimeType: "application/pdf",
+      chunks: [
+        {
+          id: "chunk-1",
+          chunkIndex: 0,
+          textPreview: "Hello CloudMind PDF",
+          vectorId: null,
+        },
+      ],
     });
     const service = createIngestService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),

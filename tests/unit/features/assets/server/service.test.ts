@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AssetQueryRepository } from "@/core/assets/ports";
+import type { BlobStore } from "@/core/blob/ports";
 import type {
   AssetDetail,
   AssetListQuery,
@@ -49,6 +50,7 @@ const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
       createdAt: "2026-03-19T00:00:00.000Z",
     },
     jobs: [createJob()],
+    chunks: [],
     ...overrides,
   };
 };
@@ -83,6 +85,11 @@ class InMemoryAssetRepository implements AssetQueryRepository {
 
 describe("asset service", () => {
   const getAssetRepositoryMock = vi.fn();
+  const getBlobStoreMock = vi.fn();
+  const blobStoreMock: BlobStore = {
+    put: vi.fn(),
+    get: vi.fn(),
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -99,6 +106,7 @@ describe("asset service", () => {
     );
     const service = createAssetService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
     });
 
     const result = await service.listAssets({ APP_NAME: "cloudmind-test" });
@@ -128,6 +136,7 @@ describe("asset service", () => {
     );
     const service = createAssetService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
     });
 
     const result = await service.getAssetById(
@@ -139,5 +148,35 @@ describe("asset service", () => {
       id: "asset-detail-1",
       title: "Asset detail item",
     });
+  });
+
+  it("getAssetById hydrates full content from R2 when contentR2Key exists", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-detail-r2",
+        title: "Hydrated asset",
+        contentText: "Preview content",
+        contentR2Key: "assets/asset-detail-r2/content/content.txt",
+      })
+    );
+    const service = createAssetService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue({
+        ...blobStoreMock,
+        get: vi.fn().mockResolvedValue({
+          key: "assets/asset-detail-r2/content/content.txt",
+          body: new TextEncoder().encode("Full content from R2").buffer,
+          size: 20,
+          contentType: "text/plain; charset=utf-8",
+        }),
+      }),
+    });
+
+    const result = await service.getAssetById(
+      { APP_NAME: "cloudmind-test" },
+      "asset-detail-r2"
+    );
+
+    expect(result.contentText).toBe("Full content from R2");
   });
 });

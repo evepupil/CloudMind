@@ -1,14 +1,17 @@
-import { and, count, desc, eq, like, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, like, or } from "drizzle-orm";
 
 import { AssetNotFoundError } from "@/core/assets/errors";
 import type {
   AssetRepository,
   AssetSearchInput,
+  CompleteAssetProcessingInput,
+  CreateAssetChunkInput,
   CreateFileAssetInput,
   CreateTextAssetInput,
   CreateUrlAssetInput,
 } from "@/core/assets/ports";
 import type {
+  AssetChunkSummary,
   AssetDetail,
   AssetListQuery,
   AssetListResult,
@@ -18,7 +21,12 @@ import type {
   IngestJobSummary,
 } from "@/features/assets/model/types";
 import { createDb } from "@/platform/db/d1/client";
-import { assetSources, assets, ingestJobs } from "@/platform/db/d1/schema";
+import {
+  assetChunks,
+  assetSources,
+  assets,
+  ingestJobs,
+} from "@/platform/db/d1/schema";
 
 const mapAssetSummary = (record: typeof assets.$inferSelect): AssetSummary => {
   return {
@@ -44,6 +52,17 @@ const mapJobSummary = (
     errorMessage: record.errorMessage,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+  };
+};
+
+const mapChunkSummary = (
+  record: typeof assetChunks.$inferSelect
+): AssetChunkSummary => {
+  return {
+    id: record.id,
+    chunkIndex: record.chunkIndex,
+    textPreview: record.textPreview,
+    vectorId: record.vectorId,
   };
 };
 
@@ -142,6 +161,11 @@ export class D1AssetRepository implements AssetRepository {
       .from(ingestJobs)
       .where(eq(ingestJobs.assetId, id))
       .orderBy(desc(ingestJobs.createdAt));
+    const chunkRecords = await this.db
+      .select()
+      .from(assetChunks)
+      .where(eq(assetChunks.assetId, id))
+      .orderBy(asc(assetChunks.chunkIndex));
 
     return {
       ...mapAssetSummary(assetRecord),
@@ -162,6 +186,7 @@ export class D1AssetRepository implements AssetRepository {
           }
         : null,
       jobs: jobRecords.map(mapJobSummary),
+      chunks: chunkRecords.map(mapChunkSummary),
     };
   }
 
@@ -354,24 +379,52 @@ export class D1AssetRepository implements AssetRepository {
 
   public async completeAssetProcessing(
     id: string,
-    summary: string,
-    contentText?: string | null
+    input: CompleteAssetProcessingInput
   ): Promise<void> {
     const now = new Date().toISOString();
     const updatePayload: Partial<typeof assets.$inferInsert> = {
       status: "ready",
-      summary,
+      summary: input.summary,
       errorMessage: null,
       failedAt: null,
       processedAt: now,
       updatedAt: now,
     };
 
-    if (contentText !== undefined) {
-      updatePayload.contentText = contentText;
+    if (input.contentText !== undefined) {
+      updatePayload.contentText = input.contentText;
+    }
+
+    if (input.contentR2Key !== undefined) {
+      updatePayload.contentR2Key = input.contentR2Key;
     }
 
     await this.db.update(assets).set(updatePayload).where(eq(assets.id, id));
+  }
+
+  public async replaceAssetChunks(
+    assetId: string,
+    chunks: CreateAssetChunkInput[]
+  ): Promise<void> {
+    await this.db.delete(assetChunks).where(eq(assetChunks.assetId, assetId));
+
+    if (chunks.length === 0) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    await this.db.insert(assetChunks).values(
+      chunks.map((chunk) => ({
+        id: crypto.randomUUID(),
+        assetId,
+        chunkIndex: chunk.chunkIndex,
+        textPreview: chunk.textPreview,
+        vectorId: chunk.vectorId ?? null,
+        createdAt: now,
+        updatedAt: now,
+      }))
+    );
   }
 
   public async failAssetProcessing(id: string, message: string): Promise<void> {

@@ -29,13 +29,25 @@ export interface AssetSearchInput {
   pageSize?: number | undefined;
 }
 
+export interface CompleteAssetProcessingInput {
+  summary: string;
+  contentText?: string | null;
+  contentR2Key?: string | null;
+}
+
+export interface CreateAssetChunkInput {
+  chunkIndex: number;
+  textPreview: string;
+  vectorId?: string | null;
+}
+
 // 这里定义资产读取侧端口，供列表与详情等读模型复用。
 export interface AssetQueryRepository {
   listAssets(query?: AssetListQuery): Promise<AssetListResult>;
   getAssetById(id: string): Promise<AssetDetail>;
 }
 
-// 这里单独抽出搜索端口，避免未来把语义检索继续塞进列表接口。
+// 这里单独抽出搜索端口，避免未来把语义检索继续堆进列表接口。
 export interface AssetSearchRepository {
   searchAssets(input: AssetSearchInput): Promise<AssetListResult>;
 }
@@ -49,8 +61,11 @@ export interface AssetIngestRepository {
   markAssetProcessing(id: string): Promise<void>;
   completeAssetProcessing(
     id: string,
-    summary: string,
-    contentText?: string | null
+    input: CompleteAssetProcessingInput
+  ): Promise<void>;
+  replaceAssetChunks(
+    assetId: string,
+    chunks: CreateAssetChunkInput[]
   ): Promise<void>;
   failAssetProcessing(id: string, message: string): Promise<void>;
   markIngestJobRunning(jobId: string): Promise<void>;
