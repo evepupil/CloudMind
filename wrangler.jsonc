@@ -3,5 +3,14 @@
   "name": "cloudmind",
   "compatibility_date": "2026-03-19",
   "compatibility_flags": ["nodejs_compat"],
-  "pages_build_output_dir": "dist"
+  "pages_build_output_dir": "dist",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cloudmind",
+      "database_id": "f4c7f630-0cc9-4f84-9ffd-dbfc05d0bac0",
+      "migrations_dir": "drizzle",
+      "remote": true
+    }
+  ]
 }

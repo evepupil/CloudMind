@@ -1,26 +1,52 @@
-import type { AssetSummary } from "@/features/assets/model/types";
+import { D1AssetRepository } from "@/db/repositories/d1-asset-repository";
+import type { AppBindings } from "@/env";
+import type { AssetDetail, AssetSummary } from "@/features/assets/model/types";
 
-// 这里先提供内存态演示数据，后续会替换成 D1 仓储实现。
-const demoAssets: AssetSummary[] = [
-  {
-    id: "asset_demo_architecture",
-    type: "url",
-    title: "CloudMind 架构草图",
-    summary: "单个 HonoX 全栈项目，直接部署到 Cloudflare Pages。",
-    status: "ready",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "asset_demo_chat_memory",
-    type: "chat",
-    title: "AI 对话存档",
-    summary: "用于演示未来 MCP 写入知识库的最小数据路径。",
-    status: "processing",
-    createdAt: new Date().toISOString(),
-  },
-];
+import { processTextAsset } from "./processor";
+import type { CreateTextAssetInput } from "./repository";
 
-// 这里封装资产读取逻辑，避免路由直接依赖数据来源细节。
-export const listAssets = (): AssetSummary[] => {
-  return demoAssets;
+const getDatabaseBinding = (bindings: AppBindings | undefined): D1Database => {
+  if (!bindings?.DB) {
+    throw new Error(
+      'Cloudflare D1 binding "DB" is not configured. ' +
+        "Create the database and bind it in wrangler.jsonc before using assets."
+    );
+  }
+
+  return bindings.DB;
+};
+
+const getAssetRepository = (bindings: AppBindings | undefined) => {
+  return new D1AssetRepository(getDatabaseBinding(bindings));
+};
+
+// 这里通过 service 层收敛仓储入口，避免页面和路由直接 new 基础设施实现。
+export const listAssets = async (
+  bindings: AppBindings | undefined
+): Promise<AssetSummary[]> => {
+  return getAssetRepository(bindings).listAssets();
+};
+
+export const getAssetById = async (
+  bindings: AppBindings | undefined,
+  id: string
+): Promise<AssetDetail> => {
+  return getAssetRepository(bindings).getAssetById(id);
+};
+
+export const createTextAsset = async (
+  bindings: AppBindings | undefined,
+  input: CreateTextAssetInput
+): Promise<AssetDetail> => {
+  return getAssetRepository(bindings).createTextAsset(input);
+};
+
+export const ingestTextAsset = async (
+  bindings: AppBindings | undefined,
+  input: CreateTextAssetInput
+): Promise<AssetDetail> => {
+  const repository = getAssetRepository(bindings);
+  const createdAsset = await repository.createTextAsset(input);
+
+  return processTextAsset(repository, createdAsset.id);
 };

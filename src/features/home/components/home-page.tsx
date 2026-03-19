@@ -9,16 +9,20 @@ const demoAssets: AssetSummary[] = [
     type: "url",
     title: "CloudMind Pages 全栈骨架",
     summary: "页面与 API 在一个 HonoX 项目里统一维护和部署。",
+    sourceUrl: null,
     status: "ready",
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "asset_demo_ingest",
     type: "note",
     title: "MVP 采集流程",
     summary: "后续会接 URL、PDF、文本与 MCP 写入。",
+    sourceUrl: null,
     status: "pending",
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
 ];
 
@@ -72,7 +76,26 @@ export const HomePage = () => {
       </section>
 
       <section>
-        <h2 style={{ fontSize: "24px" }}>Demo Assets</h2>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "12px",
+          }}
+        >
+          <h2 style={{ fontSize: "24px" }}>Demo Assets</h2>
+          <a
+            href="/assets"
+            style={{
+              color: "#0f172a",
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
+          >
+            Open Real Assets
+          </a>
+        </div>
         <div style={{ display: "grid", gap: "12px" }}>
           {demoAssets.map((asset) => (
             <article
