@@ -9,6 +9,7 @@ import * as ingestService from "@/features/ingest/server/service";
 
 vi.mock("@/features/ingest/server/service", () => {
   return {
+    backfillChunkContent: vi.fn(),
     ingestFileAsset: vi.fn(),
     ingestTextAsset: vi.fn(),
     ingestUrlAsset: vi.fn(),
@@ -278,6 +279,68 @@ describe("ingest routes", () => {
         message: "Asset not found",
       },
     });
+  });
+
+  it("POST /api/assets/backfill/chunks returns the backfill summary", async () => {
+    const app = createApp();
+
+    vi.mocked(ingestService.backfillChunkContent).mockResolvedValue({
+      dryRun: true,
+      candidateAssetIds: ["asset-note-1", "asset-pdf-1"],
+      processedAssetIds: [],
+      failedItems: [],
+    });
+
+    const response = await app.request(
+      "/api/assets/backfill/chunks",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          dryRun: true,
+          limit: 10,
+        }),
+      },
+      env
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      dryRun: true,
+      candidateAssetIds: ["asset-note-1", "asset-pdf-1"],
+      processedAssetIds: [],
+      failedItems: [],
+    });
+    expect(ingestService.backfillChunkContent).toHaveBeenCalledWith(env, {
+      dryRun: true,
+      limit: 10,
+    });
+  });
+
+  it("POST /api/assets/backfill/chunks returns 400 for invalid payload", async () => {
+    const app = createApp();
+
+    const response = await app.request("/api/assets/backfill/chunks", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        dryRun: "yes",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: expect.objectContaining({
+        code: "INVALID_INPUT",
+        message: "Invalid request payload",
+      }),
+    });
+    expect(ingestService.backfillChunkContent).not.toHaveBeenCalled();
   });
 
   it("POST /assets/actions/ingest-text redirects to the detail page after creation", async () => {

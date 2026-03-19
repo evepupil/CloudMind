@@ -136,6 +136,10 @@ class InMemoryAssetRepository implements AssetRepository {
     return structuredClone(this.asset);
   }
 
+  public async listAssetIdsMissingChunkContent(): Promise<string[]> {
+    return [];
+  }
+
   public async createTextAsset(
     _input: CreateTextAssetInput
   ): Promise<AssetDetail> {

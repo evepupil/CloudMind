@@ -4,8 +4,13 @@ import type { z } from "zod";
 import { AssetNotFoundError } from "@/core/assets/errors";
 import type { AppEnv } from "@/env";
 import { assetIdParamsSchema } from "@/features/assets/server/schemas";
-import { ingestTextPayloadSchema, ingestUrlPayloadSchema } from "./schemas";
 import {
+  backfillChunkContentPayloadSchema,
+  ingestTextPayloadSchema,
+  ingestUrlPayloadSchema,
+} from "./schemas";
+import {
+  backfillChunkContent,
   ingestFileAsset,
   ingestTextAsset,
   ingestUrlAsset,
@@ -218,6 +223,24 @@ export const registerIngestRoutes = (app: Hono<AppEnv>): void => {
 
       throw error;
     }
+  });
+
+  app.post("/api/assets/backfill/chunks", async (context) => {
+    const rawPayload = await context.req.json().catch(() => null);
+    const parsedPayload = backfillChunkContentPayloadSchema.safeParse(
+      rawPayload ?? {}
+    );
+
+    if (!parsedPayload.success) {
+      return context.json(getValidationErrorBody(parsedPayload.error), 400);
+    }
+
+    const result = await backfillChunkContent(context.env, parsedPayload.data);
+
+    return context.json({
+      ok: true,
+      ...result,
+    });
   });
 
   app.post("/assets/actions/ingest-text", async (context) => {

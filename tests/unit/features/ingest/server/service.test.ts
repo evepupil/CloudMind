@@ -65,9 +65,11 @@ const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
 
 class InMemoryAssetRepository implements AssetRepository {
   private asset: AssetDetail;
+  private readonly missingChunkContentIds: string[];
 
-  public constructor(asset: AssetDetail) {
+  public constructor(asset: AssetDetail, missingChunkContentIds?: string[]) {
     this.asset = asset;
+    this.missingChunkContentIds = missingChunkContentIds ?? [];
   }
 
   public async listAssets(_query?: AssetListQuery): Promise<AssetListResult> {
@@ -96,6 +98,10 @@ class InMemoryAssetRepository implements AssetRepository {
     }
 
     return structuredClone(this.asset);
+  }
+
+  public async listAssetIdsMissingChunkContent(): Promise<string[]> {
+    return [...this.missingChunkContentIds];
   }
 
   public async createTextAsset(
@@ -484,5 +490,91 @@ describe("ingest service", () => {
     await expect(service.reprocessAsset(env, "asset-image-1")).rejects.toThrow(
       'Asset type "image" is not supported for reprocess.'
     );
+  });
+
+  it("backfillChunkContent returns candidates without processing in dry-run mode", async () => {
+    const repository = new InMemoryAssetRepository(createAsset(), [
+      "asset-note-1",
+      "asset-pdf-1",
+    ]);
+    const service = createIngestService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      processTextAsset: processTextAssetMock,
+      processUrlAsset: processUrlAssetMock,
+      processPdfAsset: processPdfAssetMock,
+      getProcessTextAssetForced: processTextAssetForcedMock,
+      getProcessUrlAssetForced: processUrlAssetForcedMock,
+      getProcessPdfAssetForced: processPdfAssetForcedMock,
+    });
+
+    const result = await service.backfillChunkContent(env, {
+      dryRun: true,
+      limit: 10,
+    });
+
+    expect(result).toEqual({
+      dryRun: true,
+      candidateAssetIds: ["asset-note-1", "asset-pdf-1"],
+      processedAssetIds: [],
+      failedItems: [],
+    });
+    expect(processTextAssetForcedMock).not.toHaveBeenCalled();
+    expect(processPdfAssetForcedMock).not.toHaveBeenCalled();
+  });
+
+  it("backfillChunkContent reprocesses candidate assets and records failures", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-note-1",
+        type: "note",
+      }),
+      ["asset-note-1", "asset-missing-1"]
+    );
+    const processedAsset = createAsset({
+      id: "asset-note-1",
+      type: "note",
+      status: "ready",
+      summary: "Reprocessed summary",
+    });
+    const service = createIngestService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      processTextAsset: processTextAssetMock,
+      processUrlAsset: processUrlAssetMock,
+      processPdfAsset: processPdfAssetMock,
+      getProcessTextAssetForced:
+        processTextAssetForcedMock.mockResolvedValue(processedAsset),
+      getProcessUrlAssetForced: processUrlAssetForcedMock,
+      getProcessPdfAssetForced: processPdfAssetForcedMock,
+    });
+
+    const result = await service.backfillChunkContent(env, {
+      dryRun: false,
+      limit: 10,
+    });
+
+    expect(processTextAssetForcedMock).toHaveBeenCalledWith(
+      repository,
+      blobStoreMock,
+      vectorStoreMock,
+      aiProviderMock,
+      "asset-note-1"
+    );
+    expect(result).toEqual({
+      dryRun: false,
+      candidateAssetIds: ["asset-note-1", "asset-missing-1"],
+      processedAssetIds: ["asset-note-1"],
+      failedItems: [
+        {
+          assetId: "asset-missing-1",
+          errorMessage: 'Asset "asset-missing-1" not found.',
+        },
+      ],
+    });
   });
 });

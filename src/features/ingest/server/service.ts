@@ -20,6 +20,21 @@ import {
   processUrlAsset,
 } from "./processor";
 
+interface BackfillChunkContentInput {
+  dryRun?: boolean | undefined;
+  limit?: number | undefined;
+}
+
+interface BackfillChunkContentResult {
+  dryRun: boolean;
+  candidateAssetIds: string[];
+  processedAssetIds: string[];
+  failedItems: Array<{
+    assetId: string;
+    errorMessage: string;
+  }>;
+}
+
 interface IngestServiceDependencies {
   getAssetRepository: (
     bindings: AppBindings | undefined
@@ -101,6 +116,53 @@ const defaultDependencies: IngestServiceDependencies = {
     processPdfAsset(repository, blobStore, vectorStore, aiProvider, assetId, {
       force: true,
     }),
+};
+
+const reprocessExistingAsset = async (
+  dependencies: IngestServiceDependencies,
+  bindings: AppBindings | undefined,
+  repository: AssetIngestRepository,
+  asset: AssetDetail
+): Promise<AssetDetail> => {
+  switch (asset.type) {
+    case "note":
+    case "chat": {
+      const [blobStore, vectorStore, aiProvider] = await Promise.all([
+        dependencies.getBlobStore(bindings),
+        dependencies.getVectorStore(bindings),
+        dependencies.getAIProvider(bindings),
+      ]);
+
+      return dependencies.getProcessTextAssetForced(
+        repository,
+        blobStore,
+        vectorStore,
+        aiProvider,
+        asset.id
+      );
+    }
+    case "url":
+      return dependencies.getProcessUrlAssetForced(repository, asset.id);
+    case "pdf": {
+      const [blobStore, vectorStore, aiProvider] = await Promise.all([
+        dependencies.getBlobStore(bindings),
+        dependencies.getVectorStore(bindings),
+        dependencies.getAIProvider(bindings),
+      ]);
+
+      return dependencies.getProcessPdfAssetForced(
+        repository,
+        blobStore,
+        vectorStore,
+        aiProvider,
+        asset.id
+      );
+    }
+    default:
+      throw new Error(
+        `Asset type "${asset.type}" is not supported for reprocess.`
+      );
+  }
 };
 
 // 这里集中采集与重处理用例，避免继续和资产读模型耦合。
@@ -187,45 +249,53 @@ export const createIngestService = (
       const repository = await dependencies.getAssetRepository(bindings);
       const asset = await repository.getAssetById(id);
 
-      switch (asset.type) {
-        case "note":
-        case "chat": {
-          const [blobStore, vectorStore, aiProvider] = await Promise.all([
-            dependencies.getBlobStore(bindings),
-            dependencies.getVectorStore(bindings),
-            dependencies.getAIProvider(bindings),
-          ]);
+      return reprocessExistingAsset(dependencies, bindings, repository, asset);
+    },
 
-          return dependencies.getProcessTextAssetForced(
-            repository,
-            blobStore,
-            vectorStore,
-            aiProvider,
-            asset.id
-          );
-        }
-        case "url":
-          return dependencies.getProcessUrlAssetForced(repository, asset.id);
-        case "pdf": {
-          const [blobStore, vectorStore, aiProvider] = await Promise.all([
-            dependencies.getBlobStore(bindings),
-            dependencies.getVectorStore(bindings),
-            dependencies.getAIProvider(bindings),
-          ]);
+    async backfillChunkContent(
+      bindings: AppBindings | undefined,
+      input?: BackfillChunkContentInput
+    ): Promise<BackfillChunkContentResult> {
+      const repository = await dependencies.getAssetRepository(bindings);
+      const candidateAssetIds = await repository.listAssetIdsMissingChunkContent(
+        input?.limit ?? 50
+      );
 
-          return dependencies.getProcessPdfAssetForced(
-            repository,
-            blobStore,
-            vectorStore,
-            aiProvider,
-            asset.id
-          );
-        }
-        default:
-          throw new Error(
-            `Asset type "${asset.type}" is not supported for reprocess.`
-          );
+      if (input?.dryRun ?? false) {
+        return {
+          dryRun: true,
+          candidateAssetIds,
+          processedAssetIds: [],
+          failedItems: [],
+        };
       }
+
+      const processedAssetIds: string[] = [];
+      const failedItems: BackfillChunkContentResult["failedItems"] = [];
+
+      for (const assetId of candidateAssetIds) {
+        try {
+          const asset = await repository.getAssetById(assetId);
+
+          await reprocessExistingAsset(dependencies, bindings, repository, asset);
+          processedAssetIds.push(assetId);
+        } catch (error) {
+          failedItems.push({
+            assetId,
+            errorMessage:
+              error instanceof Error
+                ? error.message
+                : "Unknown backfill error.",
+          });
+        }
+      }
+
+      return {
+        dryRun: false,
+        candidateAssetIds,
+        processedAssetIds,
+        failedItems,
+      };
     },
   };
 };
@@ -237,4 +307,5 @@ export const {
   ingestUrlAsset,
   ingestFileAsset,
   reprocessAsset,
+  backfillChunkContent,
 } = ingestService;

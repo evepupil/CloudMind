@@ -1,4 +1,13 @@
-import { and, asc, count, desc, eq, inArray, like, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  like,
+  or,
+} from "drizzle-orm";
 
 import { AssetNotFoundError } from "@/core/assets/errors";
 import type {
@@ -177,6 +186,26 @@ export class D1AssetRepository implements AssetRepository {
       .where(inArray(assetChunks.vectorId, vectorIds));
 
     return records.map(mapChunkMatch);
+  }
+
+  public async listAssetIdsMissingChunkContent(limit = 50): Promise<string[]> {
+    const rows = await this.db
+      .selectDistinct({
+        assetId: assetChunks.assetId,
+      })
+      .from(assetChunks)
+      .innerJoin(assets, eq(assetChunks.assetId, assets.id))
+      .where(
+        and(
+          eq(assetChunks.contentText, ""),
+          inArray(assets.type, ["note", "pdf", "chat"]),
+          inArray(assets.status, ["ready", "failed"])
+        )
+      )
+      .orderBy(asc(assetChunks.assetId))
+      .limit(limit);
+
+    return rows.map((row) => row.assetId);
   }
 
   public async getAssetById(id: string): Promise<AssetDetail> {

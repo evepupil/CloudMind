@@ -58,6 +58,7 @@ export interface AssetSearchRepository {
 // 这里保留采集与处理链路需要的写侧接口。
 export interface AssetIngestRepository {
   getAssetById(id: string): Promise<AssetDetail>;
+  listAssetIdsMissingChunkContent(limit?: number): Promise<string[]>;
   createTextAsset(input: CreateTextAssetInput): Promise<AssetDetail>;
   createUrlAsset(input: CreateUrlAssetInput): Promise<AssetDetail>;
   createFileAsset(input: CreateFileAssetInput): Promise<AssetDetail>;
