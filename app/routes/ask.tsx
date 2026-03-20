@@ -1,16 +1,13 @@
 import { createRoute } from "honox/factory";
-
-import type { AskLibraryResult } from "@/features/chat/model/types";
 import { AskPage } from "@/features/chat/components/ask-page";
+import type { AskLibraryResult } from "@/features/chat/model/types";
 
 const parseChatError = async (response: Response): Promise<string> => {
-  const payload = (await response.json().catch(() => null)) as
-    | {
-        error?: {
-          message?: string | undefined;
-        };
-      }
-    | null;
+  const payload = (await response.json().catch(() => null)) as {
+    error?: {
+      message?: string | undefined;
+    };
+  } | null;
 
   return payload?.error?.message ?? "Ask request failed.";
 };
@@ -41,10 +38,6 @@ export default createRoute(async (context) => {
   }
 
   return context.render(
-    <AskPage
-      question={question}
-      result={result}
-      errorMessage={errorMessage}
-    />
+    <AskPage question={question} result={result} errorMessage={errorMessage} />
   );
 });

@@ -7,7 +7,10 @@ import type {
   VectorSearchMatch,
   VectorStore,
 } from "@/core/vector/ports";
-import type { AssetChunkMatch, AssetListResult } from "@/features/assets/model/types";
+import type {
+  AssetChunkMatch,
+  AssetListResult,
+} from "@/features/assets/model/types";
 import { createChatService } from "@/features/chat/server/service";
 
 class InMemorySearchRepository implements AssetSearchRepository {
@@ -47,9 +50,7 @@ class InMemorySearchRepository implements AssetSearchRepository {
 }
 
 class InMemoryVectorStore implements VectorStore {
-  public constructor(
-    private readonly matches: VectorSearchMatch[]
-  ) {}
+  public constructor(private readonly matches: VectorSearchMatch[]) {}
 
   public async upsert(): Promise<void> {
     return undefined;

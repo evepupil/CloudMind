@@ -3,15 +3,21 @@ import { PageShell } from "@/features/layout/components/page-shell";
 
 const suggestionPrompts = [
   "Summarize what I saved this week.",
-  "What are the main themes across my recent notes?",
-  "Which assets mention Cloudflare deployment choices?",
+  "Which assets mention Cloudflare deployment tradeoffs?",
+  "What should be fixed before the next frontend refactor batch?",
+];
+
+const retrievalStages = [
+  "Embed the question",
+  "Retrieve the highest scoring chunks",
+  "Ground the answer in cited evidence",
 ];
 
 const buildSuggestionHref = (prompt: string): string => {
   return `/ask?question=${encodeURIComponent(prompt)}`;
 };
 
-// 这里提供 Ask 页最小可用界面，直接展示问答结果与来源卡片。
+// 这里先把 Ask 重构成更像工作台的问答面板，强调提问、回答和证据三栏关系。
 export const AskPage = ({
   question,
   result,
@@ -25,41 +31,195 @@ export const AskPage = ({
 
   return (
     <PageShell
-      title="Ask your library"
-      subtitle="Turn CloudMind into a source-aware research partner. Answers should come with evidence, not just fluent text."
+      title="Ask with grounded evidence"
+      subtitle="Use retrieval-first answers so CloudMind behaves less like a chatbot and more like a verifiable research operator."
       navigationKey="ask"
       actions={
-        <a
-          href="/search"
-          style={{
-            padding: "12px 18px",
-            borderRadius: "999px",
-            backgroundColor: "#dff7f5",
-            color: "#0f766e",
-            textDecoration: "none",
-            fontWeight: 700,
-          }}
-        >
-          Search Sources
-        </a>
+        <>
+          <a
+            href="/search"
+            style={{
+              padding: "12px 16px",
+              borderRadius: "999px",
+              backgroundColor: "#ffffff",
+              color: "#16202d",
+              textDecoration: "none",
+              fontWeight: 700,
+              border: "1px solid rgba(21, 33, 51, 0.1)",
+            }}
+          >
+            Search first
+          </a>
+          <a
+            href="/capture"
+            style={{
+              padding: "12px 16px",
+              borderRadius: "999px",
+              backgroundColor: "#fff1dd",
+              color: "#b55d0a",
+              textDecoration: "none",
+              fontWeight: 700,
+              border: "1px solid rgba(244, 129, 32, 0.22)",
+            }}
+          >
+            Add more context
+          </a>
+        </>
       }
     >
       <section
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1.25fr) minmax(280px, 0.75fr)",
+          gridTemplateColumns: "minmax(0, 1.55fr) minmax(320px, 0.85fr)",
           gap: "18px",
         }}
       >
         <article
           style={{
             padding: "24px",
-            borderRadius: "24px",
-            backgroundColor: "#ffffff",
-            border: "1px solid rgba(15, 23, 42, 0.08)",
-            boxShadow: "0 18px 48px rgba(15, 23, 42, 0.08)",
+            borderRadius: "30px",
+            border: "1px solid rgba(21, 33, 51, 0.08)",
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(255,250,245,0.96) 100%)",
+            boxShadow: "0 24px 58px rgba(28, 39, 56, 0.06)",
           }}
         >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: "16px",
+              marginBottom: "16px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <p
+                style={{
+                  margin: "0 0 6px",
+                  color: "#f48120",
+                  fontSize: "11px",
+                  fontWeight: 800,
+                  letterSpacing: "0.16em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Answer workspace
+              </p>
+              <h2
+                style={{
+                  margin: 0,
+                  color: "#16202d",
+                  fontSize: "28px",
+                  fontWeight: 800,
+                  letterSpacing: "-0.03em",
+                }}
+              >
+                Query, answer, verify
+              </h2>
+            </div>
+            <div
+              style={{
+                padding: "10px 12px",
+                borderRadius: "16px",
+                backgroundColor: "#f6f7f9",
+                border: "1px solid rgba(21, 33, 51, 0.08)",
+                color: "#566375",
+                fontSize: "13px",
+              }}
+            >
+              Retrieval mode: top 5 chunks
+            </div>
+          </div>
+
+          <form
+            method="get"
+            action="/ask"
+            style={{
+              display: "grid",
+              gap: "12px",
+              marginBottom: "18px",
+            }}
+          >
+            <label style={{ display: "grid", gap: "8px" }}>
+              <span
+                style={{
+                  color: "#16202d",
+                  fontSize: "14px",
+                  fontWeight: 700,
+                }}
+              >
+                Ask a grounded question
+              </span>
+              <textarea
+                name="question"
+                rows={5}
+                defaultValue={question}
+                placeholder="Ask CloudMind to explain, compare, summarize, or locate something in your saved library..."
+                style={{
+                  width: "100%",
+                  padding: "16px 18px",
+                  borderRadius: "22px",
+                  border: "1px solid rgba(21, 33, 51, 0.12)",
+                  backgroundColor: "#fffdfa",
+                  color: "#16202d",
+                  fontSize: "15px",
+                  lineHeight: 1.7,
+                  resize: "vertical",
+                  fontFamily: "inherit",
+                }}
+              />
+            </label>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "12px",
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <button
+                  type="submit"
+                  style={{
+                    padding: "12px 18px",
+                    borderRadius: "999px",
+                    border: "none",
+                    backgroundColor: "#16202d",
+                    color: "#ffffff",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Ask Library
+                </button>
+                <span
+                  style={{
+                    padding: "12px 14px",
+                    borderRadius: "999px",
+                    backgroundColor: "#fff1dd",
+                    color: "#b55d0a",
+                    border: "1px solid rgba(244, 129, 32, 0.22)",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                  }}
+                >
+                  Evidence required
+                </span>
+              </div>
+              <span
+                style={{
+                  color: "#6b7685",
+                  fontSize: "13px",
+                }}
+              >
+                Full-page submit for now. AJAX comes next.
+              </span>
+            </div>
+          </form>
+
           <div
             style={{
               display: "grid",
@@ -69,165 +229,225 @@ export const AskPage = ({
             {hasQuestion ? (
               <article
                 style={{
-                  padding: "18px",
-                  borderRadius: "18px",
+                  padding: "18px 20px",
+                  borderRadius: "22px",
                   backgroundColor: "#eef6ff",
+                  border: "1px solid rgba(94, 182, 255, 0.2)",
                 }}
               >
-                <strong style={{ display: "block", marginBottom: "8px" }}>
-                  You
-                </strong>
-                <p style={{ margin: 0, lineHeight: 1.75 }}>{question}</p>
+                <p
+                  style={{
+                    margin: "0 0 8px",
+                    color: "#0b5cab",
+                    fontSize: "11px",
+                    fontWeight: 800,
+                    letterSpacing: "0.14em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  User query
+                </p>
+                <p
+                  style={{
+                    margin: 0,
+                    color: "#16202d",
+                    lineHeight: 1.8,
+                    fontSize: "15px",
+                  }}
+                >
+                  {question}
+                </p>
               </article>
             ) : null}
+
             <article
               style={{
-                padding: "18px",
-                borderRadius: "18px",
-                backgroundColor: "#f8fbfc",
-                border: "1px solid rgba(15, 23, 42, 0.06)",
+                padding: "20px 22px",
+                borderRadius: "24px",
+                backgroundColor: "#ffffff",
+                border: "1px solid rgba(21, 33, 51, 0.08)",
               }}
             >
-              <strong style={{ display: "block", marginBottom: "8px" }}>
-                CloudMind
-              </strong>
+              <p
+                style={{
+                  margin: "0 0 10px",
+                  color: "#16202d",
+                  fontSize: "12px",
+                  fontWeight: 800,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                }}
+              >
+                CloudMind answer
+              </p>
               {errorMessage ? (
                 <p
                   style={{
                     margin: 0,
-                    color: "#b91c1c",
+                    color: "#a12d28",
                     lineHeight: 1.85,
+                    fontSize: "15px",
                   }}
                 >
                   {errorMessage}
                 </p>
               ) : result ? (
-                <p style={{ margin: 0, color: "#445160", lineHeight: 1.85 }}>
+                <p
+                  style={{
+                    margin: 0,
+                    color: "#3b4757",
+                    lineHeight: 1.95,
+                    fontSize: "15px",
+                  }}
+                >
                   {result.answer}
                 </p>
               ) : (
-                <p style={{ margin: 0, color: "#445160", lineHeight: 1.85 }}>
-                  Ask a question grounded in your saved assets. CloudMind will
-                  retrieve relevant chunks first, then answer with cited
-                  evidence.
+                <p
+                  style={{
+                    margin: 0,
+                    color: "#566375",
+                    lineHeight: 1.85,
+                    fontSize: "15px",
+                  }}
+                >
+                  Ask a question about your saved material. The answer area is
+                  designed to stay readable, with evidence cards alongside it
+                  instead of burying sources after the fact.
                 </p>
               )}
             </article>
           </div>
 
-          <form
-            method="get"
-            action="/ask"
-            style={{ marginTop: "22px", display: "grid", gap: "12px" }}
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              flexWrap: "wrap",
+              marginTop: "18px",
+            }}
           >
-            <label style={{ display: "grid", gap: "8px" }}>
-              <span style={{ fontWeight: 700 }}>Ask a follow-up</span>
-              <textarea
-                name="question"
-                rows={5}
-                defaultValue={question}
-                placeholder="Ask a question grounded in your saved library..."
+            {suggestionPrompts.map((prompt) => (
+              <a
+                key={prompt}
+                href={buildSuggestionHref(prompt)}
                 style={{
-                  width: "100%",
-                  padding: "14px 16px",
-                  borderRadius: "18px",
-                  border: "1px solid rgba(15, 23, 42, 0.12)",
-                  fontSize: "15px",
-                  resize: "vertical",
-                  boxSizing: "border-box",
-                  fontFamily: "inherit",
-                }}
-              />
-            </label>
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "10px",
-              }}
-            >
-              <button
-                type="submit"
-                style={{
-                  padding: "12px 18px",
+                  padding: "10px 12px",
                   borderRadius: "999px",
-                  border: "none",
-                  backgroundColor: "#102033",
-                  color: "#ffffff",
-                  fontWeight: 700,
-                  cursor: "pointer",
+                  backgroundColor: "#f5f7fa",
+                  border: "1px solid rgba(21, 33, 51, 0.08)",
+                  color: "#566375",
+                  fontSize: "13px",
+                  textDecoration: "none",
                 }}
               >
-                Ask Library
-              </button>
-              {suggestionPrompts.map((prompt) => (
-                <a
-                  key={prompt}
-                  href={buildSuggestionHref(prompt)}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: "999px",
-                    backgroundColor: "#eef2f7",
-                    color: "#526071",
-                    fontSize: "13px",
-                    textDecoration: "none",
-                  }}
-                >
-                  {prompt}
-                </a>
-              ))}
-            </div>
-          </form>
+                {prompt}
+              </a>
+            ))}
+          </div>
         </article>
 
         <aside style={{ display: "grid", gap: "16px" }}>
           <article
             style={{
               padding: "20px",
-              borderRadius: "24px",
-              backgroundColor: "#ffffff",
-              border: "1px solid rgba(15, 23, 42, 0.08)",
+              borderRadius: "28px",
+              border: "1px solid rgba(21, 33, 51, 0.08)",
+              backgroundColor: "#fffdfa",
+              boxShadow: "0 20px 46px rgba(28, 39, 56, 0.05)",
             }}
           >
-            <h3 style={{ marginTop: 0, fontSize: "20px" }}>Evidence Panel</h3>
-            <p style={{ color: "#526071", lineHeight: 1.8 }}>
-              Answers should cite the assets and snippets that informed the
-              response.
+            <p
+              style={{
+                margin: "0 0 10px",
+                color: "#f48120",
+                fontSize: "11px",
+                fontWeight: 800,
+                letterSpacing: "0.16em",
+                textTransform: "uppercase",
+              }}
+            >
+              Evidence panel
             </p>
+            <h3
+              style={{
+                margin: "0 0 12px",
+                color: "#16202d",
+                fontSize: "22px",
+                fontWeight: 800,
+              }}
+            >
+              Retrieved sources
+            </h3>
             <div style={{ display: "grid", gap: "12px" }}>
               {result?.sources.length ? (
-                result.sources.map((source) => (
+                result.sources.map((source, index) => (
                   <article
                     key={`${source.assetId}:${source.chunkId ?? "source"}`}
                     style={{
                       padding: "16px",
                       borderRadius: "18px",
-                      backgroundColor: "#f8fbfc",
-                      border: "1px solid rgba(15, 23, 42, 0.06)",
+                      backgroundColor: index === 0 ? "#fff5e8" : "#ffffff",
+                      border:
+                        index === 0
+                          ? "1px solid rgba(244, 129, 32, 0.22)"
+                          : "1px solid rgba(21, 33, 51, 0.08)",
                     }}
                   >
-                    <a
-                      href={`/assets/${source.assetId}`}
+                    <div
                       style={{
-                        color: "#102033",
-                        textDecoration: "none",
-                        fontWeight: 700,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: "10px",
+                        alignItems: "center",
+                        marginBottom: "8px",
+                        flexWrap: "wrap",
                       }}
                     >
-                      {source.title}
-                    </a>
+                      <a
+                        href={`/assets/${source.assetId}`}
+                        style={{
+                          color: "#16202d",
+                          textDecoration: "none",
+                          fontWeight: 800,
+                        }}
+                      >
+                        {source.title}
+                      </a>
+                      <span
+                        style={{
+                          padding: "5px 8px",
+                          borderRadius: "999px",
+                          backgroundColor: "#f3f5f8",
+                          color: "#5f6b7d",
+                          fontSize: "11px",
+                          fontWeight: 800,
+                          letterSpacing: "0.08em",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        Match {index + 1}
+                      </span>
+                    </div>
                     <p
                       style={{
-                        marginBottom: "8px",
-                        color: "#526071",
+                        margin: 0,
+                        color: "#566375",
                         lineHeight: 1.75,
+                        fontSize: "14px",
                       }}
                     >
                       {source.snippet}
                     </p>
-                    <div style={{ color: "#64748b", fontSize: "13px" }}>
+                    <p
+                      style={{
+                        margin: "10px 0 0",
+                        color: "#6b7685",
+                        fontSize: "12px",
+                      }}
+                    >
                       {source.sourceUrl ?? `Asset ID: ${source.assetId}`}
-                    </div>
+                    </p>
                   </article>
                 ))
               ) : (
@@ -235,12 +455,14 @@ export const AskPage = ({
                   style={{
                     padding: "16px",
                     borderRadius: "18px",
-                    backgroundColor: "#f8fbfc",
-                    border: "1px dashed rgba(15, 23, 42, 0.12)",
-                    color: "#526071",
+                    border: "1px dashed rgba(21, 33, 51, 0.14)",
+                    color: "#566375",
+                    backgroundColor: "#ffffff",
+                    lineHeight: 1.75,
                   }}
                 >
-                  Submit a question to see the retrieved evidence here.
+                  Submit a question to see the retrieved chunks and source cards
+                  here.
                 </article>
               )}
             </div>
@@ -249,17 +471,64 @@ export const AskPage = ({
           <article
             style={{
               padding: "20px",
-              borderRadius: "24px",
+              borderRadius: "28px",
+              border: "1px solid rgba(21, 33, 51, 0.08)",
               background:
-                "linear-gradient(145deg, rgba(255,255,255,0.94) 0%, rgba(232, 250, 244, 0.9) 100%)",
-              border: "1px solid rgba(15, 23, 42, 0.08)",
+                "linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(238,246,255,0.96) 100%)",
+              boxShadow: "0 20px 46px rgba(28, 39, 56, 0.05)",
             }}
           >
-            <h3 style={{ marginTop: 0, fontSize: "20px" }}>Context Scope</h3>
-            <p style={{ margin: 0, color: "#526071", lineHeight: 1.8 }}>
-              Right now every question searches the whole library. The next step
-              is letting users limit scope by asset, type, or tag before asking.
+            <p
+              style={{
+                margin: "0 0 10px",
+                color: "#0b5cab",
+                fontSize: "11px",
+                fontWeight: 800,
+                letterSpacing: "0.16em",
+                textTransform: "uppercase",
+              }}
+            >
+              Retrieval chain
             </p>
+            <div style={{ display: "grid", gap: "12px" }}>
+              {retrievalStages.map((stage, index) => (
+                <div
+                  key={stage}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "26px minmax(0, 1fr)",
+                    gap: "12px",
+                    alignItems: "start",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "26px",
+                      height: "26px",
+                      borderRadius: "999px",
+                      backgroundColor: "#ffffff",
+                      border: "1px solid rgba(94, 182, 255, 0.22)",
+                      color: "#0b5cab",
+                      display: "grid",
+                      placeItems: "center",
+                      fontSize: "12px",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {index + 1}
+                  </span>
+                  <p
+                    style={{
+                      margin: "4px 0 0",
+                      color: "#3b4757",
+                      lineHeight: 1.7,
+                    }}
+                  >
+                    {stage}
+                  </p>
+                </div>
+              ))}
+            </div>
           </article>
         </aside>
       </section>

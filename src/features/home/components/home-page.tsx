@@ -2,34 +2,58 @@ import type { AssetSummary } from "@/features/assets/model/types";
 
 import { PageShell } from "@/features/layout/components/page-shell";
 
-const demoAssets: AssetSummary[] = [
+const overviewMetrics = [
   {
-    id: "asset_demo_article",
+    label: "Assets indexed",
+    value: "1,248",
+    note: "+32 this week",
+  },
+  {
+    label: "Items processing",
+    value: "07",
+    note: "Queue active",
+  },
+  {
+    label: "Answer coverage",
+    value: "84%",
+    note: "With evidence",
+  },
+  {
+    label: "Failed jobs",
+    value: "02",
+    note: "Needs retry",
+  },
+];
+
+const activityFeed: AssetSummary[] = [
+  {
+    id: "asset-ops-1",
     type: "url",
-    title: "CloudMind Pages 全栈原型",
+    title: "Cloudflare Pages deployment notes",
     summary:
-      "页面、API 和知识库工作流放在同一个 HonoX 项目中，便于快速验证 MVP。",
-    sourceUrl: null,
+      "Collected a deployment decision log covering Pages, D1 bindings, and service boundaries for the MVP.",
+    sourceUrl: "https://developers.cloudflare.com/",
     status: "ready",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
   {
-    id: "asset_demo_ingest",
+    id: "asset-ops-2",
     type: "note",
-    title: "知识采集闭环",
+    title: "Knowledge ingestion backlog",
     summary:
-      "优先打通文本、URL、PDF 的收集、处理、搜索和后续提问，而不是先做复杂功能。",
+      "A short operator note defining what should land in v0.1 before browser extension and export work begin.",
     sourceUrl: null,
     status: "processing",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
   {
-    id: "asset_demo_question",
+    id: "asset-ops-3",
     type: "chat",
-    title: "Ask Library 体验方向",
-    summary: "回答应该始终带来源证据，让知识问答具备可追溯性和可信度。",
+    title: "Ask Library reliability checklist",
+    summary:
+      "Captured requirements for evidence-first answers, chunk citations, and a stable retrieval loop.",
     sourceUrl: null,
     status: "pending",
     createdAt: new Date().toISOString(),
@@ -37,98 +61,110 @@ const demoAssets: AssetSummary[] = [
   },
 ];
 
-const featureCards = [
+const pipelineSteps = [
   {
-    title: "Overview First",
-    description:
-      "首页展示知识库脉搏，而不是一堆孤立入口。用户进入后先知道发生了什么。",
+    title: "Capture",
+    copy: "Save URLs, text, PDFs, and future MCP events through one intake layer.",
   },
   {
-    title: "Library as Workspace",
-    description:
-      "资产页是知识浏览器，不只是后台列表。浏览、筛选和进入详情应当顺畅。",
+    title: "Process",
+    copy: "Extract, clean, summarize, chunk, embed, and keep every derived artifact rebuildable.",
   },
   {
-    title: "Ask with Evidence",
-    description:
-      "问答页需要把回答和证据绑定起来，让 CloudMind 更像个人研究台。",
+    title: "Retrieve",
+    copy: "Search and Ask should operate on evidence-first retrieval, not fluent guesses.",
   },
 ];
 
-const metricCards = [
+const actionCards = [
   {
-    label: "New in 24h",
-    value: "12",
-    tone: "#0f766e",
+    title: "Open Library",
+    description:
+      "Inspect assets, statuses, and summaries with less dashboard noise.",
+    href: "/assets",
+    tone: "#16202d",
+    bg: "#ffffff",
+    border: "rgba(21, 33, 51, 0.12)",
   },
   {
-    label: "Processing",
-    value: "3",
-    tone: "#1d4ed8",
+    title: "Capture Source",
+    description: "Send a webpage, note, or PDF into the ingest pipeline.",
+    href: "/capture",
+    tone: "#16202d",
+    bg: "#fff5e8",
+    border: "rgba(244, 129, 32, 0.22)",
   },
   {
-    label: "Failed",
-    value: "1",
-    tone: "#b45309",
+    title: "Ask with Evidence",
+    description: "Question the library and verify where the answer came from.",
+    href: "/ask",
+    tone: "#16202d",
+    bg: "#eef6ff",
+    border: "rgba(94, 182, 255, 0.22)",
   },
 ];
 
 const statusStyles: Record<
   AssetSummary["status"],
-  { color: string; bg: string }
+  { color: string; bg: string; border: string }
 > = {
   pending: {
-    color: "#92400e",
-    bg: "#fef3c7",
+    color: "#9a5a00",
+    bg: "#fff2de",
+    border: "rgba(244, 129, 32, 0.22)",
   },
   processing: {
-    color: "#1d4ed8",
-    bg: "#dbeafe",
+    color: "#0b5cab",
+    bg: "#eaf4ff",
+    border: "rgba(94, 182, 255, 0.22)",
   },
   ready: {
-    color: "#0f766e",
-    bg: "#ccfbf1",
+    color: "#116149",
+    bg: "#e7f7ef",
+    border: "rgba(17, 97, 73, 0.18)",
   },
   failed: {
-    color: "#b91c1c",
-    bg: "#fee2e2",
+    color: "#a12d28",
+    bg: "#ffebe8",
+    border: "rgba(161, 45, 40, 0.18)",
   },
 };
 
-// 这里重做首页原型，让它更像知识工作台的总览，而不是简单功能展示页。
+// 这里重做 Overview，让它更像 Cloudflare 风格的产品工作台首页，而不是营销海报。
 export const HomePage = () => {
   return (
     <PageShell
-      title="Your private knowledge workspace"
-      subtitle="Capture webpages, notes, PDFs, and future AI conversations into one calm, searchable library you control."
+      title="Operate your private knowledge system"
+      subtitle="CloudMind should feel like a calm control surface for capture, processing, retrieval, and source-aware answers."
       navigationKey="overview"
       actions={
         <>
           <a
             href="/capture"
             style={{
-              padding: "12px 18px",
+              padding: "12px 16px",
               borderRadius: "999px",
-              backgroundColor: "#102033",
+              backgroundColor: "#16202d",
               color: "#ffffff",
               textDecoration: "none",
               fontWeight: 700,
             }}
           >
-            Open Capture
+            New capture
           </a>
           <a
             href="/ask"
             style={{
-              padding: "12px 18px",
+              padding: "12px 16px",
               borderRadius: "999px",
-              backgroundColor: "#dff7f5",
-              color: "#0f766e",
+              backgroundColor: "#fff1dd",
+              color: "#b55d0a",
               textDecoration: "none",
               fontWeight: 700,
+              border: "1px solid rgba(244, 129, 32, 0.22)",
             }}
           >
-            Ask Library
+            Open Ask
           </a>
         </>
       }
@@ -136,161 +172,263 @@ export const HomePage = () => {
       <section
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          gap: "14px",
-          marginBottom: "24px",
-        }}
-      >
-        {metricCards.map((card) => (
-          <article
-            key={card.label}
-            style={{
-              padding: "18px 20px",
-              borderRadius: "22px",
-              backgroundColor: "#ffffff",
-              border: "1px solid rgba(15, 23, 42, 0.08)",
-              boxShadow: "0 16px 40px rgba(15, 23, 42, 0.07)",
-            }}
-          >
-            <p
-              style={{
-                margin: "0 0 10px",
-                color: "#5f6e7d",
-                fontSize: "13px",
-                fontWeight: 700,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-              }}
-            >
-              {card.label}
-            </p>
-            <p
-              style={{
-                margin: 0,
-                color: card.tone,
-                fontSize: "34px",
-                fontWeight: 800,
-              }}
-            >
-              {card.value}
-            </p>
-          </article>
-        ))}
-      </section>
-
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1.45fr) minmax(300px, 0.95fr)",
+          gridTemplateColumns: "minmax(0, 1.45fr) minmax(320px, 0.9fr)",
           gap: "18px",
-          marginBottom: "28px",
+          marginBottom: "18px",
         }}
       >
         <article
           style={{
-            padding: "26px",
-            borderRadius: "28px",
+            padding: "28px",
+            borderRadius: "30px",
+            border: "1px solid rgba(21, 33, 51, 0.08)",
             background:
-              "linear-gradient(145deg, rgba(255,255,255,0.96) 0%, rgba(233, 245, 249, 0.92) 100%)",
-            border: "1px solid rgba(15, 23, 42, 0.08)",
-            boxShadow: "0 18px 48px rgba(15, 23, 42, 0.08)",
+              "linear-gradient(135deg, rgba(255,255,255,0.92) 0%, rgba(255,245,232,0.96) 100%)",
+            boxShadow: "0 24px 58px rgba(28, 39, 56, 0.07)",
           }}
         >
           <p
             style={{
-              margin: "0 0 12px",
-              color: "#0f766e",
+              margin: "0 0 10px",
+              color: "#f48120",
+              fontSize: "11px",
               fontWeight: 800,
-              letterSpacing: "0.08em",
+              letterSpacing: "0.16em",
               textTransform: "uppercase",
-              fontSize: "12px",
             }}
           >
-            Overview
+            Operator summary
           </p>
           <h2
             style={{
               margin: 0,
-              fontSize: "30px",
-              lineHeight: 1.12,
-              fontFamily: '"Georgia", "Palatino Linotype", serif',
+              color: "#16202d",
+              fontSize: "clamp(30px, 4vw, 44px)",
+              lineHeight: 1.03,
+              fontWeight: 800,
+              letterSpacing: "-0.03em",
+              maxWidth: "12ch",
             }}
           >
-            Treat CloudMind like a research desk, not a storage bucket.
+            Build a library that answers with receipts.
           </h2>
           <p
             style={{
               margin: "14px 0 0",
-              color: "#526071",
-              lineHeight: 1.8,
+              color: "#566375",
               fontSize: "16px",
+              lineHeight: 1.8,
+              maxWidth: "66ch",
             }}
           >
-            Your homepage should surface what just entered the library, what is
-            still processing, what failed, and what you can ask next.
+            The homepage should immediately show what entered the system, what
+            still needs processing, and what questions the user can ask next
+            without losing trust in the source chain.
           </p>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+              gap: "12px",
+              marginTop: "22px",
+            }}
+          >
+            {overviewMetrics.map((metric) => (
+              <article
+                key={metric.label}
+                style={{
+                  padding: "16px 16px 18px",
+                  borderRadius: "18px",
+                  backgroundColor: "rgba(255, 255, 255, 0.72)",
+                  border: "1px solid rgba(21, 33, 51, 0.08)",
+                }}
+              >
+                <p
+                  style={{
+                    margin: "0 0 8px",
+                    color: "#6b7685",
+                    fontSize: "12px",
+                    fontWeight: 800,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {metric.label}
+                </p>
+                <p
+                  style={{
+                    margin: 0,
+                    color: "#16202d",
+                    fontSize: "32px",
+                    fontWeight: 800,
+                    letterSpacing: "-0.03em",
+                  }}
+                >
+                  {metric.value}
+                </p>
+                <p
+                  style={{
+                    margin: "8px 0 0",
+                    color: "#566375",
+                    fontSize: "13px",
+                  }}
+                >
+                  {metric.note}
+                </p>
+              </article>
+            ))}
+          </div>
         </article>
 
         <article
           style={{
             padding: "24px",
-            borderRadius: "28px",
-            backgroundColor: "#ffffff",
-            border: "1px solid rgba(15, 23, 42, 0.08)",
-            boxShadow: "0 18px 48px rgba(15, 23, 42, 0.08)",
+            borderRadius: "30px",
+            border: "1px solid rgba(21, 33, 51, 0.08)",
+            backgroundColor: "#fffdfa",
+            boxShadow: "0 24px 58px rgba(28, 39, 56, 0.06)",
           }}
         >
-          <div
+          <p
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: "12px",
-              marginBottom: "12px",
+              margin: "0 0 12px",
+              color: "#16202d",
+              fontSize: "18px",
+              fontWeight: 800,
             }}
           >
-            <h2 style={{ margin: 0, fontSize: "22px" }}>Quick Routes</h2>
-            <a
-              href="/assets"
-              style={{
-                color: "#102033",
-                textDecoration: "none",
-                fontWeight: 700,
-              }}
-            >
-              Open library
-            </a>
-          </div>
-          <div style={{ display: "grid", gap: "10px" }}>
-            {featureCards.map((card) => (
+            Processing model
+          </p>
+          <div style={{ display: "grid", gap: "12px" }}>
+            {pipelineSteps.map((step, index) => (
               <article
-                key={card.title}
+                key={step.title}
                 style={{
-                  padding: "16px 18px",
-                  borderRadius: "18px",
-                  backgroundColor: "#f8fbfc",
-                  border: "1px solid rgba(15, 23, 42, 0.06)",
+                  display: "grid",
+                  gridTemplateColumns: "28px minmax(0, 1fr)",
+                  gap: "14px",
+                  padding: "14px 0",
+                  borderTop:
+                    index === 0 ? "none" : "1px solid rgba(21, 33, 51, 0.08)",
                 }}
               >
-                <h3
+                <div
                   style={{
-                    margin: "0 0 6px",
-                    color: "#102033",
-                    fontSize: "17px",
+                    width: "28px",
+                    height: "28px",
+                    borderRadius: "999px",
+                    backgroundColor:
+                      index === 0
+                        ? "#fff1dd"
+                        : index === 1
+                          ? "#eef6ff"
+                          : "#eef7f1",
+                    color:
+                      index === 0
+                        ? "#b55d0a"
+                        : index === 1
+                          ? "#0b5cab"
+                          : "#116149",
+                    display: "grid",
+                    placeItems: "center",
+                    fontSize: "12px",
+                    fontWeight: 800,
                   }}
                 >
-                  {card.title}
-                </h3>
-                <p style={{ margin: 0, color: "#5f6e7d", lineHeight: 1.7 }}>
-                  {card.description}
-                </p>
+                  {index + 1}
+                </div>
+                <div>
+                  <h3
+                    style={{
+                      margin: "0 0 6px",
+                      color: "#16202d",
+                      fontSize: "16px",
+                    }}
+                  >
+                    {step.title}
+                  </h3>
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#566375",
+                      lineHeight: 1.75,
+                    }}
+                  >
+                    {step.copy}
+                  </p>
+                </div>
               </article>
             ))}
           </div>
         </article>
       </section>
 
-      <section>
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+          marginBottom: "18px",
+        }}
+      >
+        {actionCards.map((card) => (
+          <a
+            key={card.title}
+            href={card.href}
+            style={{
+              padding: "20px 20px 22px",
+              borderRadius: "24px",
+              textDecoration: "none",
+              color: card.tone,
+              backgroundColor: card.bg,
+              border: `1px solid ${card.border}`,
+              boxShadow: "0 18px 42px rgba(28, 39, 56, 0.05)",
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 10px",
+                color: "#6b7685",
+                fontSize: "11px",
+                fontWeight: 800,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+              }}
+            >
+              Launch
+            </p>
+            <h3
+              style={{
+                margin: 0,
+                fontSize: "20px",
+                fontWeight: 800,
+              }}
+            >
+              {card.title}
+            </h3>
+            <p
+              style={{
+                margin: "10px 0 0",
+                color: "#566375",
+                lineHeight: 1.75,
+              }}
+            >
+              {card.description}
+            </p>
+          </a>
+        ))}
+      </section>
+
+      <section
+        style={{
+          padding: "24px",
+          borderRadius: "30px",
+          backgroundColor: "#fffdfa",
+          border: "1px solid rgba(21, 33, 51, 0.08)",
+          boxShadow: "0 22px 52px rgba(28, 39, 56, 0.06)",
+        }}
+      >
         <div
           style={{
             display: "flex",
@@ -298,84 +436,159 @@ export const HomePage = () => {
             alignItems: "baseline",
             gap: "12px",
             marginBottom: "16px",
+            flexWrap: "wrap",
           }}
         >
-          <h2 style={{ margin: 0, fontSize: "26px" }}>
-            Recent library activity
-          </h2>
+          <div>
+            <p
+              style={{
+                margin: "0 0 6px",
+                color: "#f48120",
+                fontSize: "11px",
+                fontWeight: 800,
+                letterSpacing: "0.16em",
+                textTransform: "uppercase",
+              }}
+            >
+              Recent activity
+            </p>
+            <h2
+              style={{
+                margin: 0,
+                fontSize: "28px",
+                color: "#16202d",
+                fontWeight: 800,
+                letterSpacing: "-0.03em",
+              }}
+            >
+              What changed in the library
+            </h2>
+          </div>
           <a
             href="/search"
             style={{
-              color: "#0f766e",
+              color: "#16202d",
               textDecoration: "none",
               fontWeight: 700,
             }}
           >
-            Search knowledge
+            Search across assets
           </a>
         </div>
-        <div style={{ display: "grid", gap: "14px" }}>
-          {demoAssets.map((asset) => {
+
+        <div style={{ display: "grid", gap: "12px" }}>
+          {activityFeed.map((asset) => {
             const statusStyle = statusStyles[asset.status];
 
             return (
               <article
                 key={asset.id}
                 style={{
-                  padding: "20px 22px",
-                  borderRadius: "22px",
-                  border: "1px solid rgba(15, 23, 42, 0.08)",
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1.4fr) auto",
+                  gap: "16px",
+                  alignItems: "start",
+                  padding: "18px 18px 20px",
+                  borderRadius: "20px",
+                  border: "1px solid rgba(21, 33, 51, 0.08)",
                   backgroundColor: "#ffffff",
-                  boxShadow: "0 14px 32px rgba(15, 23, 42, 0.06)",
                 }}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: "14px",
-                    marginBottom: "10px",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div>
-                    <strong
-                      style={{
-                        display: "block",
-                        fontSize: "18px",
-                        color: "#102033",
-                      }}
-                    >
-                      {asset.title}
-                    </strong>
-                    <span style={{ color: "#5f6e7d", fontSize: "14px" }}>
-                      {asset.type} asset
-                    </span>
-                  </div>
-                  <span
+                <div style={{ minWidth: 0 }}>
+                  <div
                     style={{
-                      padding: "8px 12px",
-                      borderRadius: "999px",
-                      backgroundColor: statusStyle.bg,
-                      color: statusStyle.color,
-                      fontSize: "13px",
-                      fontWeight: 800,
-                      textTransform: "capitalize",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      gap: "10px",
+                      marginBottom: "8px",
                     }}
                   >
-                    {asset.status}
-                  </span>
+                    <span
+                      style={{
+                        padding: "5px 8px",
+                        borderRadius: "999px",
+                        backgroundColor: "#f3f5f8",
+                        color: "#5f6b7d",
+                        fontSize: "11px",
+                        fontWeight: 800,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {asset.type}
+                    </span>
+                    <span
+                      style={{
+                        padding: "5px 8px",
+                        borderRadius: "999px",
+                        backgroundColor: statusStyle.bg,
+                        color: statusStyle.color,
+                        border: `1px solid ${statusStyle.border}`,
+                        fontSize: "11px",
+                        fontWeight: 800,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {asset.status}
+                    </span>
+                  </div>
+                  <h3
+                    style={{
+                      margin: "0 0 8px",
+                      color: "#16202d",
+                      fontSize: "20px",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {asset.title}
+                  </h3>
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#566375",
+                      lineHeight: 1.75,
+                    }}
+                  >
+                    {asset.summary}
+                  </p>
                 </div>
-                <p
+
+                <div
                   style={{
-                    margin: 0,
-                    color: "#445160",
-                    lineHeight: 1.75,
+                    display: "grid",
+                    gap: "8px",
+                    minWidth: "164px",
                   }}
                 >
-                  {asset.summary}
-                </p>
+                  <div
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: "14px",
+                      backgroundColor: "#f7f8fa",
+                      color: "#566375",
+                      fontSize: "13px",
+                    }}
+                  >
+                    {asset.sourceUrl ?? "Local or manual source"}
+                  </div>
+                  <a
+                    href="/ask"
+                    style={{
+                      padding: "11px 12px",
+                      borderRadius: "14px",
+                      backgroundColor: "#16202d",
+                      color: "#ffffff",
+                      textDecoration: "none",
+                      textAlign: "center",
+                      fontSize: "13px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Ask from this context
+                  </a>
+                </div>
               </article>
             );
           })}

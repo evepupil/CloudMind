@@ -6,7 +6,11 @@ import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provi
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 
-import type { AskLibraryInput, AskLibraryResult, ChatSource } from "../model/types";
+import type {
+  AskLibraryInput,
+  AskLibraryResult,
+  ChatSource,
+} from "../model/types";
 
 interface ChatServiceDependencies {
   getAssetRepository: (
@@ -66,7 +70,9 @@ interface GroundingContext {
 
 const buildGroundingContexts = (
   vectorMatches: Awaited<ReturnType<VectorStore["search"]>>,
-  chunkMatches: Awaited<ReturnType<AssetSearchRepository["getChunkMatchesByVectorIds"]>>
+  chunkMatches: Awaited<
+    ReturnType<AssetSearchRepository["getChunkMatchesByVectorIds"]>
+  >
 ): GroundingContext[] => {
   const chunkMatchMap = new Map(
     chunkMatches
@@ -75,25 +81,25 @@ const buildGroundingContexts = (
   );
 
   return vectorMatches.reduce<GroundingContext[]>((contexts, match) => {
-      const chunkMatch = chunkMatchMap.get(match.id);
+    const chunkMatch = chunkMatchMap.get(match.id);
 
-      if (!chunkMatch) {
-        return contexts;
-      }
-
-      contexts.push({
-        source: {
-          assetId: chunkMatch.asset.id,
-          chunkId: chunkMatch.id,
-          title: chunkMatch.asset.title,
-          sourceUrl: chunkMatch.asset.sourceUrl,
-          snippet: chunkMatch.textPreview,
-        },
-        contentText: chunkMatch.contentText?.trim() || chunkMatch.textPreview,
-      });
-
+    if (!chunkMatch) {
       return contexts;
-    }, []);
+    }
+
+    contexts.push({
+      source: {
+        assetId: chunkMatch.asset.id,
+        chunkId: chunkMatch.id,
+        title: chunkMatch.asset.title,
+        sourceUrl: chunkMatch.asset.sourceUrl,
+        snippet: chunkMatch.textPreview,
+      },
+      contentText: chunkMatch.contentText?.trim() || chunkMatch.textPreview,
+    });
+
+    return contexts;
+  }, []);
 };
 
 const buildChatPrompt = (
@@ -179,7 +185,9 @@ export const createChatService = (
 
       return {
         answer:
-          answer.text.trim().length > 0 ? answer.text.trim() : createFallbackAnswer(),
+          answer.text.trim().length > 0
+            ? answer.text.trim()
+            : createFallbackAnswer(),
         sources: groundingContexts.map((context) => context.source),
       };
     },

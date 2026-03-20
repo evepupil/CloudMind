@@ -82,23 +82,17 @@
       "indexes": {
         "asset_artifacts_asset_id_idx": {
           "name": "asset_artifacts_asset_id_idx",
-          "columns": [
-            "asset_id"
-          ],
+          "columns": ["asset_id"],
           "isUnique": false
         },
         "asset_artifacts_type_idx": {
           "name": "asset_artifacts_type_idx",
-          "columns": [
-            "artifact_type"
-          ],
+          "columns": ["artifact_type"],
           "isUnique": false
         },
         "asset_artifacts_run_id_idx": {
           "name": "asset_artifacts_run_id_idx",
-          "columns": [
-            "created_by_run_id"
-          ],
+          "columns": ["created_by_run_id"],
           "isUnique": false
         }
       },
@@ -107,12 +101,8 @@
           "name": "asset_artifacts_asset_id_assets_id_fk",
           "tableFrom": "asset_artifacts",
           "tableTo": "assets",
-          "columnsFrom": [
-            "asset_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["asset_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -120,12 +110,8 @@
           "name": "asset_artifacts_created_by_run_id_workflow_runs_id_fk",
           "tableFrom": "asset_artifacts",
           "tableTo": "workflow_runs",
-          "columnsFrom": [
-            "created_by_run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by_run_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -198,24 +184,17 @@
       "indexes": {
         "asset_chunks_asset_id_idx": {
           "name": "asset_chunks_asset_id_idx",
-          "columns": [
-            "asset_id"
-          ],
+          "columns": ["asset_id"],
           "isUnique": false
         },
         "asset_chunks_asset_id_chunk_index_idx": {
           "name": "asset_chunks_asset_id_chunk_index_idx",
-          "columns": [
-            "asset_id",
-            "chunk_index"
-          ],
+          "columns": ["asset_id", "chunk_index"],
           "isUnique": false
         },
         "asset_chunks_vector_id_idx": {
           "name": "asset_chunks_vector_id_idx",
-          "columns": [
-            "vector_id"
-          ],
+          "columns": ["vector_id"],
           "isUnique": false
         }
       },
@@ -224,12 +203,8 @@
           "name": "asset_chunks_asset_id_assets_id_fk",
           "tableFrom": "asset_chunks",
           "tableTo": "assets",
-          "columnsFrom": [
-            "asset_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["asset_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -287,16 +262,12 @@
       "indexes": {
         "asset_sources_asset_id_idx": {
           "name": "asset_sources_asset_id_idx",
-          "columns": [
-            "asset_id"
-          ],
+          "columns": ["asset_id"],
           "isUnique": false
         },
         "asset_sources_kind_idx": {
           "name": "asset_sources_kind_idx",
-          "columns": [
-            "kind"
-          ],
+          "columns": ["kind"],
           "isUnique": false
         }
       },
@@ -305,12 +276,8 @@
           "name": "asset_sources_asset_id_assets_id_fk",
           "tableFrom": "asset_sources",
           "tableTo": "assets",
-          "columnsFrom": [
-            "asset_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["asset_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -438,30 +405,22 @@
       "indexes": {
         "assets_status_idx": {
           "name": "assets_status_idx",
-          "columns": [
-            "status"
-          ],
+          "columns": ["status"],
           "isUnique": false
         },
         "assets_type_idx": {
           "name": "assets_type_idx",
-          "columns": [
-            "type"
-          ],
+          "columns": ["type"],
           "isUnique": false
         },
         "assets_created_at_idx": {
           "name": "assets_created_at_idx",
-          "columns": [
-            "created_at"
-          ],
+          "columns": ["created_at"],
           "isUnique": false
         },
         "assets_source_url_idx": {
           "name": "assets_source_url_idx",
-          "columns": [
-            "source_url"
-          ],
+          "columns": ["source_url"],
           "isUnique": false
         }
       },
@@ -548,30 +507,22 @@
       "indexes": {
         "ingest_jobs_asset_id_idx": {
           "name": "ingest_jobs_asset_id_idx",
-          "columns": [
-            "asset_id"
-          ],
+          "columns": ["asset_id"],
           "isUnique": false
         },
         "ingest_jobs_status_idx": {
           "name": "ingest_jobs_status_idx",
-          "columns": [
-            "status"
-          ],
+          "columns": ["status"],
           "isUnique": false
         },
         "ingest_jobs_type_idx": {
           "name": "ingest_jobs_type_idx",
-          "columns": [
-            "job_type"
-          ],
+          "columns": ["job_type"],
           "isUnique": false
         },
         "ingest_jobs_created_at_idx": {
           "name": "ingest_jobs_created_at_idx",
-          "columns": [
-            "created_at"
-          ],
+          "columns": ["created_at"],
           "isUnique": false
         }
       },
@@ -580,12 +531,8 @@
           "name": "ingest_jobs_asset_id_assets_id_fk",
           "tableFrom": "ingest_jobs",
           "tableTo": "assets",
-          "columnsFrom": [
-            "asset_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["asset_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -685,30 +632,22 @@
       "indexes": {
         "workflow_runs_asset_id_idx": {
           "name": "workflow_runs_asset_id_idx",
-          "columns": [
-            "asset_id"
-          ],
+          "columns": ["asset_id"],
           "isUnique": false
         },
         "workflow_runs_status_idx": {
           "name": "workflow_runs_status_idx",
-          "columns": [
-            "status"
-          ],
+          "columns": ["status"],
           "isUnique": false
         },
         "workflow_runs_type_idx": {
           "name": "workflow_runs_type_idx",
-          "columns": [
-            "workflow_type"
-          ],
+          "columns": ["workflow_type"],
           "isUnique": false
         },
         "workflow_runs_created_at_idx": {
           "name": "workflow_runs_created_at_idx",
-          "columns": [
-            "created_at"
-          ],
+          "columns": ["created_at"],
           "isUnique": false
         }
       },
@@ -717,12 +656,8 @@
           "name": "workflow_runs_asset_id_assets_id_fk",
           "tableFrom": "workflow_runs",
           "tableTo": "assets",
-          "columnsFrom": [
-            "asset_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["asset_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -837,30 +772,22 @@
       "indexes": {
         "workflow_steps_run_id_idx": {
           "name": "workflow_steps_run_id_idx",
-          "columns": [
-            "run_id"
-          ],
+          "columns": ["run_id"],
           "isUnique": false
         },
         "workflow_steps_asset_id_idx": {
           "name": "workflow_steps_asset_id_idx",
-          "columns": [
-            "asset_id"
-          ],
+          "columns": ["asset_id"],
           "isUnique": false
         },
         "workflow_steps_status_idx": {
           "name": "workflow_steps_status_idx",
-          "columns": [
-            "status"
-          ],
+          "columns": ["status"],
           "isUnique": false
         },
         "workflow_steps_type_idx": {
           "name": "workflow_steps_type_idx",
-          "columns": [
-            "step_type"
-          ],
+          "columns": ["step_type"],
           "isUnique": false
         }
       },
@@ -869,12 +796,8 @@
           "name": "workflow_steps_run_id_workflow_runs_id_fk",
           "tableFrom": "workflow_steps",
           "tableTo": "workflow_runs",
-          "columnsFrom": [
-            "run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["run_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -882,12 +805,8 @@
           "name": "workflow_steps_asset_id_assets_id_fk",
           "tableFrom": "workflow_steps",
           "tableTo": "assets",
-          "columnsFrom": [
-            "asset_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["asset_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
