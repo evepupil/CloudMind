@@ -8,6 +8,7 @@ import type {
   CreateUrlAssetInput,
 } from "@/core/assets/ports";
 import type { BlobStore } from "@/core/blob/ports";
+import type { JobQueue } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type {
@@ -211,8 +212,10 @@ describe("ingest service", () => {
   const getBlobStoreMock = vi.fn();
   const getVectorStoreMock = vi.fn();
   const getWorkflowRepositoryMock = vi.fn();
+  const getJobQueueMock = vi.fn();
   const getAIProviderMock = vi.fn();
   const workflowRepositoryMock = {} as WorkflowRepository;
+  const jobQueueMock = {} as JobQueue;
   const processTextAssetMock = vi.fn();
   const processUrlAssetMock = vi.fn();
   const processPdfAssetMock = vi.fn();
@@ -250,6 +253,7 @@ describe("ingest service", () => {
       getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
         workflowRepositoryMock
       ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
       processUrlAsset: processUrlAssetMock,
@@ -269,6 +273,7 @@ describe("ingest service", () => {
     expect(getBlobStoreMock).toHaveBeenCalledWith(env);
     expect(getVectorStoreMock).toHaveBeenCalledWith(env);
     expect(getWorkflowRepositoryMock).toHaveBeenCalledWith(env);
+    expect(getJobQueueMock).toHaveBeenCalledWith(env);
     expect(getAIProviderMock).toHaveBeenCalledWith(env);
     expect(processTextAssetMock).toHaveBeenCalledWith(
       repository,
@@ -276,6 +281,7 @@ describe("ingest service", () => {
       blobStoreMock,
       vectorStoreMock,
       aiProviderMock,
+      jobQueueMock,
       "asset-text-1"
     );
     expect(await repository.getAssetById("asset-text-1")).toMatchObject({
@@ -308,6 +314,7 @@ describe("ingest service", () => {
       getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
         workflowRepositoryMock
       ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock.mockResolvedValue(processedAsset),
@@ -323,7 +330,20 @@ describe("ingest service", () => {
     });
 
     expect(result).toEqual(processedAsset);
-    expect(processUrlAssetMock).toHaveBeenCalledWith(repository, "asset-url-1");
+    expect(getBlobStoreMock).toHaveBeenCalledWith(env);
+    expect(getVectorStoreMock).toHaveBeenCalledWith(env);
+    expect(getWorkflowRepositoryMock).toHaveBeenCalledWith(env);
+    expect(getJobQueueMock).toHaveBeenCalledWith(env);
+    expect(getAIProviderMock).toHaveBeenCalledWith(env);
+    expect(processUrlAssetMock).toHaveBeenCalledWith(
+      repository,
+      workflowRepositoryMock,
+      blobStoreMock,
+      vectorStoreMock,
+      aiProviderMock,
+      jobQueueMock,
+      "asset-url-1"
+    );
     expect(await repository.getAssetById("asset-url-1")).toMatchObject({
       type: "url",
       title: "Cloudflare Docs",
@@ -357,6 +377,7 @@ describe("ingest service", () => {
       getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
         workflowRepositoryMock
       ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
       processUrlAsset: processUrlAssetMock,
@@ -403,6 +424,7 @@ describe("ingest service", () => {
       getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
         workflowRepositoryMock
       ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock.mockResolvedValue(processedAsset),
@@ -423,6 +445,60 @@ describe("ingest service", () => {
         kind: "mcp" satisfies AssetSourceKind,
       },
     });
+  });
+
+  it("reprocessAsset uses the URL processor for url assets", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-url-1",
+        type: "url",
+        sourceUrl: "https://developers.cloudflare.com",
+        contentText: null,
+      })
+    );
+    const processedAsset = createAsset({
+      id: "asset-url-1",
+      type: "url",
+      status: "ready",
+      summary: "Saved URL asset for https://developers.cloudflare.com",
+      sourceUrl: "https://developers.cloudflare.com",
+      contentText: null,
+    });
+    const service = createIngestService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      processTextAsset: processTextAssetMock,
+      processUrlAsset: processUrlAssetMock,
+      processPdfAsset: processPdfAssetMock,
+      getProcessTextAssetForced: processTextAssetForcedMock,
+      getProcessUrlAssetForced:
+        processUrlAssetForcedMock.mockResolvedValue(processedAsset),
+      getProcessPdfAssetForced: processPdfAssetForcedMock,
+    });
+
+    const result = await service.reprocessAsset(env, "asset-url-1");
+
+    expect(getBlobStoreMock).toHaveBeenCalledWith(env);
+    expect(getVectorStoreMock).toHaveBeenCalledWith(env);
+    expect(getWorkflowRepositoryMock).toHaveBeenCalledWith(env);
+    expect(getJobQueueMock).toHaveBeenCalledWith(env);
+    expect(getAIProviderMock).toHaveBeenCalledWith(env);
+    expect(processUrlAssetForcedMock).toHaveBeenCalledWith(
+      repository,
+      workflowRepositoryMock,
+      blobStoreMock,
+      vectorStoreMock,
+      aiProviderMock,
+      jobQueueMock,
+      "asset-url-1"
+    );
+    expect(result).toEqual(processedAsset);
   });
 
   it("ingestFileAsset uploads the file and forwards the created asset to the PDF processor", async () => {
@@ -460,6 +536,7 @@ describe("ingest service", () => {
       getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
         workflowRepositoryMock
       ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
@@ -480,6 +557,7 @@ describe("ingest service", () => {
     expect(getBlobStoreMock).toHaveBeenCalledWith(env);
     expect(getVectorStoreMock).toHaveBeenCalledWith(env);
     expect(getWorkflowRepositoryMock).toHaveBeenCalledWith(env);
+    expect(getJobQueueMock).toHaveBeenCalledWith(env);
     expect(getAIProviderMock).toHaveBeenCalledWith(env);
     expect(blobStoreMock.put).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -494,6 +572,7 @@ describe("ingest service", () => {
       blobStoreMock,
       vectorStoreMock,
       aiProviderMock,
+      jobQueueMock,
       "asset-file-1"
     );
     expect(result).toEqual(processedAsset);
@@ -518,6 +597,7 @@ describe("ingest service", () => {
       getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
         workflowRepositoryMock
       ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
@@ -536,6 +616,7 @@ describe("ingest service", () => {
       blobStoreMock,
       vectorStoreMock,
       aiProviderMock,
+      jobQueueMock,
       "asset-note-1"
     );
     expect(result).toEqual(processedAsset);
@@ -575,6 +656,7 @@ describe("ingest service", () => {
       getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
         workflowRepositoryMock
       ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
@@ -590,6 +672,7 @@ describe("ingest service", () => {
     expect(getBlobStoreMock).toHaveBeenCalledWith(env);
     expect(getVectorStoreMock).toHaveBeenCalledWith(env);
     expect(getWorkflowRepositoryMock).toHaveBeenCalledWith(env);
+    expect(getJobQueueMock).toHaveBeenCalledWith(env);
     expect(getAIProviderMock).toHaveBeenCalledWith(env);
     expect(processPdfAssetForcedMock).toHaveBeenCalledWith(
       repository,
@@ -597,6 +680,7 @@ describe("ingest service", () => {
       blobStoreMock,
       vectorStoreMock,
       aiProviderMock,
+      jobQueueMock,
       "asset-pdf-1"
     );
     expect(result).toEqual(processedAsset);
@@ -616,6 +700,7 @@ describe("ingest service", () => {
       getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
         workflowRepositoryMock
       ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
@@ -642,6 +727,7 @@ describe("ingest service", () => {
       getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
         workflowRepositoryMock
       ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
@@ -687,6 +773,7 @@ describe("ingest service", () => {
       getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
         workflowRepositoryMock
       ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
@@ -708,6 +795,7 @@ describe("ingest service", () => {
       blobStoreMock,
       vectorStoreMock,
       aiProviderMock,
+      jobQueueMock,
       "asset-note-1"
     );
     expect(result).toEqual({

@@ -55,6 +55,7 @@ export interface WorkflowRunRecord {
   workflowType: WorkflowType;
   triggerType: WorkflowTriggerType;
   status: WorkflowRunStatus;
+  stateJson: string | null;
   currentStep: string | null;
   errorMessage: string | null;
   startedAt: string | null;

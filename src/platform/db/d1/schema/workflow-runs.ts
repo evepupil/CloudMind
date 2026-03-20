@@ -38,6 +38,7 @@ export const workflowRuns = sqliteTable(
       enum: workflowTriggerTypeValues,
     }).notNull(),
     status: text("status", { enum: workflowRunStatusValues }).notNull(),
+    stateJson: text("state_json"),
     currentStep: text("current_step"),
     errorMessage: text("error_message"),
     startedAt: text("started_at"),

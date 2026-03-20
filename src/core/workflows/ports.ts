@@ -1,6 +1,7 @@
 import type {
   AssetArtifactStorageKind,
   AssetArtifactType,
+  WorkflowRunRecord,
   WorkflowStepRecord,
   WorkflowStepType,
   WorkflowTriggerType,
@@ -11,6 +12,7 @@ export interface CreateWorkflowRunInput {
   assetId: string;
   workflowType: WorkflowType;
   triggerType: WorkflowTriggerType;
+  stateJson?: string | null | undefined;
 }
 
 export interface CreateWorkflowStepInput {
@@ -35,10 +37,16 @@ export interface WorkflowRepository {
   createWorkflowRun(input: CreateWorkflowRunInput): Promise<{
     id: string;
   }>;
+  getWorkflowRunById(runId: string): Promise<WorkflowRunRecord>;
   createWorkflowSteps(
     runId: string,
     steps: CreateWorkflowStepInput[]
   ): Promise<WorkflowStepRecord[]>;
+  listWorkflowStepsByRunId(runId: string): Promise<WorkflowStepRecord[]>;
+  updateWorkflowRunState(
+    runId: string,
+    stateJson?: string | null
+  ): Promise<void>;
   markWorkflowRunRunning(runId: string, currentStep: string): Promise<void>;
   completeWorkflowRun(runId: string): Promise<void>;
   failWorkflowRun(

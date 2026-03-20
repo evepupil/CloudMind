@@ -1,6 +1,7 @@
 import type { AIProvider } from "@/core/ai/ports";
 import type { AssetIngestRepository } from "@/core/assets/ports";
 import type { BlobStore } from "@/core/blob/ports";
+import type { JobQueue, JobQueueMessage } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type {
   CreateAssetArtifactInput,
@@ -8,6 +9,7 @@ import type {
 } from "@/core/workflows/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
 import type {
+  WorkflowStepRecord,
   WorkflowStepType,
   WorkflowTriggerType,
   WorkflowType,
@@ -19,6 +21,7 @@ export interface WorkflowServices {
   blobStore: BlobStore;
   vectorStore: VectorStore;
   aiProvider: AIProvider;
+  jobQueue: JobQueue;
 }
 
 export interface WorkflowExecutionContext {
@@ -50,106 +53,332 @@ export interface WorkflowDefinition {
   steps: WorkflowStepDefinition[];
 }
 
+export interface WorkflowStepQueuePayload {
+  runId: string;
+  stepKey: string;
+}
+
 const stringifyJson = (
   value: Record<string, unknown> | undefined
 ): string | null => {
-  if (!value) {
+  if (!value || Object.keys(value).length === 0) {
     return null;
   }
 
   return JSON.stringify(value);
 };
 
-// 这里实现最小 workflow runtime，先支持串行步骤执行，后续再接 Queue 做一步一消费。
-export const runWorkflow = async (
-  definition: WorkflowDefinition,
-  asset: AssetDetail,
-  triggerType: WorkflowTriggerType,
-  services: WorkflowServices,
-  initialState?: Record<string, unknown>
-): Promise<{
-  runId: string;
-  state: Record<string, unknown>;
-}> => {
-  const run = await services.workflowRepository.createWorkflowRun({
-    assetId: asset.id,
-    workflowType: definition.type,
-    triggerType,
-  });
-  const steps = await services.workflowRepository.createWorkflowSteps(
-    run.id,
-    definition.steps.map((step) => ({
-      assetId: asset.id,
-      stepKey: step.key,
-      stepType: step.type,
-    }))
-  );
-  const stepMap = new Map(steps.map((step) => [step.stepKey, step]));
-  const state: Record<string, unknown> = {
-    ...(initialState ?? {}),
-  };
-
-  for (const stepDefinition of definition.steps) {
-    const step = stepMap.get(stepDefinition.key);
-
-    if (!step) {
-      throw new Error(`Workflow step "${stepDefinition.key}" was not created.`);
-    }
-
-    await services.workflowRepository.markWorkflowRunRunning(
-      run.id,
-      stepDefinition.key
-    );
-    await services.workflowRepository.markWorkflowStepRunning(step.id);
-
-    try {
-      const result = await stepDefinition.execute({
-        asset,
-        runId: run.id,
-        state,
-        services,
-      });
-      const nextState = result.state ?? {};
-
-      Object.assign(state, nextState);
-
-      for (const artifact of result.artifacts ?? []) {
-        await services.workflowRepository.createAssetArtifact({
-          assetId: asset.id,
-          createdByRunId: run.id,
-          ...artifact,
-        });
-      }
-
-      if (result.status === "skipped") {
-        await services.workflowRepository.skipWorkflowStep(
-          step.id,
-          stringifyJson(result.output)
-        );
-      } else {
-        await services.workflowRepository.completeWorkflowStep(
-          step.id,
-          stringifyJson(result.output)
-        );
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unknown workflow step error.";
-
-      await services.workflowRepository.failWorkflowStep(step.id, message);
-      await services.workflowRepository.failWorkflowRun(
-        run.id,
-        stepDefinition.key,
-        message
-      );
-      throw error;
-    }
+const parseStateJson = (value: string | null): Record<string, unknown> => {
+  if (!value) {
+    return {};
   }
 
-  await services.workflowRepository.completeWorkflowRun(run.id);
+  try {
+    const parsed = JSON.parse(value);
 
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {}
+
+  return {};
+};
+
+const getLatestJob = (asset: AssetDetail) => {
+  return asset.jobs[0] ?? null;
+};
+
+const createWorkflowStepMessage = (
+  payload: WorkflowStepQueuePayload
+): JobQueueMessage => {
   return {
-    runId: run.id,
-    state,
+    type: "workflow_step",
+    payloadJson: JSON.stringify(payload),
+    dedupeKey: `${payload.runId}:${payload.stepKey}`,
   };
+};
+
+const getStepDefinition = (
+  definition: WorkflowDefinition,
+  stepKey: string
+): WorkflowStepDefinition => {
+  const step = definition.steps.find((item) => item.key === stepKey);
+
+  if (!step) {
+    throw new Error(
+      `Workflow "${definition.type}" is missing step "${stepKey}".`
+    );
+  }
+
+  return step;
+};
+
+const getNextStepDefinition = (
+  definition: WorkflowDefinition,
+  stepKey: string
+): WorkflowStepDefinition | null => {
+  const currentIndex = definition.steps.findIndex(
+    (item) => item.key === stepKey
+  );
+
+  if (currentIndex === -1) {
+    throw new Error(
+      `Workflow "${definition.type}" is missing step "${stepKey}".`
+    );
+  }
+
+  return definition.steps[currentIndex + 1] ?? null;
+};
+
+const getWorkflowStepRecord = (
+  steps: WorkflowStepRecord[],
+  stepKey: string
+): WorkflowStepRecord => {
+  const step = steps.find((item) => item.stepKey === stepKey);
+
+  if (!step) {
+    throw new Error(`Workflow step "${stepKey}" was not created.`);
+  }
+
+  return step;
+};
+
+// 这里负责只创建 run/steps 并投递首个 step，真正执行放到 Queue consumer。
+export const enqueueWorkflow = async (
+  definition: WorkflowDefinition,
+  assetId: string,
+  triggerType: WorkflowTriggerType,
+  services: WorkflowServices,
+  options?: {
+    force?: boolean;
+  },
+  initialState?: Record<string, unknown>
+): Promise<AssetDetail> => {
+  const asset = await services.assetRepository.getAssetById(assetId);
+  const latestJob = getLatestJob(asset);
+
+  if (
+    !options?.force &&
+    (asset.status === "ready" || asset.status === "failed")
+  ) {
+    return asset;
+  }
+
+  let runId: string | null = null;
+  let firstStep: WorkflowStepRecord | null = null;
+
+  try {
+    await services.assetRepository.markAssetProcessing(asset.id);
+
+    if (latestJob) {
+      await services.assetRepository.markIngestJobRunning(latestJob.id);
+    }
+
+    const run = await services.workflowRepository.createWorkflowRun({
+      assetId: asset.id,
+      workflowType: definition.type,
+      triggerType,
+      stateJson: stringifyJson(initialState),
+    });
+
+    runId = run.id;
+
+    const steps = await services.workflowRepository.createWorkflowSteps(
+      run.id,
+      definition.steps.map((step) => ({
+        assetId: asset.id,
+        stepKey: step.key,
+        stepType: step.type,
+      }))
+    );
+
+    firstStep = steps[0] ?? null;
+
+    if (!firstStep) {
+      await services.workflowRepository.completeWorkflowRun(run.id);
+
+      if (latestJob) {
+        await services.assetRepository.completeIngestJob(latestJob.id);
+      }
+
+      return services.assetRepository.getAssetById(asset.id);
+    }
+
+    await services.jobQueue.enqueue(
+      createWorkflowStepMessage({
+        runId: run.id,
+        stepKey: firstStep.stepKey,
+      })
+    );
+
+    return services.assetRepository.getAssetById(asset.id);
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown workflow enqueue error.";
+
+    if (runId && firstStep) {
+      await services.workflowRepository.failWorkflowStep(firstStep.id, message);
+      await services.workflowRepository.failWorkflowRun(
+        runId,
+        firstStep.stepKey,
+        message
+      );
+    } else if (runId) {
+      await services.workflowRepository.failWorkflowRun(runId, null, message);
+    }
+
+    await services.assetRepository.failAssetProcessing(asset.id, message);
+
+    if (latestJob) {
+      await services.assetRepository.failIngestJob(latestJob.id, message);
+    }
+
+    return services.assetRepository.getAssetById(asset.id);
+  }
+};
+
+// 这里消费单条 workflow step 消息，执行成功后继续投递下一步。
+export const consumeWorkflowStepMessage = async (
+  definition: WorkflowDefinition,
+  payload: WorkflowStepQueuePayload,
+  services: WorkflowServices
+): Promise<void> => {
+  const run = await services.workflowRepository.getWorkflowRunById(
+    payload.runId
+  );
+
+  if (run.workflowType !== definition.type) {
+    throw new Error(
+      `Workflow type mismatch for run "${run.id}": expected "${definition.type}" but got "${run.workflowType}".`
+    );
+  }
+
+  if (
+    run.status === "succeeded" ||
+    run.status === "failed" ||
+    run.status === "cancelled"
+  ) {
+    return;
+  }
+
+  const asset = await services.assetRepository.getAssetById(run.assetId);
+  const latestJob = getLatestJob(asset);
+  const steps = await services.workflowRepository.listWorkflowStepsByRunId(
+    run.id
+  );
+  const step = getWorkflowStepRecord(steps, payload.stepKey);
+
+  if (step.status === "succeeded" || step.status === "skipped") {
+    return;
+  }
+
+  const stepDefinition = getStepDefinition(definition, payload.stepKey);
+  const state = parseStateJson(run.stateJson);
+
+  await services.workflowRepository.markWorkflowRunRunning(
+    run.id,
+    step.stepKey
+  );
+  await services.workflowRepository.markWorkflowStepRunning(step.id);
+
+  try {
+    const result = await stepDefinition.execute({
+      asset,
+      runId: run.id,
+      state,
+      services,
+    });
+    const nextState = result.state ?? {};
+
+    Object.assign(state, nextState);
+
+    for (const artifact of result.artifacts ?? []) {
+      await services.workflowRepository.createAssetArtifact({
+        assetId: asset.id,
+        createdByRunId: run.id,
+        ...artifact,
+      });
+    }
+
+    await services.workflowRepository.updateWorkflowRunState(
+      run.id,
+      stringifyJson(state)
+    );
+
+    if (result.status === "skipped") {
+      await services.workflowRepository.skipWorkflowStep(
+        step.id,
+        stringifyJson(result.output)
+      );
+    } else {
+      await services.workflowRepository.completeWorkflowStep(
+        step.id,
+        stringifyJson(result.output)
+      );
+    }
+
+    const nextStep = getNextStepDefinition(definition, step.stepKey);
+
+    if (!nextStep) {
+      await services.workflowRepository.completeWorkflowRun(run.id);
+
+      if (latestJob) {
+        await services.assetRepository.completeIngestJob(latestJob.id);
+      }
+
+      return;
+    }
+
+    await services.jobQueue.enqueue(
+      createWorkflowStepMessage({
+        runId: run.id,
+        stepKey: nextStep.key,
+      })
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown workflow step error.";
+
+    await services.workflowRepository.failWorkflowStep(step.id, message);
+    await services.workflowRepository.failWorkflowRun(
+      run.id,
+      step.stepKey,
+      message
+    );
+    await services.assetRepository.failAssetProcessing(asset.id, message);
+
+    if (latestJob) {
+      await services.assetRepository.failIngestJob(latestJob.id, message);
+    }
+
+    throw error;
+  }
+};
+
+export const parseWorkflowStepQueuePayload = (
+  message: JobQueueMessage
+): WorkflowStepQueuePayload | null => {
+  if (message.type !== "workflow_step") {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(message.payloadJson);
+
+    if (
+      payload &&
+      typeof payload === "object" &&
+      typeof payload.runId === "string" &&
+      typeof payload.stepKey === "string"
+    ) {
+      return {
+        runId: payload.runId,
+        stepKey: payload.stepKey,
+      };
+    }
+  } catch {}
+
+  return null;
 };

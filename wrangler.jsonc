@@ -25,6 +25,22 @@
       "index_name": "cloudmind-asset-chunks"
     }
   ],
+  "queues": {
+    "producers": [
+      {
+        "queue": "cloudmind-workflows",
+        "binding": "WORKFLOW_QUEUE"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "cloudmind-workflows",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 3
+      }
+    ]
+  },
   "ai": {
     "binding": "AI"
   }

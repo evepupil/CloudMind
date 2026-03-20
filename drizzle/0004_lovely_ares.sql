@@ -1,0 +1,1 @@
+ALTER TABLE `workflow_runs` ADD `state_json` text;

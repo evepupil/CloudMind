@@ -13,6 +13,7 @@ import type {
   CreateUrlAssetInput,
 } from "@/core/assets/ports";
 import type { BlobObject, BlobStore } from "@/core/blob/ports";
+import type { JobQueue, JobQueueMessage } from "@/core/queue/ports";
 import type {
   VectorRecord,
   VectorSearchInput,
@@ -43,6 +44,11 @@ import type {
   WorkflowRunRecord,
   WorkflowStepRecord,
 } from "@/features/workflows/model/types";
+import { getWorkflowDefinition } from "@/features/workflows/server/registry";
+import {
+  consumeWorkflowStepMessage,
+  parseWorkflowStepQueuePayload,
+} from "@/features/workflows/server/runtime";
 
 const createJob = (
   overrides: Partial<IngestJobSummary> = {}
@@ -359,6 +365,7 @@ class InMemoryWorkflowRepository implements WorkflowRepository {
       workflowType: input.workflowType,
       triggerType: input.triggerType,
       status: "queued",
+      stateJson: input.stateJson ?? null,
       currentStep: null,
       errorMessage: null,
       startedAt: null,
@@ -368,6 +375,10 @@ class InMemoryWorkflowRepository implements WorkflowRepository {
     });
 
     return { id };
+  }
+
+  public async getWorkflowRunById(runId: string): Promise<WorkflowRunRecord> {
+    return structuredClone(this.getRun(runId));
   }
 
   public async createWorkflowSteps(
@@ -394,6 +405,24 @@ class InMemoryWorkflowRepository implements WorkflowRepository {
     this.steps.push(...created);
 
     return created.map((step) => structuredClone(step));
+  }
+
+  public async listWorkflowStepsByRunId(
+    runId: string
+  ): Promise<WorkflowStepRecord[]> {
+    return this.steps
+      .filter((step) => step.runId === runId)
+      .map((step) => structuredClone(step));
+  }
+
+  public async updateWorkflowRunState(
+    runId: string,
+    stateJson?: string | null
+  ): Promise<void> {
+    const run = this.getRun(runId);
+
+    run.stateJson = stateJson ?? null;
+    run.updatedAt = "2026-03-19T00:01:30.000Z";
   }
 
   public async markWorkflowRunRunning(
@@ -435,7 +464,7 @@ class InMemoryWorkflowRepository implements WorkflowRepository {
     const step = this.getStep(stepId);
 
     step.status = "running";
-    step.attempt = 1;
+    step.attempt += 1;
     step.startedAt = "2026-03-19T00:01:00.000Z";
     step.updatedAt = "2026-03-19T00:01:00.000Z";
   }
@@ -521,6 +550,49 @@ class InMemoryWorkflowRepository implements WorkflowRepository {
   }
 }
 
+class InMemoryJobQueue implements JobQueue {
+  public readonly messages: JobQueueMessage[] = [];
+
+  public async enqueue(message: JobQueueMessage): Promise<void> {
+    this.messages.push(structuredClone(message));
+  }
+}
+
+const drainWorkflowQueue = async (
+  jobQueue: InMemoryJobQueue,
+  repository: InMemoryAssetRepository,
+  workflowRepository: InMemoryWorkflowRepository,
+  blobStore: InMemoryBlobStore,
+  vectorStore: InMemoryVectorStore,
+  aiProvider: InMemoryAIProvider
+): Promise<void> => {
+  while (jobQueue.messages.length > 0) {
+    const message = jobQueue.messages.shift();
+
+    if (!message) {
+      return;
+    }
+
+    const payload = parseWorkflowStepQueuePayload(message);
+
+    if (!payload) {
+      throw new Error(`Unexpected queue message type "${message.type}".`);
+    }
+
+    const run = await workflowRepository.getWorkflowRunById(payload.runId);
+    const definition = getWorkflowDefinition(run.workflowType);
+
+    await consumeWorkflowStepMessage(definition, payload, {
+      assetRepository: repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+    });
+  }
+};
+
 describe("processTextAsset", () => {
   it("promotes a pending text asset to ready and completes the latest job", async () => {
     const repository = new InMemoryAssetRepository(
@@ -533,15 +605,32 @@ describe("processTextAsset", () => {
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new InMemoryAIProvider();
     const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
 
-    const result = await processTextAsset(
+    const enqueued = await processTextAsset(
       repository,
       workflowRepository,
       blobStore,
       vectorStore,
       aiProvider,
+      jobQueue,
       "asset-1"
     );
+
+    expect(enqueued.status).toBe("processing");
+    expect(enqueued.jobs[0]?.status).toBe("running");
+    expect(jobQueue.messages).toHaveLength(1);
+
+    await drainWorkflowQueue(
+      jobQueue,
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider
+    );
+
+    const result = await repository.getAssetById("asset-1");
 
     expect(result.status).toBe("ready");
     expect(result.summary).toBe(
@@ -615,15 +704,33 @@ describe("processTextAsset", () => {
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new InMemoryAIProvider();
     const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
 
-    const result = await processTextAsset(
+    const enqueued = await processTextAsset(
       repository,
       workflowRepository,
       blobStore,
       vectorStore,
       aiProvider,
+      jobQueue,
       "asset-1"
     );
+
+    expect(enqueued.status).toBe("processing");
+    expect(jobQueue.messages).toHaveLength(1);
+
+    await expect(
+      drainWorkflowQueue(
+        jobQueue,
+        repository,
+        workflowRepository,
+        blobStore,
+        vectorStore,
+        aiProvider
+      )
+    ).rejects.toThrow("Asset content is empty and cannot be processed.");
+
+    const result = await repository.getAssetById("asset-1");
 
     expect(result.status).toBe("failed");
     expect(result.summary).toBeNull();
@@ -654,6 +761,7 @@ describe("processTextAsset", () => {
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new InMemoryAIProvider();
     const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
 
     const result = await processTextAsset(
       repository,
@@ -661,6 +769,7 @@ describe("processTextAsset", () => {
       blobStore,
       vectorStore,
       aiProvider,
+      jobQueue,
       "asset-1"
     );
 
@@ -668,6 +777,7 @@ describe("processTextAsset", () => {
     expect(result.summary).toBe("Existing summary");
     expect(result.jobs[0]?.status).toBe("succeeded");
     expect(workflowRepository.runs).toEqual([]);
+    expect(jobQueue.messages).toEqual([]);
   });
 });
 
@@ -682,14 +792,119 @@ describe("processUrlAsset", () => {
         sourceUrl: "https://developers.cloudflare.com",
       })
     );
+    const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new InMemoryAIProvider();
+    const workflowRepository = new InMemoryWorkflowRepository();
 
-    const result = await processUrlAsset(repository, "asset-url-1");
+    const jobQueue = new InMemoryJobQueue();
+
+    const enqueued = await processUrlAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      "asset-url-1"
+    );
+
+    expect(enqueued.status).toBe("processing");
+    expect(jobQueue.messages).toHaveLength(1);
+
+    await drainWorkflowQueue(
+      jobQueue,
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider
+    );
+
+    const result = await repository.getAssetById("asset-url-1");
 
     expect(result.status).toBe("ready");
     expect(result.summary).toBe(
       "Saved URL asset for https://developers.cloudflare.com"
     );
     expect(result.jobs[0]?.status).toBe("succeeded");
+    expect(workflowRepository.runs).toEqual([
+      expect.objectContaining({
+        assetId: "asset-url-1",
+        workflowType: "url_ingest_v1",
+        triggerType: "ingest",
+        status: "succeeded",
+      }),
+    ]);
+    expect(workflowRepository.steps.map((step) => step.stepKey)).toEqual([
+      "load_source",
+      "summarize",
+      "finalize",
+    ]);
+    expect(workflowRepository.artifacts).toEqual([
+      expect.objectContaining({
+        artifactType: "summary",
+        storageKind: "inline",
+        contentText: "Saved URL asset for https://developers.cloudflare.com",
+      }),
+    ]);
+  });
+
+  it("marks the asset as failed when the URL is empty", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-url-empty",
+        type: "url",
+        title: "Empty URL",
+        contentText: null,
+        sourceUrl: "   ",
+      })
+    );
+    const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new InMemoryAIProvider();
+    const workflowRepository = new InMemoryWorkflowRepository();
+
+    const jobQueue = new InMemoryJobQueue();
+
+    const enqueued = await processUrlAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      "asset-url-empty"
+    );
+
+    expect(enqueued.status).toBe("processing");
+    expect(jobQueue.messages).toHaveLength(1);
+
+    await expect(
+      drainWorkflowQueue(
+        jobQueue,
+        repository,
+        workflowRepository,
+        blobStore,
+        vectorStore,
+        aiProvider
+      )
+    ).rejects.toThrow("Asset URL is empty and cannot be processed.");
+
+    const result = await repository.getAssetById("asset-url-empty");
+
+    expect(result.status).toBe("failed");
+    expect(result.errorMessage).toBe(
+      "Asset URL is empty and cannot be processed."
+    );
+    expect(result.jobs[0]?.status).toBe("failed");
+    expect(workflowRepository.runs[0]).toEqual(
+      expect.objectContaining({
+        workflowType: "url_ingest_v1",
+        status: "failed",
+        currentStep: "load_source",
+      })
+    );
   });
 });
 
@@ -717,15 +932,31 @@ describe("processPdfAsset", () => {
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new InMemoryAIProvider();
     const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
 
-    const result = await processPdfAsset(
+    const enqueued = await processPdfAsset(
       repository,
       workflowRepository,
       blobStore,
       vectorStore,
       aiProvider,
+      jobQueue,
       "asset-pdf-1"
     );
+
+    expect(enqueued.status).toBe("processing");
+    expect(jobQueue.messages).toHaveLength(1);
+
+    await drainWorkflowQueue(
+      jobQueue,
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider
+    );
+
+    const result = await repository.getAssetById("asset-pdf-1");
 
     expect(result.status).toBe("ready");
     expect(result.summary).toBe("Hello CloudMind PDF");
@@ -796,15 +1027,32 @@ describe("processPdfAsset", () => {
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new InMemoryAIProvider();
     const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
 
-    const result = await processPdfAsset(
+    const enqueued = await processPdfAsset(
       repository,
       workflowRepository,
       blobStore,
       vectorStore,
       aiProvider,
+      jobQueue,
       "asset-pdf-missing"
     );
+
+    expect(enqueued.status).toBe("processing");
+
+    await expect(
+      drainWorkflowQueue(
+        jobQueue,
+        repository,
+        workflowRepository,
+        blobStore,
+        vectorStore,
+        aiProvider
+      )
+    ).rejects.toThrow("Asset file was not found in blob storage.");
+
+    const result = await repository.getAssetById("asset-pdf-missing");
 
     expect(result.status).toBe("failed");
     expect(result.errorMessage).toBe(
@@ -841,15 +1089,32 @@ describe("processPdfAsset", () => {
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new InMemoryAIProvider();
     const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
 
-    const result = await processPdfAsset(
+    const enqueued = await processPdfAsset(
       repository,
       workflowRepository,
       blobStore,
       vectorStore,
       aiProvider,
+      jobQueue,
       "asset-pdf-invalid"
     );
+
+    expect(enqueued.status).toBe("processing");
+
+    await expect(
+      drainWorkflowQueue(
+        jobQueue,
+        repository,
+        workflowRepository,
+        blobStore,
+        vectorStore,
+        aiProvider
+      )
+    ).rejects.toThrow("Uploaded file is not a valid PDF.");
+
+    const result = await repository.getAssetById("asset-pdf-invalid");
 
     expect(result.status).toBe("failed");
     expect(result.errorMessage).toBe("Uploaded file is not a valid PDF.");
@@ -883,15 +1148,32 @@ describe("processPdfAsset", () => {
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new InMemoryAIProvider();
     const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
 
-    const result = await processPdfAsset(
+    const enqueued = await processPdfAsset(
       repository,
       workflowRepository,
       blobStore,
       vectorStore,
       aiProvider,
+      jobQueue,
       "asset-pdf-broken"
     );
+
+    expect(enqueued.status).toBe("processing");
+
+    await expect(
+      drainWorkflowQueue(
+        jobQueue,
+        repository,
+        workflowRepository,
+        blobStore,
+        vectorStore,
+        aiProvider
+      )
+    ).rejects.toThrow("Failed to extract text from PDF.");
+
+    const result = await repository.getAssetById("asset-pdf-broken");
 
     expect(result.status).toBe("failed");
     expect(result.errorMessage).toBe("Failed to extract text from PDF.");

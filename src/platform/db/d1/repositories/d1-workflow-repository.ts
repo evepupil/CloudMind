@@ -1,4 +1,4 @@
-import { and, count, eq } from "drizzle-orm";
+import { and, asc, count, eq, sql } from "drizzle-orm";
 
 import type {
   CreateAssetArtifactInput,
@@ -6,7 +6,10 @@ import type {
   CreateWorkflowStepInput,
   WorkflowRepository,
 } from "@/core/workflows/ports";
-import type { WorkflowStepRecord } from "@/features/workflows/model/types";
+import type {
+  WorkflowRunRecord,
+  WorkflowStepRecord,
+} from "@/features/workflows/model/types";
 import { createDb } from "@/platform/db/d1/client";
 import {
   assetArtifacts,
@@ -35,6 +38,25 @@ const mapWorkflowStepRecord = (
   };
 };
 
+const mapWorkflowRunRecord = (
+  record: typeof workflowRuns.$inferSelect
+): WorkflowRunRecord => {
+  return {
+    id: record.id,
+    assetId: record.assetId,
+    workflowType: record.workflowType,
+    triggerType: record.triggerType,
+    status: record.status,
+    stateJson: record.stateJson,
+    currentStep: record.currentStep,
+    errorMessage: record.errorMessage,
+    startedAt: record.startedAt,
+    finishedAt: record.finishedAt,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+};
+
 // 这里实现 workflow 持久化，供最小运行时记录 run/step/artifact 生命周期。
 export class D1WorkflowRepository implements WorkflowRepository {
   private readonly db: ReturnType<typeof createDb>;
@@ -55,6 +77,7 @@ export class D1WorkflowRepository implements WorkflowRepository {
       workflowType: input.workflowType,
       triggerType: input.triggerType,
       status: "queued",
+      stateJson: input.stateJson ?? null,
       currentStep: null,
       errorMessage: null,
       startedAt: null,
@@ -64,6 +87,20 @@ export class D1WorkflowRepository implements WorkflowRepository {
     });
 
     return { id };
+  }
+
+  public async getWorkflowRunById(runId: string): Promise<WorkflowRunRecord> {
+    const [record] = await this.db
+      .select()
+      .from(workflowRuns)
+      .where(eq(workflowRuns.id, runId))
+      .limit(1);
+
+    if (!record) {
+      throw new Error(`Workflow run "${runId}" was not found.`);
+    }
+
+    return mapWorkflowRunRecord(record);
   }
 
   public async createWorkflowSteps(
@@ -93,6 +130,31 @@ export class D1WorkflowRepository implements WorkflowRepository {
     }
 
     return rows.map(mapWorkflowStepRecord);
+  }
+
+  public async listWorkflowStepsByRunId(
+    runId: string
+  ): Promise<WorkflowStepRecord[]> {
+    const records = await this.db
+      .select()
+      .from(workflowSteps)
+      .where(eq(workflowSteps.runId, runId))
+      .orderBy(asc(workflowSteps.createdAt), asc(workflowSteps.stepKey));
+
+    return records.map(mapWorkflowStepRecord);
+  }
+
+  public async updateWorkflowRunState(
+    runId: string,
+    stateJson?: string | null
+  ): Promise<void> {
+    await this.db
+      .update(workflowRuns)
+      .set({
+        stateJson: stateJson ?? null,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(workflowRuns.id, runId));
   }
 
   public async markWorkflowRunRunning(
@@ -154,7 +216,7 @@ export class D1WorkflowRepository implements WorkflowRepository {
       .update(workflowSteps)
       .set({
         status: "running",
-        attempt: 1,
+        attempt: sql`${workflowSteps.attempt} + 1`,
         errorMessage: null,
         startedAt: now,
         updatedAt: now,

@@ -6,6 +6,7 @@ import type {
 } from "@/core/assets/ports";
 import { createRawAssetBlobKey } from "@/core/blob/keys";
 import type { BlobStore } from "@/core/blob/ports";
+import type { JobQueue } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AppBindings } from "@/env";
@@ -14,6 +15,7 @@ import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provi
 import { getBlobStoreFromBindings } from "@/platform/blob/r2/get-blob-store";
 import { getAssetIngestRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
 import { getWorkflowRepositoryFromBindings } from "@/platform/db/d1/repositories/get-workflow-repository";
+import { getJobQueueFromBindings } from "@/platform/queue/cloudflare/get-job-queue";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 
 import {
@@ -50,6 +52,9 @@ interface IngestServiceDependencies {
   getWorkflowRepository: (
     bindings: AppBindings | undefined
   ) => WorkflowRepository | Promise<WorkflowRepository>;
+  getJobQueue: (
+    bindings: AppBindings | undefined
+  ) => JobQueue | Promise<JobQueue>;
   getAIProvider: (
     bindings: AppBindings | undefined
   ) => AIProvider | Promise<AIProvider>;
@@ -59,6 +64,7 @@ interface IngestServiceDependencies {
     blobStore: BlobStore,
     vectorStore: VectorStore,
     aiProvider: AIProvider,
+    jobQueue: JobQueue,
     assetId: string,
     options?: {
       force?: boolean;
@@ -66,6 +72,11 @@ interface IngestServiceDependencies {
   ) => Promise<AssetDetail>;
   processUrlAsset: (
     repository: AssetIngestRepository,
+    workflowRepository: WorkflowRepository,
+    blobStore: BlobStore,
+    vectorStore: VectorStore,
+    aiProvider: AIProvider,
+    jobQueue: JobQueue,
     assetId: string
   ) => Promise<AssetDetail>;
   processPdfAsset: (
@@ -74,6 +85,7 @@ interface IngestServiceDependencies {
     blobStore: BlobStore,
     vectorStore: VectorStore,
     aiProvider: AIProvider,
+    jobQueue: JobQueue,
     assetId: string
   ) => Promise<AssetDetail>;
   getProcessTextAssetForced: (
@@ -82,6 +94,7 @@ interface IngestServiceDependencies {
     blobStore: BlobStore,
     vectorStore: VectorStore,
     aiProvider: AIProvider,
+    jobQueue: JobQueue,
     assetId: string,
     options?: {
       force?: boolean;
@@ -89,6 +102,11 @@ interface IngestServiceDependencies {
   ) => Promise<AssetDetail>;
   getProcessUrlAssetForced: (
     repository: AssetIngestRepository,
+    workflowRepository: WorkflowRepository,
+    blobStore: BlobStore,
+    vectorStore: VectorStore,
+    aiProvider: AIProvider,
+    jobQueue: JobQueue,
     assetId: string
   ) => Promise<AssetDetail>;
   getProcessPdfAssetForced: (
@@ -97,6 +115,7 @@ interface IngestServiceDependencies {
     blobStore: BlobStore,
     vectorStore: VectorStore,
     aiProvider: AIProvider,
+    jobQueue: JobQueue,
     assetId: string
   ) => Promise<AssetDetail>;
 }
@@ -106,6 +125,7 @@ const defaultDependencies: IngestServiceDependencies = {
   getBlobStore: getBlobStoreFromBindings,
   getVectorStore: getVectorStoreFromBindings,
   getWorkflowRepository: getWorkflowRepositoryFromBindings,
+  getJobQueue: getJobQueueFromBindings,
   getAIProvider: getAIProviderFromBindings,
   processTextAsset,
   processUrlAsset,
@@ -116,6 +136,7 @@ const defaultDependencies: IngestServiceDependencies = {
     blobStore,
     vectorStore,
     aiProvider,
+    jobQueue,
     assetId
   ) =>
     processTextAsset(
@@ -124,19 +145,38 @@ const defaultDependencies: IngestServiceDependencies = {
       blobStore,
       vectorStore,
       aiProvider,
+      jobQueue,
       assetId,
       {
         force: true,
       }
     ),
-  getProcessUrlAssetForced: (repository, assetId) =>
-    processUrlAsset(repository, assetId, { force: true }),
+  getProcessUrlAssetForced: (
+    repository,
+    workflowRepository,
+    blobStore,
+    vectorStore,
+    aiProvider,
+    jobQueue,
+    assetId
+  ) =>
+    processUrlAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      assetId,
+      { force: true }
+    ),
   getProcessPdfAssetForced: (
     repository,
     workflowRepository,
     blobStore,
     vectorStore,
     aiProvider,
+    jobQueue,
     assetId
   ) =>
     processPdfAsset(
@@ -145,6 +185,7 @@ const defaultDependencies: IngestServiceDependencies = {
       blobStore,
       vectorStore,
       aiProvider,
+      jobQueue,
       assetId,
       {
         force: true,
@@ -161,12 +202,13 @@ const reprocessExistingAsset = async (
   switch (asset.type) {
     case "note":
     case "chat": {
-      const [blobStore, vectorStore, workflowRepository, aiProvider] =
+      const [blobStore, vectorStore, workflowRepository, aiProvider, jobQueue] =
         await Promise.all([
           dependencies.getBlobStore(bindings),
           dependencies.getVectorStore(bindings),
           dependencies.getWorkflowRepository(bindings),
           dependencies.getAIProvider(bindings),
+          dependencies.getJobQueue(bindings),
         ]);
 
       return dependencies.getProcessTextAssetForced(
@@ -175,18 +217,38 @@ const reprocessExistingAsset = async (
         blobStore,
         vectorStore,
         aiProvider,
+        jobQueue,
         asset.id
       );
     }
-    case "url":
-      return dependencies.getProcessUrlAssetForced(repository, asset.id);
-    case "pdf": {
-      const [blobStore, vectorStore, workflowRepository, aiProvider] =
+    case "url": {
+      const [blobStore, vectorStore, workflowRepository, aiProvider, jobQueue] =
         await Promise.all([
           dependencies.getBlobStore(bindings),
           dependencies.getVectorStore(bindings),
           dependencies.getWorkflowRepository(bindings),
           dependencies.getAIProvider(bindings),
+          dependencies.getJobQueue(bindings),
+        ]);
+
+      return dependencies.getProcessUrlAssetForced(
+        repository,
+        workflowRepository,
+        blobStore,
+        vectorStore,
+        aiProvider,
+        jobQueue,
+        asset.id
+      );
+    }
+    case "pdf": {
+      const [blobStore, vectorStore, workflowRepository, aiProvider, jobQueue] =
+        await Promise.all([
+          dependencies.getBlobStore(bindings),
+          dependencies.getVectorStore(bindings),
+          dependencies.getWorkflowRepository(bindings),
+          dependencies.getAIProvider(bindings),
+          dependencies.getJobQueue(bindings),
         ]);
 
       return dependencies.getProcessPdfAssetForced(
@@ -195,6 +257,7 @@ const reprocessExistingAsset = async (
         blobStore,
         vectorStore,
         aiProvider,
+        jobQueue,
         asset.id
       );
     }
@@ -219,6 +282,7 @@ export const createIngestService = (
       const vectorStore = await dependencies.getVectorStore(bindings);
       const workflowRepository =
         await dependencies.getWorkflowRepository(bindings);
+      const jobQueue = await dependencies.getJobQueue(bindings);
       const aiProvider = await dependencies.getAIProvider(bindings);
       const createdAsset = await repository.createTextAsset(input);
 
@@ -228,6 +292,7 @@ export const createIngestService = (
         blobStore,
         vectorStore,
         aiProvider,
+        jobQueue,
         createdAsset.id
       );
     },
@@ -237,9 +302,23 @@ export const createIngestService = (
       input: CreateUrlAssetInput
     ): Promise<AssetDetail> {
       const repository = await dependencies.getAssetRepository(bindings);
+      const blobStore = await dependencies.getBlobStore(bindings);
+      const vectorStore = await dependencies.getVectorStore(bindings);
+      const workflowRepository =
+        await dependencies.getWorkflowRepository(bindings);
+      const jobQueue = await dependencies.getJobQueue(bindings);
+      const aiProvider = await dependencies.getAIProvider(bindings);
       const createdAsset = await repository.createUrlAsset(input);
 
-      return dependencies.processUrlAsset(repository, createdAsset.id);
+      return dependencies.processUrlAsset(
+        repository,
+        workflowRepository,
+        blobStore,
+        vectorStore,
+        aiProvider,
+        jobQueue,
+        createdAsset.id
+      );
     },
 
     async ingestFileAsset(
@@ -254,6 +333,7 @@ export const createIngestService = (
       const vectorStore = await dependencies.getVectorStore(bindings);
       const workflowRepository =
         await dependencies.getWorkflowRepository(bindings);
+      const jobQueue = await dependencies.getJobQueue(bindings);
       const aiProvider = await dependencies.getAIProvider(bindings);
       const assetId = crypto.randomUUID();
       const rawR2Key = createRawAssetBlobKey(assetId, input.file.name);
@@ -284,6 +364,7 @@ export const createIngestService = (
         blobStore,
         vectorStore,
         aiProvider,
+        jobQueue,
         createdAsset.id
       );
     },
