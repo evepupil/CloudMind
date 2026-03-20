@@ -381,6 +381,26 @@ class InMemoryWorkflowRepository implements WorkflowRepository {
     return structuredClone(this.getRun(runId));
   }
 
+  public async listWorkflowRunsByAssetId(
+    assetId: string
+  ): Promise<WorkflowRunRecord[]> {
+    return this.runs
+      .filter((run) => run.assetId === assetId)
+      .map((run) => structuredClone(run));
+  }
+
+  public async getWorkflowRunDetail(runId: string) {
+    return {
+      run: structuredClone(this.getRun(runId)),
+      steps: this.steps
+        .filter((step) => step.runId === runId)
+        .map((step) => structuredClone(step)),
+      artifacts: this.artifacts
+        .filter((artifact) => artifact.createdByRunId === runId)
+        .map((artifact) => structuredClone(artifact)),
+    };
+  }
+
   public async createWorkflowSteps(
     runId: string,
     steps: CreateWorkflowStepInput[]
@@ -527,6 +547,14 @@ class InMemoryWorkflowRepository implements WorkflowRepository {
       createdByRunId: input.createdByRunId ?? null,
       createdAt: "2026-03-19T00:01:00.000Z",
     });
+  }
+
+  public async listAssetArtifactsByRunId(
+    runId: string
+  ): Promise<AssetArtifactRecord[]> {
+    return this.artifacts
+      .filter((artifact) => artifact.createdByRunId === runId)
+      .map((artifact) => structuredClone(artifact));
   }
 
   private getRun(id: string): WorkflowRunRecord {

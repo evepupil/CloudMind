@@ -88,6 +88,19 @@ const getLatestJob = (asset: AssetDetail) => {
   return asset.jobs[0] ?? null;
 };
 
+const logWorkflowEvent = (
+  event: string,
+  fields: Record<string, unknown>
+): void => {
+  console.log(
+    JSON.stringify({
+      scope: "workflow",
+      event,
+      ...fields,
+    })
+  );
+};
+
 const createWorkflowStepMessage = (
   payload: WorkflowStepQueuePayload
 ): JobQueueMessage => {
@@ -182,6 +195,12 @@ export const enqueueWorkflow = async (
     });
 
     runId = run.id;
+    logWorkflowEvent("run_enqueued", {
+      runId: run.id,
+      assetId: asset.id,
+      workflowType: definition.type,
+      triggerType,
+    });
 
     const steps = await services.workflowRepository.createWorkflowSteps(
       run.id,
@@ -210,6 +229,12 @@ export const enqueueWorkflow = async (
         stepKey: firstStep.stepKey,
       })
     );
+    logWorkflowEvent("step_queued", {
+      runId: run.id,
+      assetId: asset.id,
+      workflowType: definition.type,
+      stepKey: firstStep.stepKey,
+    });
 
     return services.assetRepository.getAssetById(asset.id);
   } catch (error) {
@@ -276,12 +301,20 @@ export const consumeWorkflowStepMessage = async (
 
   const stepDefinition = getStepDefinition(definition, payload.stepKey);
   const state = parseStateJson(run.stateJson);
+  const startedAt = Date.now();
 
   await services.workflowRepository.markWorkflowRunRunning(
     run.id,
     step.stepKey
   );
   await services.workflowRepository.markWorkflowStepRunning(step.id);
+  logWorkflowEvent("step_started", {
+    runId: run.id,
+    assetId: asset.id,
+    workflowType: run.workflowType,
+    stepKey: step.stepKey,
+    attempt: step.attempt + 1,
+  });
 
   try {
     const result = await stepDefinition.execute({
@@ -312,17 +345,36 @@ export const consumeWorkflowStepMessage = async (
         step.id,
         stringifyJson(result.output)
       );
+      logWorkflowEvent("step_skipped", {
+        runId: run.id,
+        assetId: asset.id,
+        workflowType: run.workflowType,
+        stepKey: step.stepKey,
+        durationMs: Date.now() - startedAt,
+      });
     } else {
       await services.workflowRepository.completeWorkflowStep(
         step.id,
         stringifyJson(result.output)
       );
+      logWorkflowEvent("step_succeeded", {
+        runId: run.id,
+        assetId: asset.id,
+        workflowType: run.workflowType,
+        stepKey: step.stepKey,
+        durationMs: Date.now() - startedAt,
+      });
     }
 
     const nextStep = getNextStepDefinition(definition, step.stepKey);
 
     if (!nextStep) {
       await services.workflowRepository.completeWorkflowRun(run.id);
+      logWorkflowEvent("run_succeeded", {
+        runId: run.id,
+        assetId: asset.id,
+        workflowType: run.workflowType,
+      });
 
       if (latestJob) {
         await services.assetRepository.completeIngestJob(latestJob.id);
@@ -337,6 +389,12 @@ export const consumeWorkflowStepMessage = async (
         stepKey: nextStep.key,
       })
     );
+    logWorkflowEvent("step_queued", {
+      runId: run.id,
+      assetId: asset.id,
+      workflowType: run.workflowType,
+      stepKey: nextStep.key,
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown workflow step error.";
@@ -352,6 +410,19 @@ export const consumeWorkflowStepMessage = async (
     if (latestJob) {
       await services.assetRepository.failIngestJob(latestJob.id, message);
     }
+
+    console.error(
+      JSON.stringify({
+        scope: "workflow",
+        event: "step_failed",
+        runId: run.id,
+        assetId: asset.id,
+        workflowType: run.workflowType,
+        stepKey: step.stepKey,
+        durationMs: Date.now() - startedAt,
+        errorMessage: message,
+      })
+    );
 
     throw error;
   }

@@ -2,15 +2,24 @@ import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssetNotFoundError } from "@/core/assets/errors";
+import { WorkflowRunNotFoundError } from "@/core/workflows/errors";
 import type { AppEnv } from "@/env";
 import type { AssetDetail } from "@/features/assets/model/types";
 import { registerAssetRoutes } from "@/features/assets/server/routes";
 import * as assetService from "@/features/assets/server/service";
+import * as workflowService from "@/features/workflows/server/service";
 
 vi.mock("@/features/assets/server/service", () => {
   return {
     getAssetById: vi.fn(),
     listAssets: vi.fn(),
+  };
+});
+
+vi.mock("@/features/workflows/server/service", () => {
+  return {
+    getWorkflowRunDetail: vi.fn(),
+    listWorkflowRunsByAssetId: vi.fn(),
   };
 });
 
@@ -135,6 +144,129 @@ describe("asset routes", () => {
     expect(assetService.getAssetById).toHaveBeenCalledWith(env, "asset-jobs-1");
   });
 
+  it("GET /api/assets/:id/workflows returns workflow runs for the asset", async () => {
+    const app = createApp();
+    const item = createAssetDetail({
+      id: "asset-workflows-1",
+    });
+    const env = { APP_NAME: "cloudmind-test" };
+
+    vi.mocked(assetService.getAssetById).mockResolvedValue(item);
+    vi.mocked(workflowService.listWorkflowRunsByAssetId).mockResolvedValue([
+      {
+        id: "run-1",
+        assetId: "asset-workflows-1",
+        workflowType: "note_ingest_v1",
+        triggerType: "ingest",
+        status: "succeeded",
+        stateJson: "{}",
+        currentStep: null,
+        errorMessage: null,
+        startedAt: "2026-03-20T00:01:00.000Z",
+        finishedAt: "2026-03-20T00:02:00.000Z",
+        createdAt: "2026-03-20T00:00:00.000Z",
+        updatedAt: "2026-03-20T00:02:00.000Z",
+      },
+    ]);
+
+    const response = await app.request(
+      "/api/assets/asset-workflows-1/workflows",
+      undefined,
+      env
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      items: [
+        expect.objectContaining({
+          id: "run-1",
+          assetId: "asset-workflows-1",
+          workflowType: "note_ingest_v1",
+        }),
+      ],
+    });
+    expect(assetService.getAssetById).toHaveBeenCalledWith(
+      env,
+      "asset-workflows-1"
+    );
+    expect(workflowService.listWorkflowRunsByAssetId).toHaveBeenCalledWith(
+      env,
+      "asset-workflows-1"
+    );
+  });
+
+  it("GET /api/workflows/:id returns workflow run detail", async () => {
+    const app = createApp();
+    const env = { APP_NAME: "cloudmind-test" };
+
+    vi.mocked(workflowService.getWorkflowRunDetail).mockResolvedValue({
+      run: {
+        id: "run-1",
+        assetId: "asset-1",
+        workflowType: "pdf_ingest_v1",
+        triggerType: "reprocess",
+        status: "failed",
+        stateJson: '{"summary":"partial"}',
+        currentStep: "embed",
+        errorMessage: "Embedding timeout",
+        startedAt: "2026-03-20T00:01:00.000Z",
+        finishedAt: "2026-03-20T00:03:00.000Z",
+        createdAt: "2026-03-20T00:00:00.000Z",
+        updatedAt: "2026-03-20T00:03:00.000Z",
+      },
+      steps: [
+        {
+          id: "step-1",
+          runId: "run-1",
+          assetId: "asset-1",
+          stepKey: "load_source",
+          stepType: "load_source",
+          status: "succeeded",
+          attempt: 1,
+          inputJson: null,
+          outputJson: '{"rawR2Key":"assets/a.pdf"}',
+          errorMessage: null,
+          startedAt: "2026-03-20T00:01:00.000Z",
+          finishedAt: "2026-03-20T00:01:10.000Z",
+          createdAt: "2026-03-20T00:00:00.000Z",
+          updatedAt: "2026-03-20T00:01:10.000Z",
+        },
+      ],
+      artifacts: [
+        {
+          id: "artifact-1",
+          assetId: "asset-1",
+          artifactType: "summary",
+          version: 1,
+          storageKind: "inline",
+          r2Key: null,
+          contentText: "Partial summary",
+          metadataJson: null,
+          createdByRunId: "run-1",
+          createdAt: "2026-03-20T00:01:30.000Z",
+        },
+      ],
+    });
+
+    const response = await app.request("/api/workflows/run-1", undefined, env);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      item: expect.objectContaining({
+        run: expect.objectContaining({
+          id: "run-1",
+          workflowType: "pdf_ingest_v1",
+        }),
+        steps: expect.any(Array),
+        artifacts: expect.any(Array),
+      }),
+    });
+    expect(workflowService.getWorkflowRunDetail).toHaveBeenCalledWith(
+      env,
+      "run-1"
+    );
+  });
+
   it("GET /api/assets/:id returns 404 when the asset does not exist", async () => {
     const app = createApp();
 
@@ -167,6 +299,42 @@ describe("asset routes", () => {
       error: {
         code: "ASSET_NOT_FOUND",
         message: "Asset not found",
+      },
+    });
+  });
+
+  it("GET /api/assets/:id/workflows returns 404 when the asset does not exist", async () => {
+    const app = createApp();
+
+    vi.mocked(assetService.getAssetById).mockRejectedValue(
+      new AssetNotFoundError("missing-asset")
+    );
+
+    const response = await app.request("/api/assets/missing-asset/workflows");
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "ASSET_NOT_FOUND",
+        message: "Asset not found",
+      },
+    });
+  });
+
+  it("GET /api/workflows/:id returns 404 when the run does not exist", async () => {
+    const app = createApp();
+
+    vi.mocked(workflowService.getWorkflowRunDetail).mockRejectedValue(
+      new WorkflowRunNotFoundError("missing-run")
+    );
+
+    const response = await app.request("/api/workflows/missing-run");
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "WORKFLOW_RUN_NOT_FOUND",
+        message: "Workflow run not found",
       },
     });
   });

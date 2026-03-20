@@ -4,6 +4,12 @@
   "main": "dist/index.js",
   "compatibility_date": "2026-03-20",
   "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true
+    }
+  },
   "assets": {
     "directory": "./public"
   },

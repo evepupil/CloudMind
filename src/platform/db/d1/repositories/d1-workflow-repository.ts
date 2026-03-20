@@ -1,5 +1,6 @@
-import { and, asc, count, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 
+import { WorkflowRunNotFoundError } from "@/core/workflows/errors";
 import type {
   CreateAssetArtifactInput,
   CreateWorkflowRunInput,
@@ -7,6 +8,8 @@ import type {
   WorkflowRepository,
 } from "@/core/workflows/ports";
 import type {
+  AssetArtifactRecord,
+  WorkflowRunDetail,
   WorkflowRunRecord,
   WorkflowStepRecord,
 } from "@/features/workflows/model/types";
@@ -57,6 +60,23 @@ const mapWorkflowRunRecord = (
   };
 };
 
+const mapAssetArtifactRecord = (
+  record: typeof assetArtifacts.$inferSelect
+): AssetArtifactRecord => {
+  return {
+    id: record.id,
+    assetId: record.assetId,
+    artifactType: record.artifactType,
+    version: record.version,
+    storageKind: record.storageKind,
+    r2Key: record.r2Key,
+    contentText: record.contentText,
+    metadataJson: record.metadataJson,
+    createdByRunId: record.createdByRunId,
+    createdAt: record.createdAt,
+  };
+};
+
 // 这里实现 workflow 持久化，供最小运行时记录 run/step/artifact 生命周期。
 export class D1WorkflowRepository implements WorkflowRepository {
   private readonly db: ReturnType<typeof createDb>;
@@ -97,10 +117,36 @@ export class D1WorkflowRepository implements WorkflowRepository {
       .limit(1);
 
     if (!record) {
-      throw new Error(`Workflow run "${runId}" was not found.`);
+      throw new WorkflowRunNotFoundError(runId);
     }
 
     return mapWorkflowRunRecord(record);
+  }
+
+  public async listWorkflowRunsByAssetId(
+    assetId: string
+  ): Promise<WorkflowRunRecord[]> {
+    const records = await this.db
+      .select()
+      .from(workflowRuns)
+      .where(eq(workflowRuns.assetId, assetId))
+      .orderBy(desc(workflowRuns.createdAt));
+
+    return records.map(mapWorkflowRunRecord);
+  }
+
+  public async getWorkflowRunDetail(runId: string): Promise<WorkflowRunDetail> {
+    const [run, steps, artifacts] = await Promise.all([
+      this.getWorkflowRunById(runId),
+      this.listWorkflowStepsByRunId(runId),
+      this.listAssetArtifactsByRunId(runId),
+    ]);
+
+    return {
+      run,
+      steps,
+      artifacts,
+    };
   }
 
   public async createWorkflowSteps(
@@ -305,5 +351,17 @@ export class D1WorkflowRepository implements WorkflowRepository {
       createdByRunId: input.createdByRunId ?? null,
       createdAt: now,
     });
+  }
+
+  public async listAssetArtifactsByRunId(
+    runId: string
+  ): Promise<AssetArtifactRecord[]> {
+    const records = await this.db
+      .select()
+      .from(assetArtifacts)
+      .where(eq(assetArtifacts.createdByRunId, runId))
+      .orderBy(asc(assetArtifacts.createdAt));
+
+    return records.map(mapAssetArtifactRecord);
   }
 }

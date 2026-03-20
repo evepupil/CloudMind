@@ -1,6 +1,8 @@
 import type {
+  AssetArtifactRecord,
   AssetArtifactStorageKind,
   AssetArtifactType,
+  WorkflowRunDetail,
   WorkflowRunRecord,
   WorkflowStepRecord,
   WorkflowStepType,
@@ -38,6 +40,8 @@ export interface WorkflowRepository {
     id: string;
   }>;
   getWorkflowRunById(runId: string): Promise<WorkflowRunRecord>;
+  listWorkflowRunsByAssetId(assetId: string): Promise<WorkflowRunRecord[]>;
+  getWorkflowRunDetail(runId: string): Promise<WorkflowRunDetail>;
   createWorkflowSteps(
     runId: string,
     steps: CreateWorkflowStepInput[]
@@ -66,4 +70,5 @@ export interface WorkflowRepository {
     outputJson?: string | null
   ): Promise<void>;
   createAssetArtifact(input: CreateAssetArtifactInput): Promise<void>;
+  listAssetArtifactsByRunId(runId: string): Promise<AssetArtifactRecord[]>;
 }

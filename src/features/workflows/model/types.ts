@@ -93,3 +93,9 @@ export interface AssetArtifactRecord {
   createdByRunId: string | null;
   createdAt: string;
 }
+
+export interface WorkflowRunDetail {
+  run: WorkflowRunRecord;
+  steps: WorkflowStepRecord[];
+  artifacts: AssetArtifactRecord[];
+}
