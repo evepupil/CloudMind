@@ -21,6 +21,7 @@ export const assets = sqliteTable(
     errorMessage: text("error_message"),
     processedAt: text("processed_at"),
     failedAt: text("failed_at"),
+    deletedAt: text("deleted_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -29,5 +30,6 @@ export const assets = sqliteTable(
     index("assets_type_idx").on(table.type),
     index("assets_created_at_idx").on(table.createdAt),
     index("assets_source_url_idx").on(table.sourceUrl),
+    index("assets_deleted_at_idx").on(table.deletedAt),
   ]
 );

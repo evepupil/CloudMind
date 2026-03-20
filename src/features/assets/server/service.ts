@@ -1,4 +1,7 @@
-import type { AssetQueryRepository } from "@/core/assets/ports";
+import type {
+  AssetRepository,
+  UpdateAssetMetadataInput,
+} from "@/core/assets/ports";
 import type { BlobStore } from "@/core/blob/ports";
 import type { AppBindings } from "@/env";
 import type {
@@ -7,7 +10,7 @@ import type {
   AssetListResult,
 } from "@/features/assets/model/types";
 import { getBlobStoreFromBindings } from "@/platform/blob/r2/get-blob-store";
-import { getAssetQueryRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
+import { getAssetRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
 
 const hydrateAssetContent = async (
   blobStore: BlobStore,
@@ -32,14 +35,14 @@ const hydrateAssetContent = async (
 interface AssetServiceDependencies {
   getAssetRepository: (
     bindings: AppBindings | undefined
-  ) => AssetQueryRepository | Promise<AssetQueryRepository>;
+  ) => AssetRepository | Promise<AssetRepository>;
   getBlobStore: (
     bindings: AppBindings | undefined
   ) => BlobStore | Promise<BlobStore>;
 }
 
 const defaultDependencies: AssetServiceDependencies = {
-  getAssetRepository: getAssetQueryRepositoryFromBindings,
+  getAssetRepository: getAssetRepositoryFromBindings,
   getBlobStore: getBlobStoreFromBindings,
 };
 
@@ -67,9 +70,31 @@ export const createAssetService = (
 
       return hydrateAssetContent(blobStore, item);
     },
+
+    async updateAsset(
+      bindings: AppBindings | undefined,
+      id: string,
+      input: UpdateAssetMetadataInput
+    ): Promise<AssetDetail> {
+      const repository = await dependencies.getAssetRepository(bindings);
+      const blobStore = await dependencies.getBlobStore(bindings);
+      const item = await repository.updateAssetMetadata(id, input);
+
+      return hydrateAssetContent(blobStore, item);
+    },
+
+    async deleteAsset(
+      bindings: AppBindings | undefined,
+      id: string
+    ): Promise<void> {
+      const repository = await dependencies.getAssetRepository(bindings);
+
+      await repository.softDeleteAsset(id);
+    },
   };
 };
 
 const assetService = createAssetService();
 
-export const { listAssets, getAssetById } = assetService;
+export const { listAssets, getAssetById, updateAsset, deleteAsset } =
+  assetService;

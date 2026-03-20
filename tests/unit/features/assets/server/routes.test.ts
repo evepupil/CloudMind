@@ -11,8 +11,10 @@ import * as workflowService from "@/features/workflows/server/service";
 
 vi.mock("@/features/assets/server/service", () => {
   return {
+    deleteAsset: vi.fn(),
     getAssetById: vi.fn(),
     listAssets: vi.fn(),
+    updateAsset: vi.fn(),
   };
 });
 
@@ -142,6 +144,68 @@ describe("asset routes", () => {
       items: item.jobs,
     });
     expect(assetService.getAssetById).toHaveBeenCalledWith(env, "asset-jobs-1");
+  });
+
+  it("PATCH /api/assets/:id updates asset metadata", async () => {
+    const app = createApp();
+    const env = { APP_NAME: "cloudmind-test" };
+    const item = createAssetDetail({
+      id: "asset-edit-1",
+      title: "Updated title",
+      summary: "Updated summary",
+      sourceUrl: "https://example.com/edited",
+    });
+
+    vi.mocked(assetService.updateAsset).mockResolvedValue(item);
+
+    const response = await app.request(
+      "/api/assets/asset-edit-1",
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: "Updated title",
+          summary: "Updated summary",
+          sourceUrl: "https://example.com/edited",
+        }),
+      },
+      env
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      item,
+    });
+    expect(assetService.updateAsset).toHaveBeenCalledWith(env, "asset-edit-1", {
+      title: "Updated title",
+      summary: "Updated summary",
+      sourceUrl: "https://example.com/edited",
+    });
+  });
+
+  it("DELETE /api/assets/:id soft deletes the asset", async () => {
+    const app = createApp();
+    const env = { APP_NAME: "cloudmind-test" };
+
+    const response = await app.request(
+      "/api/assets/asset-delete-1",
+      {
+        method: "DELETE",
+      },
+      env
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+    });
+    expect(assetService.deleteAsset).toHaveBeenCalledWith(
+      env,
+      "asset-delete-1"
+    );
   });
 
   it("GET /api/assets/:id/workflows returns workflow runs for the asset", async () => {
@@ -337,6 +401,73 @@ describe("asset routes", () => {
         message: "Workflow run not found",
       },
     });
+  });
+
+  it("PATCH /api/assets/:id returns 404 when the asset does not exist", async () => {
+    const app = createApp();
+
+    vi.mocked(assetService.updateAsset).mockRejectedValue(
+      new AssetNotFoundError("missing-asset")
+    );
+
+    const response = await app.request("/api/assets/missing-asset", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title: "Updated title",
+      }),
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "ASSET_NOT_FOUND",
+        message: "Asset not found",
+      },
+    });
+  });
+
+  it("DELETE /api/assets/:id returns 404 when the asset does not exist", async () => {
+    const app = createApp();
+
+    vi.mocked(assetService.deleteAsset).mockRejectedValue(
+      new AssetNotFoundError("missing-asset")
+    );
+
+    const response = await app.request("/api/assets/missing-asset", {
+      method: "DELETE",
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "ASSET_NOT_FOUND",
+        message: "Asset not found",
+      },
+    });
+  });
+
+  it("PATCH /api/assets/:id returns 400 for invalid input", async () => {
+    const app = createApp();
+
+    const response = await app.request("/api/assets/asset-edit-1", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: expect.objectContaining({
+        code: "INVALID_INPUT",
+        message: "Invalid request payload",
+      }),
+    });
+    expect(assetService.updateAsset).not.toHaveBeenCalled();
   });
 
   it("GET /api/assets passes list filters to the service", async () => {

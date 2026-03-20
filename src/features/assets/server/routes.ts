@@ -9,8 +9,12 @@ import {
   listWorkflowRunsByAssetId,
 } from "@/features/workflows/server/service";
 
-import { assetIdParamsSchema, assetListQuerySchema } from "./schemas";
-import { getAssetById, listAssets } from "./service";
+import {
+  assetIdParamsSchema,
+  assetListQuerySchema,
+  assetUpdatePayloadSchema,
+} from "./schemas";
+import { deleteAsset, getAssetById, listAssets, updateAsset } from "./service";
 
 const getValidationErrorBody = (error: z.ZodError) => {
   return {
@@ -56,6 +60,62 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
       const item = await getAssetById(context.env, parsedParams.data.id);
 
       return context.json({ item });
+    } catch (error) {
+      if (error instanceof AssetNotFoundError) {
+        return context.json(getAssetNotFoundBody(), 404);
+      }
+
+      throw error;
+    }
+  });
+
+  app.patch("/api/assets/:id", async (context) => {
+    const parsedParams = assetIdParamsSchema.safeParse(context.req.param());
+
+    if (!parsedParams.success) {
+      return context.json(getValidationErrorBody(parsedParams.error), 400);
+    }
+
+    const rawPayload = await context.req.json().catch(() => null);
+    const parsedPayload = assetUpdatePayloadSchema.safeParse(rawPayload);
+
+    if (!parsedPayload.success) {
+      return context.json(getValidationErrorBody(parsedPayload.error), 400);
+    }
+
+    try {
+      const item = await updateAsset(
+        context.env,
+        parsedParams.data.id,
+        parsedPayload.data
+      );
+
+      return context.json({
+        ok: true,
+        item,
+      });
+    } catch (error) {
+      if (error instanceof AssetNotFoundError) {
+        return context.json(getAssetNotFoundBody(), 404);
+      }
+
+      throw error;
+    }
+  });
+
+  app.delete("/api/assets/:id", async (context) => {
+    const parsedParams = assetIdParamsSchema.safeParse(context.req.param());
+
+    if (!parsedParams.success) {
+      return context.json(getValidationErrorBody(parsedParams.error), 400);
+    }
+
+    try {
+      await deleteAsset(context.env, parsedParams.data.id);
+
+      return context.json({
+        ok: true,
+      });
     } catch (error) {
       if (error instanceof AssetNotFoundError) {
         return context.json(getAssetNotFoundBody(), 404);
@@ -140,6 +200,83 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
       }
 
       throw error;
+    }
+  });
+
+  app.post("/assets/actions/:id/update", async (context) => {
+    const parsedParams = assetIdParamsSchema.safeParse(context.req.param());
+
+    if (!parsedParams.success) {
+      return context.redirect(
+        `/assets?error=${encodeURIComponent("Invalid asset id.")}`
+      );
+    }
+
+    const formData = await context.req.formData();
+    const parsedPayload = assetUpdatePayloadSchema.safeParse({
+      title: formData.get("title"),
+      summary: formData.get("summary"),
+      sourceUrl: formData.get("sourceUrl"),
+    });
+
+    if (!parsedPayload.success) {
+      return context.redirect(
+        `/assets/${parsedParams.data.id}?error=${encodeURIComponent(
+          "Please provide valid asset metadata."
+        )}`
+      );
+    }
+
+    try {
+      await updateAsset(context.env, parsedParams.data.id, parsedPayload.data);
+
+      return context.redirect(`/assets/${parsedParams.data.id}?updated=1`);
+    } catch (error) {
+      if (error instanceof AssetNotFoundError) {
+        return context.redirect(
+          `/assets/${parsedParams.data.id}?error=${encodeURIComponent(
+            "Asset not found."
+          )}`
+        );
+      }
+
+      const message =
+        error instanceof Error ? error.message : "Failed to update asset.";
+
+      return context.redirect(
+        `/assets/${parsedParams.data.id}?error=${encodeURIComponent(message)}`
+      );
+    }
+  });
+
+  app.post("/assets/actions/:id/delete", async (context) => {
+    const parsedParams = assetIdParamsSchema.safeParse(context.req.param());
+
+    if (!parsedParams.success) {
+      return context.redirect(
+        `/assets?error=${encodeURIComponent("Invalid asset id.")}`
+      );
+    }
+
+    try {
+      await deleteAsset(context.env, parsedParams.data.id);
+
+      return context.redirect("/assets?deleted=1");
+    } catch (error) {
+      if (error instanceof AssetNotFoundError) {
+        return context.redirect(
+          `/assets/${parsedParams.data.id}?error=${encodeURIComponent(
+            "Asset not found."
+          )}`
+        );
+      }
+
+      const message =
+        error instanceof Error ? error.message : "Failed to delete asset.";
+
+      return context.redirect(
+        `/assets/${parsedParams.data.id}?error=${encodeURIComponent(message)}`
+      );
     }
   });
 };

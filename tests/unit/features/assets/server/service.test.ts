@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { AssetQueryRepository } from "@/core/assets/ports";
+import { AssetNotFoundError } from "@/core/assets/errors";
+import type {
+  AssetRepository,
+  UpdateAssetMetadataInput,
+} from "@/core/assets/ports";
 import type { BlobStore } from "@/core/blob/ports";
 import type {
   AssetDetail,
@@ -55,8 +58,9 @@ const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
   };
 };
 
-class InMemoryAssetRepository implements AssetQueryRepository {
+class InMemoryAssetRepository implements AssetRepository {
   private asset: AssetDetail;
+  private deleted = false;
 
   public constructor(asset: AssetDetail) {
     this.asset = asset;
@@ -75,11 +79,78 @@ class InMemoryAssetRepository implements AssetQueryRepository {
   }
 
   public async getAssetById(id: string): Promise<AssetDetail> {
-    if (id !== this.asset.id) {
-      throw new Error(`Asset "${id}" not found.`);
+    if (this.deleted || id !== this.asset.id) {
+      throw new AssetNotFoundError(id);
     }
 
     return structuredClone(this.asset);
+  }
+
+  public async searchAssets(): Promise<AssetListResult> {
+    return this.listAssets();
+  }
+
+  public async getChunkMatchesByVectorIds() {
+    return [];
+  }
+
+  public async listAssetIdsMissingChunkContent(): Promise<string[]> {
+    return [];
+  }
+
+  public async createTextAsset(): Promise<AssetDetail> {
+    return structuredClone(this.asset);
+  }
+
+  public async createUrlAsset(): Promise<AssetDetail> {
+    return structuredClone(this.asset);
+  }
+
+  public async createFileAsset(): Promise<AssetDetail> {
+    return structuredClone(this.asset);
+  }
+
+  public async markAssetProcessing(): Promise<void> {}
+
+  public async completeAssetProcessing(): Promise<void> {}
+
+  public async replaceAssetChunks(): Promise<void> {}
+
+  public async failAssetProcessing(): Promise<void> {}
+
+  public async markIngestJobRunning(): Promise<void> {}
+
+  public async completeIngestJob(): Promise<void> {}
+
+  public async failIngestJob(): Promise<void> {}
+
+  public async updateAssetMetadata(
+    id: string,
+    input: UpdateAssetMetadataInput
+  ): Promise<AssetDetail> {
+    await this.getAssetById(id);
+
+    this.asset = {
+      ...this.asset,
+      title: input.title ?? this.asset.title,
+      summary: input.summary !== undefined ? input.summary : this.asset.summary,
+      sourceUrl:
+        input.sourceUrl !== undefined ? input.sourceUrl : this.asset.sourceUrl,
+      source:
+        this.asset.source && input.sourceUrl !== undefined
+          ? {
+              ...this.asset.source,
+              sourceUrl: input.sourceUrl,
+            }
+          : this.asset.source,
+    };
+
+    return structuredClone(this.asset);
+  }
+
+  public async softDeleteAsset(id: string): Promise<void> {
+    await this.getAssetById(id);
+    this.deleted = true;
   }
 }
 
@@ -178,5 +249,65 @@ describe("asset service", () => {
     );
 
     expect(result.contentText).toBe("Full content from R2");
+  });
+
+  it("updateAsset delegates to the repository and keeps hydrated content", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-edit-1",
+        title: "Before edit",
+        summary: "Old summary",
+        contentText: "Preview content",
+        contentR2Key: "assets/asset-edit-1/content/content.txt",
+      })
+    );
+    const service = createAssetService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue({
+        ...blobStoreMock,
+        get: vi.fn().mockResolvedValue({
+          key: "assets/asset-edit-1/content/content.txt",
+          body: new TextEncoder().encode("Hydrated content").buffer,
+          size: 15,
+          contentType: "text/plain; charset=utf-8",
+        }),
+      }),
+    });
+
+    const result = await service.updateAsset(
+      { APP_NAME: "cloudmind-test" },
+      "asset-edit-1",
+      {
+        title: "After edit",
+        summary: "Manual summary",
+        sourceUrl: "https://example.com/edited",
+      }
+    );
+
+    expect(result).toMatchObject({
+      id: "asset-edit-1",
+      title: "After edit",
+      summary: "Manual summary",
+      sourceUrl: "https://example.com/edited",
+      contentText: "Hydrated content",
+    });
+  });
+
+  it("deleteAsset delegates to the repository", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-delete-1",
+      })
+    );
+    const service = createAssetService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+    });
+
+    await service.deleteAsset({ APP_NAME: "cloudmind-test" }, "asset-delete-1");
+
+    await expect(repository.getAssetById("asset-delete-1")).rejects.toThrow(
+      AssetNotFoundError
+    );
   });
 });

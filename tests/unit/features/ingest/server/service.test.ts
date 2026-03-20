@@ -187,6 +187,42 @@ class InMemoryAssetRepository implements AssetRepository {
   public async completeIngestJob(): Promise<void> {}
 
   public async failIngestJob(): Promise<void> {}
+
+  public async updateAssetMetadata(
+    id: string,
+    input: {
+      title?: string | undefined;
+      summary?: string | null | undefined;
+      sourceUrl?: string | null | undefined;
+    }
+  ): Promise<AssetDetail> {
+    if (id !== this.asset.id) {
+      throw new Error(`Asset "${id}" not found.`);
+    }
+
+    this.asset = {
+      ...this.asset,
+      title: input.title ?? this.asset.title,
+      summary: input.summary !== undefined ? input.summary : this.asset.summary,
+      sourceUrl:
+        input.sourceUrl !== undefined ? input.sourceUrl : this.asset.sourceUrl,
+      source:
+        this.asset.source && input.sourceUrl !== undefined
+          ? {
+              ...this.asset.source,
+              sourceUrl: input.sourceUrl,
+            }
+          : this.asset.source,
+    };
+
+    return structuredClone(this.asset);
+  }
+
+  public async softDeleteAsset(id: string): Promise<void> {
+    if (id !== this.asset.id) {
+      throw new Error(`Asset "${id}" not found.`);
+    }
+  }
 }
 
 describe("ingest service", () => {

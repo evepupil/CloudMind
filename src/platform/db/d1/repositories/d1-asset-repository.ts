@@ -1,4 +1,14 @@
-import { and, asc, count, desc, eq, inArray, like, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  like,
+  or,
+} from "drizzle-orm";
 
 import { AssetNotFoundError } from "@/core/assets/errors";
 import type {
@@ -9,6 +19,7 @@ import type {
   CreateFileAssetInput,
   CreateTextAssetInput,
   CreateUrlAssetInput,
+  UpdateAssetMetadataInput,
 } from "@/core/assets/ports";
 import type {
   AssetChunkMatch,
@@ -79,7 +90,7 @@ const mapChunkMatch = (record: {
 };
 
 const buildAssetListWhereClause = (query?: AssetListQuery) => {
-  const conditions = [];
+  const conditions = [isNull(assets.deletedAt)];
 
   if (query?.status) {
     conditions.push(eq(assets.status, query.status));
@@ -91,13 +102,15 @@ const buildAssetListWhereClause = (query?: AssetListQuery) => {
 
   if (query?.query) {
     const search = `%${query.query}%`;
-    conditions.push(
-      or(
-        like(assets.title, search),
-        like(assets.summary, search),
-        like(assets.sourceUrl, search)
-      )
+    const searchCondition = or(
+      like(assets.title, search),
+      like(assets.summary, search),
+      like(assets.sourceUrl, search)
     );
+
+    if (searchCondition) {
+      conditions.push(searchCondition);
+    }
   }
 
   return conditions.length > 0 ? and(...conditions) : undefined;
@@ -174,7 +187,9 @@ export class D1AssetRepository implements AssetRepository {
       })
       .from(assetChunks)
       .innerJoin(assets, eq(assetChunks.assetId, assets.id))
-      .where(inArray(assetChunks.vectorId, vectorIds));
+      .where(
+        and(inArray(assetChunks.vectorId, vectorIds), isNull(assets.deletedAt))
+      );
 
     return records.map(mapChunkMatch);
   }
@@ -190,7 +205,8 @@ export class D1AssetRepository implements AssetRepository {
         and(
           eq(assetChunks.contentText, ""),
           inArray(assets.type, ["note", "pdf", "chat"]),
-          inArray(assets.status, ["ready", "failed"])
+          inArray(assets.status, ["ready", "failed"]),
+          isNull(assets.deletedAt)
         )
       )
       .orderBy(asc(assetChunks.assetId))
@@ -203,7 +219,7 @@ export class D1AssetRepository implements AssetRepository {
     const [assetRecord] = await this.db
       .select()
       .from(assets)
-      .where(eq(assets.id, id))
+      .where(and(eq(assets.id, id), isNull(assets.deletedAt)))
       .limit(1);
 
     if (!assetRecord) {
@@ -276,6 +292,7 @@ export class D1AssetRepository implements AssetRepository {
       errorMessage: null,
       processedAt: null,
       failedAt: null,
+      deletedAt: null,
       createdAt: now,
       updatedAt: now,
     });
@@ -334,6 +351,7 @@ export class D1AssetRepository implements AssetRepository {
       errorMessage: null,
       processedAt: null,
       failedAt: null,
+      deletedAt: null,
       createdAt: now,
       updatedAt: now,
     });
@@ -391,6 +409,7 @@ export class D1AssetRepository implements AssetRepository {
       errorMessage: null,
       processedAt: null,
       failedAt: null,
+      deletedAt: null,
       createdAt: now,
       updatedAt: now,
     });
@@ -544,5 +563,56 @@ export class D1AssetRepository implements AssetRepository {
         updatedAt: now,
       })
       .where(eq(ingestJobs.id, jobId));
+  }
+
+  public async updateAssetMetadata(
+    id: string,
+    input: UpdateAssetMetadataInput
+  ): Promise<AssetDetail> {
+    await this.getAssetById(id);
+
+    const now = new Date().toISOString();
+    const updatePayload: Partial<typeof assets.$inferInsert> = {
+      updatedAt: now,
+    };
+
+    if (input.title !== undefined) {
+      updatePayload.title = input.title;
+    }
+
+    if (input.summary !== undefined) {
+      updatePayload.summary = input.summary;
+    }
+
+    if (input.sourceUrl !== undefined) {
+      updatePayload.sourceUrl = input.sourceUrl;
+    }
+
+    await this.db.update(assets).set(updatePayload).where(eq(assets.id, id));
+
+    if (input.sourceUrl !== undefined) {
+      await this.db
+        .update(assetSources)
+        .set({
+          sourceUrl: input.sourceUrl,
+        })
+        .where(eq(assetSources.assetId, id));
+    }
+
+    return this.getAssetById(id);
+  }
+
+  public async softDeleteAsset(id: string): Promise<void> {
+    await this.getAssetById(id);
+
+    const now = new Date().toISOString();
+
+    await this.db
+      .update(assets)
+      .set({
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(assets.id, id));
   }
 }

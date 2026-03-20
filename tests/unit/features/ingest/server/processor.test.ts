@@ -271,6 +271,38 @@ class InMemoryAssetRepository implements AssetRepository {
     job.updatedAt = "2026-03-19T00:03:00.000Z";
   }
 
+  public async updateAssetMetadata(
+    id: string,
+    input: {
+      title?: string | undefined;
+      summary?: string | null | undefined;
+      sourceUrl?: string | null | undefined;
+    }
+  ): Promise<AssetDetail> {
+    this.assertId(id);
+
+    this.asset = {
+      ...this.asset,
+      title: input.title ?? this.asset.title,
+      summary: input.summary !== undefined ? input.summary : this.asset.summary,
+      sourceUrl:
+        input.sourceUrl !== undefined ? input.sourceUrl : this.asset.sourceUrl,
+      source:
+        this.asset.source && input.sourceUrl !== undefined
+          ? {
+              ...this.asset.source,
+              sourceUrl: input.sourceUrl,
+            }
+          : this.asset.source,
+    };
+
+    return structuredClone(this.asset);
+  }
+
+  public async softDeleteAsset(id: string): Promise<void> {
+    this.assertId(id);
+  }
+
   private assertId(id: string): void {
     if (id !== this.asset.id) {
       throw new Error(`Unexpected asset id "${id}".`);

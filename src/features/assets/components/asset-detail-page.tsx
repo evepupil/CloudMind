@@ -244,6 +244,122 @@ export const AssetDetailPage = ({
               backgroundColor: "#ffffff",
             }}
           >
+            <h2 style={{ marginTop: 0, fontSize: "20px" }}>Manage</h2>
+            <form
+              action={`/assets/actions/${item.id}/update`}
+              method="post"
+              style={{ display: "grid", gap: "12px" }}
+            >
+              <label style={{ display: "grid", gap: "8px" }}>
+                <span style={{ fontWeight: 700 }}>Title</span>
+                <input
+                  name="title"
+                  defaultValue={item.title}
+                  required
+                  style={{
+                    width: "100%",
+                    padding: "12px 14px",
+                    borderRadius: "14px",
+                    border: "1px solid rgba(15, 23, 42, 0.12)",
+                    fontSize: "14px",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </label>
+              <label style={{ display: "grid", gap: "8px" }}>
+                <span style={{ fontWeight: 700 }}>Source URL</span>
+                <input
+                  name="sourceUrl"
+                  type="url"
+                  defaultValue={item.sourceUrl ?? ""}
+                  placeholder="https://example.com"
+                  style={{
+                    width: "100%",
+                    padding: "12px 14px",
+                    borderRadius: "14px",
+                    border: "1px solid rgba(15, 23, 42, 0.12)",
+                    fontSize: "14px",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </label>
+              <label style={{ display: "grid", gap: "8px" }}>
+                <span style={{ fontWeight: 700 }}>Summary</span>
+                <textarea
+                  name="summary"
+                  defaultValue={item.summary ?? ""}
+                  rows={5}
+                  style={{
+                    width: "100%",
+                    padding: "12px 14px",
+                    borderRadius: "14px",
+                    border: "1px solid rgba(15, 23, 42, 0.12)",
+                    fontSize: "14px",
+                    lineHeight: 1.7,
+                    boxSizing: "border-box",
+                    resize: "vertical",
+                  }}
+                />
+              </label>
+              <button
+                type="submit"
+                style={{
+                  padding: "12px 16px",
+                  borderRadius: "999px",
+                  border: "none",
+                  backgroundColor: "#102033",
+                  color: "#ffffff",
+                  fontSize: "14px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Save Changes
+              </button>
+            </form>
+            <form
+              action={`/assets/actions/${item.id}/delete`}
+              method="post"
+              style={{ marginTop: "14px" }}
+            >
+              <button
+                type="submit"
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  borderRadius: "999px",
+                  border: "1px solid #fecaca",
+                  backgroundColor: "#fff1f2",
+                  color: "#b91c1c",
+                  fontSize: "14px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Delete Asset
+              </button>
+            </form>
+            <p
+              style={{
+                marginBottom: 0,
+                color: "#7f1d1d",
+                fontSize: "13px",
+                lineHeight: 1.7,
+              }}
+            >
+              Deletion is soft-delete for now. The asset disappears from list,
+              search, and chat results.
+            </p>
+          </article>
+
+          <article
+            style={{
+              padding: "22px",
+              borderRadius: "24px",
+              border: "1px solid rgba(15, 23, 42, 0.08)",
+              backgroundColor: "#ffffff",
+            }}
+          >
             <h2 style={{ marginTop: 0, fontSize: "20px" }}>Source</h2>
             <dl
               style={{

@@ -46,6 +46,12 @@ export interface CreateAssetChunkInput {
   vectorId?: string | null;
 }
 
+export interface UpdateAssetMetadataInput {
+  title?: string | undefined;
+  summary?: string | null | undefined;
+  sourceUrl?: string | null | undefined;
+}
+
 // 这里定义资产读取侧接口，供列表与详情等读模型复用。
 export interface AssetQueryRepository {
   listAssets(query?: AssetListQuery): Promise<AssetListResult>;
@@ -80,6 +86,16 @@ export interface AssetIngestRepository {
   failIngestJob(jobId: string, message: string): Promise<void>;
 }
 
+// 这里补充资产管理写侧接口，承接人工编辑与软删除场景。
+export interface AssetMutationRepository {
+  updateAssetMetadata(
+    id: string,
+    input: UpdateAssetMetadataInput
+  ): Promise<AssetDetail>;
+  softDeleteAsset(id: string): Promise<void>;
+}
+
 export type AssetRepository = AssetQueryRepository &
   AssetSearchRepository &
-  AssetIngestRepository;
+  AssetIngestRepository &
+  AssetMutationRepository;

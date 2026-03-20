@@ -6,8 +6,13 @@ import { getAssetById } from "@/features/assets/server/service";
 
 const getFlashMessage = (
   created: string | undefined,
-  reprocessed: string | undefined
+  reprocessed: string | undefined,
+  updated: string | undefined
 ): string | undefined => {
+  if (updated) {
+    return "Asset updated successfully.";
+  }
+
   if (reprocessed) {
     return "Asset reprocessed successfully.";
   }
@@ -19,12 +24,13 @@ const getFlashMessage = (
   return undefined;
 };
 
-// 这里提供最小详情页 route，直接复用 service 层并解析页面提示参数。
+// 这里提供最小详情页 route，直接复用 service 并解析页面提示参数。
 export default createRoute(async (context) => {
   const id = context.req.param("id");
   const flashMessage = getFlashMessage(
     context.req.query("created"),
-    context.req.query("reprocessed")
+    context.req.query("reprocessed"),
+    context.req.query("updated")
   );
   const errorMessage = context.req.query("error") ?? undefined;
 
