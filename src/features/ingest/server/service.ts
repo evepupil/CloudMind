@@ -7,11 +7,13 @@ import type {
 import { createRawAssetBlobKey } from "@/core/blob/keys";
 import type { BlobStore } from "@/core/blob/ports";
 import type { VectorStore } from "@/core/vector/ports";
+import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AppBindings } from "@/env";
 import type { AssetDetail } from "@/features/assets/model/types";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getBlobStoreFromBindings } from "@/platform/blob/r2/get-blob-store";
 import { getAssetIngestRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
+import { getWorkflowRepositoryFromBindings } from "@/platform/db/d1/repositories/get-workflow-repository";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 
 import {
@@ -45,15 +47,22 @@ interface IngestServiceDependencies {
   getVectorStore: (
     bindings: AppBindings | undefined
   ) => VectorStore | Promise<VectorStore>;
+  getWorkflowRepository: (
+    bindings: AppBindings | undefined
+  ) => WorkflowRepository | Promise<WorkflowRepository>;
   getAIProvider: (
     bindings: AppBindings | undefined
   ) => AIProvider | Promise<AIProvider>;
   processTextAsset: (
     repository: AssetIngestRepository,
+    workflowRepository: WorkflowRepository,
     blobStore: BlobStore,
     vectorStore: VectorStore,
     aiProvider: AIProvider,
-    assetId: string
+    assetId: string,
+    options?: {
+      force?: boolean;
+    }
   ) => Promise<AssetDetail>;
   processUrlAsset: (
     repository: AssetIngestRepository,
@@ -68,10 +77,14 @@ interface IngestServiceDependencies {
   ) => Promise<AssetDetail>;
   getProcessTextAssetForced: (
     repository: AssetIngestRepository,
+    workflowRepository: WorkflowRepository,
     blobStore: BlobStore,
     vectorStore: VectorStore,
     aiProvider: AIProvider,
-    assetId: string
+    assetId: string,
+    options?: {
+      force?: boolean;
+    }
   ) => Promise<AssetDetail>;
   getProcessUrlAssetForced: (
     repository: AssetIngestRepository,
@@ -90,20 +103,30 @@ const defaultDependencies: IngestServiceDependencies = {
   getAssetRepository: getAssetIngestRepositoryFromBindings,
   getBlobStore: getBlobStoreFromBindings,
   getVectorStore: getVectorStoreFromBindings,
+  getWorkflowRepository: getWorkflowRepositoryFromBindings,
   getAIProvider: getAIProviderFromBindings,
   processTextAsset,
   processUrlAsset,
   processPdfAsset,
   getProcessTextAssetForced: (
     repository,
+    workflowRepository,
     blobStore,
     vectorStore,
     aiProvider,
     assetId
   ) =>
-    processTextAsset(repository, blobStore, vectorStore, aiProvider, assetId, {
-      force: true,
-    }),
+    processTextAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      assetId,
+      {
+        force: true,
+      }
+    ),
   getProcessUrlAssetForced: (repository, assetId) =>
     processUrlAsset(repository, assetId, { force: true }),
   getProcessPdfAssetForced: (
@@ -127,14 +150,17 @@ const reprocessExistingAsset = async (
   switch (asset.type) {
     case "note":
     case "chat": {
-      const [blobStore, vectorStore, aiProvider] = await Promise.all([
-        dependencies.getBlobStore(bindings),
-        dependencies.getVectorStore(bindings),
-        dependencies.getAIProvider(bindings),
-      ]);
+      const [blobStore, vectorStore, workflowRepository, aiProvider] =
+        await Promise.all([
+          dependencies.getBlobStore(bindings),
+          dependencies.getVectorStore(bindings),
+          dependencies.getWorkflowRepository(bindings),
+          dependencies.getAIProvider(bindings),
+        ]);
 
       return dependencies.getProcessTextAssetForced(
         repository,
+        workflowRepository,
         blobStore,
         vectorStore,
         aiProvider,
@@ -177,11 +203,14 @@ export const createIngestService = (
       const repository = await dependencies.getAssetRepository(bindings);
       const blobStore = await dependencies.getBlobStore(bindings);
       const vectorStore = await dependencies.getVectorStore(bindings);
+      const workflowRepository =
+        await dependencies.getWorkflowRepository(bindings);
       const aiProvider = await dependencies.getAIProvider(bindings);
       const createdAsset = await repository.createTextAsset(input);
 
       return dependencies.processTextAsset(
         repository,
+        workflowRepository,
         blobStore,
         vectorStore,
         aiProvider,
@@ -257,9 +286,8 @@ export const createIngestService = (
       input?: BackfillChunkContentInput
     ): Promise<BackfillChunkContentResult> {
       const repository = await dependencies.getAssetRepository(bindings);
-      const candidateAssetIds = await repository.listAssetIdsMissingChunkContent(
-        input?.limit ?? 50
-      );
+      const candidateAssetIds =
+        await repository.listAssetIdsMissingChunkContent(input?.limit ?? 50);
 
       if (input?.dryRun ?? false) {
         return {
@@ -277,7 +305,12 @@ export const createIngestService = (
         try {
           const asset = await repository.getAssetById(assetId);
 
-          await reprocessExistingAsset(dependencies, bindings, repository, asset);
+          await reprocessExistingAsset(
+            dependencies,
+            bindings,
+            repository,
+            asset
+          );
           processedAssetIds.push(assetId);
         } catch (error) {
           failedItems.push({

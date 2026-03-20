@@ -9,6 +9,7 @@ import type {
 } from "@/core/assets/ports";
 import type { BlobStore } from "@/core/blob/ports";
 import type { VectorStore } from "@/core/vector/ports";
+import type { WorkflowRepository } from "@/core/workflows/ports";
 import type {
   AssetChunkMatch,
   AssetDetail,
@@ -209,7 +210,9 @@ describe("ingest service", () => {
   const getAssetRepositoryMock = vi.fn();
   const getBlobStoreMock = vi.fn();
   const getVectorStoreMock = vi.fn();
+  const getWorkflowRepositoryMock = vi.fn();
   const getAIProviderMock = vi.fn();
+  const workflowRepositoryMock = {} as WorkflowRepository;
   const processTextAssetMock = vi.fn();
   const processUrlAssetMock = vi.fn();
   const processPdfAssetMock = vi.fn();
@@ -244,6 +247,9 @@ describe("ingest service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
       processUrlAsset: processUrlAssetMock,
@@ -262,9 +268,11 @@ describe("ingest service", () => {
     expect(getAssetRepositoryMock).toHaveBeenCalledWith(env);
     expect(getBlobStoreMock).toHaveBeenCalledWith(env);
     expect(getVectorStoreMock).toHaveBeenCalledWith(env);
+    expect(getWorkflowRepositoryMock).toHaveBeenCalledWith(env);
     expect(getAIProviderMock).toHaveBeenCalledWith(env);
     expect(processTextAssetMock).toHaveBeenCalledWith(
       repository,
+      workflowRepositoryMock,
       blobStoreMock,
       vectorStoreMock,
       aiProviderMock,
@@ -297,6 +305,9 @@ describe("ingest service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock.mockResolvedValue(processedAsset),
@@ -343,6 +354,9 @@ describe("ingest service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
       processUrlAsset: processUrlAssetMock,
@@ -386,6 +400,9 @@ describe("ingest service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock.mockResolvedValue(processedAsset),
@@ -440,6 +457,9 @@ describe("ingest service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
@@ -493,6 +513,9 @@ describe("ingest service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
@@ -507,6 +530,7 @@ describe("ingest service", () => {
 
     expect(processTextAssetForcedMock).toHaveBeenCalledWith(
       repository,
+      workflowRepositoryMock,
       blobStoreMock,
       vectorStoreMock,
       aiProviderMock,
@@ -546,6 +570,9 @@ describe("ingest service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
@@ -582,6 +609,9 @@ describe("ingest service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
@@ -605,6 +635,9 @@ describe("ingest service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
@@ -647,6 +680,9 @@ describe("ingest service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
@@ -664,6 +700,7 @@ describe("ingest service", () => {
 
     expect(processTextAssetForcedMock).toHaveBeenCalledWith(
       repository,
+      workflowRepositoryMock,
       blobStoreMock,
       vectorStoreMock,
       aiProviderMock,

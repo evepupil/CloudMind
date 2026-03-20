@@ -20,6 +20,12 @@ import type {
   VectorStore,
 } from "@/core/vector/ports";
 import type {
+  CreateAssetArtifactInput,
+  CreateWorkflowRunInput,
+  CreateWorkflowStepInput,
+  WorkflowRepository,
+} from "@/core/workflows/ports";
+import type {
   AssetChunkMatch,
   AssetDetail,
   AssetListQuery,
@@ -32,6 +38,11 @@ import {
   processTextAsset,
   processUrlAsset,
 } from "@/features/ingest/server/processor";
+import type {
+  AssetArtifactRecord,
+  WorkflowRunRecord,
+  WorkflowStepRecord,
+} from "@/features/workflows/model/types";
 
 const createJob = (
   overrides: Partial<IngestJobSummary> = {}
@@ -330,6 +341,186 @@ class InMemoryAIProvider implements AIProvider {
   }
 }
 
+class InMemoryWorkflowRepository implements WorkflowRepository {
+  public readonly runs: WorkflowRunRecord[] = [];
+
+  public readonly steps: WorkflowStepRecord[] = [];
+
+  public readonly artifacts: AssetArtifactRecord[] = [];
+
+  public async createWorkflowRun(
+    input: CreateWorkflowRunInput
+  ): Promise<{ id: string }> {
+    const id = `run-${this.runs.length + 1}`;
+
+    this.runs.push({
+      id,
+      assetId: input.assetId,
+      workflowType: input.workflowType,
+      triggerType: input.triggerType,
+      status: "queued",
+      currentStep: null,
+      errorMessage: null,
+      startedAt: null,
+      finishedAt: null,
+      createdAt: "2026-03-19T00:00:00.000Z",
+      updatedAt: "2026-03-19T00:00:00.000Z",
+    });
+
+    return { id };
+  }
+
+  public async createWorkflowSteps(
+    runId: string,
+    steps: CreateWorkflowStepInput[]
+  ): Promise<WorkflowStepRecord[]> {
+    const created = steps.map((step, index) => ({
+      id: `step-${this.steps.length + index + 1}`,
+      runId,
+      assetId: step.assetId,
+      stepKey: step.stepKey,
+      stepType: step.stepType,
+      status: "pending" as const,
+      attempt: 0,
+      inputJson: step.inputJson ?? null,
+      outputJson: null,
+      errorMessage: null,
+      startedAt: null,
+      finishedAt: null,
+      createdAt: "2026-03-19T00:00:00.000Z",
+      updatedAt: "2026-03-19T00:00:00.000Z",
+    }));
+
+    this.steps.push(...created);
+
+    return created.map((step) => structuredClone(step));
+  }
+
+  public async markWorkflowRunRunning(
+    runId: string,
+    currentStep: string
+  ): Promise<void> {
+    const run = this.getRun(runId);
+
+    run.status = "running";
+    run.currentStep = currentStep;
+    run.startedAt = "2026-03-19T00:01:00.000Z";
+    run.updatedAt = "2026-03-19T00:01:00.000Z";
+  }
+
+  public async completeWorkflowRun(runId: string): Promise<void> {
+    const run = this.getRun(runId);
+
+    run.status = "succeeded";
+    run.currentStep = null;
+    run.finishedAt = "2026-03-19T00:02:00.000Z";
+    run.updatedAt = "2026-03-19T00:02:00.000Z";
+  }
+
+  public async failWorkflowRun(
+    runId: string,
+    currentStep: string | null,
+    message: string
+  ): Promise<void> {
+    const run = this.getRun(runId);
+
+    run.status = "failed";
+    run.currentStep = currentStep;
+    run.errorMessage = message;
+    run.finishedAt = "2026-03-19T00:03:00.000Z";
+    run.updatedAt = "2026-03-19T00:03:00.000Z";
+  }
+
+  public async markWorkflowStepRunning(stepId: string): Promise<void> {
+    const step = this.getStep(stepId);
+
+    step.status = "running";
+    step.attempt = 1;
+    step.startedAt = "2026-03-19T00:01:00.000Z";
+    step.updatedAt = "2026-03-19T00:01:00.000Z";
+  }
+
+  public async completeWorkflowStep(
+    stepId: string,
+    outputJson?: string | null
+  ): Promise<void> {
+    const step = this.getStep(stepId);
+
+    step.status = "succeeded";
+    step.outputJson = outputJson ?? null;
+    step.finishedAt = "2026-03-19T00:02:00.000Z";
+    step.updatedAt = "2026-03-19T00:02:00.000Z";
+  }
+
+  public async skipWorkflowStep(
+    stepId: string,
+    outputJson?: string | null
+  ): Promise<void> {
+    const step = this.getStep(stepId);
+
+    step.status = "skipped";
+    step.outputJson = outputJson ?? null;
+    step.finishedAt = "2026-03-19T00:02:00.000Z";
+    step.updatedAt = "2026-03-19T00:02:00.000Z";
+  }
+
+  public async failWorkflowStep(
+    stepId: string,
+    message: string,
+    outputJson?: string | null
+  ): Promise<void> {
+    const step = this.getStep(stepId);
+
+    step.status = "failed";
+    step.outputJson = outputJson ?? null;
+    step.errorMessage = message;
+    step.finishedAt = "2026-03-19T00:03:00.000Z";
+    step.updatedAt = "2026-03-19T00:03:00.000Z";
+  }
+
+  public async createAssetArtifact(
+    input: CreateAssetArtifactInput
+  ): Promise<void> {
+    this.artifacts.push({
+      id: `artifact-${this.artifacts.length + 1}`,
+      assetId: input.assetId,
+      artifactType: input.artifactType,
+      version:
+        this.artifacts.filter(
+          (artifact) =>
+            artifact.assetId === input.assetId &&
+            artifact.artifactType === input.artifactType
+        ).length + 1,
+      storageKind: input.storageKind,
+      r2Key: input.r2Key ?? null,
+      contentText: input.contentText ?? null,
+      metadataJson: input.metadataJson ?? null,
+      createdByRunId: input.createdByRunId ?? null,
+      createdAt: "2026-03-19T00:01:00.000Z",
+    });
+  }
+
+  private getRun(id: string): WorkflowRunRecord {
+    const run = this.runs.find((item) => item.id === id);
+
+    if (!run) {
+      throw new Error(`Unexpected workflow run id "${id}".`);
+    }
+
+    return run;
+  }
+
+  private getStep(id: string): WorkflowStepRecord {
+    const step = this.steps.find((item) => item.id === id);
+
+    if (!step) {
+      throw new Error(`Unexpected workflow step id "${id}".`);
+    }
+
+    return step;
+  }
+}
+
 describe("processTextAsset", () => {
   it("promotes a pending text asset to ready and completes the latest job", async () => {
     const repository = new InMemoryAssetRepository(
@@ -341,9 +532,11 @@ describe("processTextAsset", () => {
     const blobStore = new InMemoryBlobStore();
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new InMemoryAIProvider();
+    const workflowRepository = new InMemoryWorkflowRepository();
 
     const result = await processTextAsset(
       repository,
+      workflowRepository,
       blobStore,
       vectorStore,
       aiProvider,
@@ -379,6 +572,37 @@ describe("processTextAsset", () => {
         }),
       ],
     ]);
+    expect(workflowRepository.runs).toEqual([
+      expect.objectContaining({
+        assetId: "asset-1",
+        workflowType: "note_ingest_v1",
+        triggerType: "ingest",
+        status: "succeeded",
+      }),
+    ]);
+    expect(workflowRepository.steps.map((step) => step.stepKey)).toEqual([
+      "clean_content",
+      "summarize",
+      "persist_content",
+      "chunk",
+      "embed",
+      "index",
+      "finalize",
+    ]);
+    expect(
+      workflowRepository.steps.every((step) => step.status === "succeeded")
+    ).toBe(true);
+    expect(workflowRepository.artifacts).toEqual([
+      expect.objectContaining({
+        artifactType: "summary",
+        storageKind: "inline",
+      }),
+      expect.objectContaining({
+        artifactType: "clean_content",
+        storageKind: "r2",
+        r2Key: "assets/asset-1/content/content.txt",
+      }),
+    ]);
   });
 
   it("marks the asset and job as failed when content is empty", async () => {
@@ -390,9 +614,11 @@ describe("processTextAsset", () => {
     const blobStore = new InMemoryBlobStore();
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new InMemoryAIProvider();
+    const workflowRepository = new InMemoryWorkflowRepository();
 
     const result = await processTextAsset(
       repository,
+      workflowRepository,
       blobStore,
       vectorStore,
       aiProvider,
@@ -408,6 +634,12 @@ describe("processTextAsset", () => {
     expect(result.jobs[0]?.errorMessage).toBe(
       "Asset content is empty and cannot be processed."
     );
+    expect(workflowRepository.runs[0]).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        currentStep: "clean_content",
+      })
+    );
   });
 
   it("returns early for assets that are already ready", async () => {
@@ -421,9 +653,11 @@ describe("processTextAsset", () => {
     const blobStore = new InMemoryBlobStore();
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new InMemoryAIProvider();
+    const workflowRepository = new InMemoryWorkflowRepository();
 
     const result = await processTextAsset(
       repository,
+      workflowRepository,
       blobStore,
       vectorStore,
       aiProvider,
@@ -433,6 +667,7 @@ describe("processTextAsset", () => {
     expect(result.status).toBe("ready");
     expect(result.summary).toBe("Existing summary");
     expect(result.jobs[0]?.status).toBe("succeeded");
+    expect(workflowRepository.runs).toEqual([]);
   });
 });
 
