@@ -1,4 +1,15 @@
+import { PageShell } from "@/features/layout/components/page-shell";
 import type { SearchResult } from "@/features/search/model/types";
+
+const starterQueries = [
+  "Cloudflare deployment decisions",
+  "What did I save about vector search?",
+  "Recent notes about frontend refactor",
+];
+
+const buildStarterHref = (query: string): string => {
+  return `/search?query=${encodeURIComponent(query)}`;
+};
 
 const formatDate = (value: string): string => {
   return new Date(value).toLocaleString("zh-CN", {
@@ -10,6 +21,34 @@ const formatScore = (value: number): string => {
   return value.toFixed(3);
 };
 
+const getScoreStyles = (value: number) => {
+  if (value >= 0.85) {
+    return {
+      color: "#116149",
+      bg: "#e7f7ef",
+      border: "rgba(17, 97, 73, 0.18)",
+      label: "Strong match",
+    };
+  }
+
+  if (value >= 0.65) {
+    return {
+      color: "#0b5cab",
+      bg: "#eaf4ff",
+      border: "rgba(94, 182, 255, 0.22)",
+      label: "Relevant",
+    };
+  }
+
+  return {
+    color: "#9a5a00",
+    bg: "#fff2de",
+    border: "rgba(244, 129, 32, 0.22)",
+    label: "Weak match",
+  };
+};
+
+// 这里把 Search 改成工作台内的检索面板，不再作为脱离壳层的单页。
 export const SearchPage = ({
   result,
   query,
@@ -17,178 +56,630 @@ export const SearchPage = ({
   result: SearchResult;
   query: string;
 }) => {
+  const trimmedQuery = query.trim();
+  const hasQuery = trimmedQuery.length > 0;
+  const hasResults = result.items.length > 0;
+
   return (
-    <main
-      style={{
-        maxWidth: "960px",
-        margin: "0 auto",
-        padding: "48px 24px 80px",
-        fontFamily:
-          'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      }}
+    <PageShell
+      title="Search your library"
+      subtitle="Run semantic retrieval across saved assets, inspect chunk-level matches, and decide what should be opened, compared, or asked next."
+      navigationKey="search"
+      actions={
+        <>
+          <a
+            href="/ask"
+            style={{
+              padding: "12px 16px",
+              borderRadius: "999px",
+              backgroundColor: "#ffffff",
+              color: "#16202d",
+              textDecoration: "none",
+              fontWeight: 700,
+              border: "1px solid rgba(21, 33, 51, 0.1)",
+            }}
+          >
+            Open Ask
+          </a>
+          <a
+            href="/capture"
+            style={{
+              padding: "12px 16px",
+              borderRadius: "999px",
+              backgroundColor: "#fff1dd",
+              color: "#b55d0a",
+              textDecoration: "none",
+              fontWeight: 700,
+              border: "1px solid rgba(244, 129, 32, 0.22)",
+            }}
+          >
+            Add sources
+          </a>
+        </>
+      }
     >
-      <header style={{ marginBottom: "32px" }}>
-        <p
-          style={{
-            margin: 0,
-            color: "#4f46e5",
-            fontSize: "14px",
-            fontWeight: 700,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-          }}
-        >
-          CloudMind
-        </p>
-        <h1 style={{ margin: "12px 0", fontSize: "40px", lineHeight: 1.1 }}>
-          Search
-        </h1>
-        <p style={{ margin: 0, color: "#475569", fontSize: "18px" }}>
-          先用语义向量召回 chunk，再回填对应资产信息。
-        </p>
-      </header>
-      <form
-        method="get"
-        action="/search"
+      <section
         style={{
           display: "grid",
-          gap: "12px",
-          marginBottom: "24px",
-          padding: "24px",
-          borderRadius: "20px",
-          border: "1px solid #e2e8f0",
-          background:
-            "linear-gradient(135deg, #f8fafc 0%, #eff6ff 55%, #fefce8 100%)",
+          gridTemplateColumns: "minmax(0, 1.55fr) minmax(300px, 0.82fr)",
+          gap: "18px",
         }}
       >
-        <label style={{ display: "grid", gap: "8px" }}>
-          <span style={{ fontWeight: 700 }}>Semantic Query</span>
-          <input
-            name="query"
-            type="search"
-            defaultValue={query}
-            placeholder="Search by meaning across notes and PDFs"
-            style={{
-              width: "100%",
-              padding: "12px 14px",
-              borderRadius: "12px",
-              border: "1px solid #cbd5e1",
-              fontSize: "15px",
-            }}
-          />
-        </label>
-        <button
-          type="submit"
-          style={{
-            justifySelf: "start",
-            padding: "12px 18px",
-            borderRadius: "999px",
-            border: "none",
-            backgroundColor: "#0f172a",
-            color: "#ffffff",
-            fontSize: "14px",
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          Search
-        </button>
-      </form>
-
-      <section>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "baseline",
-            gap: "12px",
-            marginBottom: "16px",
-          }}
-        >
-          <h2 style={{ margin: 0, fontSize: "24px" }}>Results</h2>
-          <span style={{ color: "#64748b", fontSize: "14px" }}>
-            {result.pagination.total} chunk matches
-          </span>
-        </div>
-        {query.length === 0 ? (
+        <div style={{ display: "grid", gap: "16px" }}>
           <article
             style={{
               padding: "24px",
-              borderRadius: "18px",
-              backgroundColor: "#f8fafc",
-              border: "1px dashed #cbd5e1",
-              color: "#475569",
+              borderRadius: "30px",
+              border: "1px solid rgba(21, 33, 51, 0.08)",
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(255,250,245,0.96) 100%)",
+              boxShadow: "0 24px 58px rgba(28, 39, 56, 0.06)",
             }}
           >
-            输入问题或主题后开始搜索。
-          </article>
-        ) : result.items.length === 0 ? (
-          <article
-            style={{
-              padding: "24px",
-              borderRadius: "18px",
-              backgroundColor: "#f8fafc",
-              border: "1px dashed #cbd5e1",
-              color: "#475569",
-            }}
-          >
-            没有找到匹配的语义结果。
-          </article>
-        ) : (
-          <div style={{ display: "grid", gap: "14px" }}>
-            {result.items.map((item) => (
-              <article
-                key={item.chunk.id}
-                style={{
-                  padding: "20px",
-                  borderRadius: "18px",
-                  border: "1px solid #e2e8f0",
-                  backgroundColor: "#ffffff",
-                }}
-              >
-                <div
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: "14px",
+                flexWrap: "wrap",
+                marginBottom: "14px",
+              }}
+            >
+              <div>
+                <p
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: "12px",
-                    alignItems: "baseline",
+                    margin: "0 0 6px",
+                    color: "#f48120",
+                    fontSize: "11px",
+                    fontWeight: 800,
+                    letterSpacing: "0.16em",
+                    textTransform: "uppercase",
                   }}
                 >
-                  <a
-                    href={`/assets/${item.chunk.asset.id}`}
+                  Semantic retrieval
+                </p>
+                <h2
+                  style={{
+                    margin: 0,
+                    color: "#16202d",
+                    fontSize: "28px",
+                    fontWeight: 800,
+                    letterSpacing: "-0.03em",
+                  }}
+                >
+                  Query the knowledge graph-in-progress
+                </h2>
+              </div>
+              <div
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: "16px",
+                  backgroundColor: "#f6f7f9",
+                  border: "1px solid rgba(21, 33, 51, 0.08)",
+                  color: "#566375",
+                  fontSize: "13px",
+                }}
+              >
+                {result.pagination.total} chunk matches
+              </div>
+            </div>
+
+            <form
+              method="get"
+              action="/search"
+              style={{
+                display: "grid",
+                gap: "12px",
+              }}
+            >
+              <label style={{ display: "grid", gap: "8px" }}>
+                <span
+                  style={{
+                    color: "#16202d",
+                    fontSize: "14px",
+                    fontWeight: 700,
+                  }}
+                >
+                  Semantic query
+                </span>
+                <input
+                  name="query"
+                  type="search"
+                  defaultValue={query}
+                  placeholder="Search across notes, PDFs, and saved URLs by meaning"
+                  style={{
+                    width: "100%",
+                    padding: "14px 16px",
+                    borderRadius: "18px",
+                    border: "1px solid rgba(21, 33, 51, 0.12)",
+                    backgroundColor: "#fffdfa",
+                    color: "#16202d",
+                    fontSize: "15px",
+                  }}
+                />
+              </label>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button
+                    type="submit"
                     style={{
-                      color: "#0f172a",
-                      textDecoration: "none",
-                      fontSize: "18px",
+                      padding: "12px 18px",
+                      borderRadius: "999px",
+                      border: "none",
+                      backgroundColor: "#16202d",
+                      color: "#ffffff",
+                      fontSize: "14px",
                       fontWeight: 700,
+                      cursor: "pointer",
                     }}
                   >
-                    {item.chunk.asset.title}
-                  </a>
+                    Search library
+                  </button>
                   <span
                     style={{
-                      color: "#0f172a",
+                      padding: "12px 14px",
+                      borderRadius: "999px",
+                      backgroundColor: "#eef6ff",
+                      color: "#0b5cab",
+                      border: "1px solid rgba(94, 182, 255, 0.22)",
                       fontSize: "13px",
                       fontWeight: 700,
                     }}
                   >
-                    score {formatScore(item.score)}
+                    Chunk-first retrieval
                   </span>
                 </div>
-                <div style={{ marginTop: "6px", color: "#64748b" }}>
-                  {item.chunk.asset.type} | chunk #{item.chunk.chunkIndex} |{" "}
-                  {formatDate(item.chunk.asset.createdAt)}
-                </div>
-                <p style={{ color: "#334155" }}>{item.chunk.textPreview}</p>
-                <div style={{ color: "#64748b", fontSize: "14px" }}>
-                  {item.chunk.asset.sourceUrl ??
-                    `Asset ID: ${item.chunk.asset.id}`}
-                </div>
+                <span
+                  style={{
+                    color: "#6b7685",
+                    fontSize: "13px",
+                  }}
+                >
+                  Page refresh for now. Async search can come next.
+                </span>
+              </div>
+            </form>
+
+            {!hasQuery ? (
+              <div
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  flexWrap: "wrap",
+                  marginTop: "16px",
+                }}
+              >
+                {starterQueries.map((item) => (
+                  <a
+                    key={item}
+                    href={buildStarterHref(item)}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: "999px",
+                      backgroundColor: "#f5f7fa",
+                      border: "1px solid rgba(21, 33, 51, 0.08)",
+                      color: "#566375",
+                      fontSize: "13px",
+                      textDecoration: "none",
+                    }}
+                  >
+                    {item}
+                  </a>
+                ))}
+              </div>
+            ) : null}
+          </article>
+
+          <section
+            style={{
+              padding: "24px",
+              borderRadius: "30px",
+              backgroundColor: "#fffdfa",
+              border: "1px solid rgba(21, 33, 51, 0.08)",
+              boxShadow: "0 22px 52px rgba(28, 39, 56, 0.06)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                gap: "12px",
+                marginBottom: "16px",
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <p
+                  style={{
+                    margin: "0 0 6px",
+                    color: "#f48120",
+                    fontSize: "11px",
+                    fontWeight: 800,
+                    letterSpacing: "0.16em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Results
+                </p>
+                <h2
+                  style={{
+                    margin: 0,
+                    fontSize: "28px",
+                    color: "#16202d",
+                    fontWeight: 800,
+                    letterSpacing: "-0.03em",
+                  }}
+                >
+                  Retrieval output
+                </h2>
+              </div>
+              <span
+                style={{
+                  color: "#566375",
+                  fontSize: "13px",
+                }}
+              >
+                Page {result.pagination.page} /{" "}
+                {Math.max(result.pagination.totalPages, 1)}
+              </span>
+            </div>
+
+            {!hasQuery ? (
+              <article
+                style={{
+                  padding: "18px",
+                  borderRadius: "20px",
+                  backgroundColor: "#ffffff",
+                  border: "1px dashed rgba(21, 33, 51, 0.14)",
+                  color: "#566375",
+                  lineHeight: 1.8,
+                }}
+              >
+                输入一个主题、问题或技术决策方向，Search 会先召回最相关的
+                chunk，再把它们还原成可查看的资产来源。
               </article>
-            ))}
-          </div>
-        )}
+            ) : !hasResults ? (
+              <article
+                style={{
+                  padding: "18px",
+                  borderRadius: "20px",
+                  backgroundColor: "#ffffff",
+                  border: "1px dashed rgba(21, 33, 51, 0.14)",
+                  color: "#566375",
+                  lineHeight: 1.8,
+                }}
+              >
+                没有找到匹配结果。可以换一种表达方式，或者先去 Capture
+                增加上下文资产再回来搜索。
+              </article>
+            ) : (
+              <div style={{ display: "grid", gap: "12px" }}>
+                {result.items.map((item, index) => {
+                  const scoreStyle = getScoreStyles(item.score);
+
+                  return (
+                    <article
+                      key={item.chunk.id}
+                      style={{
+                        padding: "18px 18px 20px",
+                        borderRadius: "22px",
+                        border: "1px solid rgba(21, 33, 51, 0.08)",
+                        backgroundColor: "#ffffff",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          gap: "14px",
+                          flexWrap: "wrap",
+                          marginBottom: "10px",
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "8px",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                padding: "5px 8px",
+                                borderRadius: "999px",
+                                backgroundColor: "#f3f5f8",
+                                color: "#5f6b7d",
+                                fontSize: "11px",
+                                fontWeight: 800,
+                                letterSpacing: "0.08em",
+                                textTransform: "uppercase",
+                              }}
+                            >
+                              {item.chunk.asset.type}
+                            </span>
+                            <span
+                              style={{
+                                padding: "5px 8px",
+                                borderRadius: "999px",
+                                backgroundColor: scoreStyle.bg,
+                                color: scoreStyle.color,
+                                border: `1px solid ${scoreStyle.border}`,
+                                fontSize: "11px",
+                                fontWeight: 800,
+                                letterSpacing: "0.08em",
+                                textTransform: "uppercase",
+                              }}
+                            >
+                              {scoreStyle.label}
+                            </span>
+                          </div>
+                          <a
+                            href={`/assets/${item.chunk.asset.id}`}
+                            style={{
+                              color: "#16202d",
+                              textDecoration: "none",
+                              fontSize: "20px",
+                              fontWeight: 800,
+                            }}
+                          >
+                            {item.chunk.asset.title}
+                          </a>
+                        </div>
+
+                        <div
+                          style={{
+                            display: "grid",
+                            gap: "6px",
+                            minWidth: "142px",
+                            justifyItems: "end",
+                          }}
+                        >
+                          <span
+                            style={{
+                              color: "#16202d",
+                              fontSize: "16px",
+                              fontWeight: 800,
+                            }}
+                          >
+                            {formatScore(item.score)}
+                          </span>
+                          <span
+                            style={{
+                              color: "#6b7685",
+                              fontSize: "12px",
+                            }}
+                          >
+                            Match #{index + 1}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "10px",
+                          flexWrap: "wrap",
+                          marginBottom: "10px",
+                          color: "#6b7685",
+                          fontSize: "13px",
+                        }}
+                      >
+                        <span>Chunk #{item.chunk.chunkIndex}</span>
+                        <span>{formatDate(item.chunk.asset.createdAt)}</span>
+                        <span>
+                          {item.chunk.asset.sourceUrl ??
+                            `Asset ID: ${item.chunk.asset.id}`}
+                        </span>
+                      </div>
+
+                      <p
+                        style={{
+                          margin: "0 0 14px",
+                          color: "#3b4757",
+                          lineHeight: 1.82,
+                          fontSize: "15px",
+                        }}
+                      >
+                        {item.chunk.textPreview}
+                      </p>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "10px",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <a
+                          href={`/assets/${item.chunk.asset.id}`}
+                          style={{
+                            padding: "10px 12px",
+                            borderRadius: "14px",
+                            backgroundColor: "#16202d",
+                            color: "#ffffff",
+                            textDecoration: "none",
+                            fontSize: "13px",
+                            fontWeight: 700,
+                          }}
+                        >
+                          Open asset
+                        </a>
+                        <a
+                          href={`/ask?question=${encodeURIComponent(
+                            `Based on ${item.chunk.asset.title}, ${trimmedQuery}`
+                          )}`}
+                          style={{
+                            padding: "10px 12px",
+                            borderRadius: "14px",
+                            backgroundColor: "#fff1dd",
+                            color: "#b55d0a",
+                            textDecoration: "none",
+                            fontSize: "13px",
+                            fontWeight: 700,
+                            border: "1px solid rgba(244, 129, 32, 0.22)",
+                          }}
+                        >
+                          Ask from result
+                        </a>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <aside style={{ display: "grid", gap: "16px" }}>
+          <article
+            style={{
+              padding: "20px",
+              borderRadius: "28px",
+              border: "1px solid rgba(21, 33, 51, 0.08)",
+              backgroundColor: "#fffdfa",
+              boxShadow: "0 20px 46px rgba(28, 39, 56, 0.05)",
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 10px",
+                color: "#f48120",
+                fontSize: "11px",
+                fontWeight: 800,
+                letterSpacing: "0.16em",
+                textTransform: "uppercase",
+              }}
+            >
+              Search telemetry
+            </p>
+            <div style={{ display: "grid", gap: "10px" }}>
+              {[
+                {
+                  label: "Query state",
+                  value: hasQuery ? "Active" : "Idle",
+                },
+                {
+                  label: "Total matches",
+                  value: String(result.pagination.total),
+                },
+                {
+                  label: "Page size",
+                  value: String(result.pagination.pageSize),
+                },
+                {
+                  label: "Top page",
+                  value: String(result.pagination.page),
+                },
+              ].map((item, index) => (
+                <div
+                  key={item.label}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    paddingTop: index === 0 ? "0" : "10px",
+                    borderTop:
+                      index === 0 ? "none" : "1px solid rgba(21, 33, 51, 0.08)",
+                    color: "#566375",
+                    fontSize: "13px",
+                  }}
+                >
+                  <span>{item.label}</span>
+                  <span
+                    style={{
+                      color: "#16202d",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {item.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article
+            style={{
+              padding: "20px",
+              borderRadius: "28px",
+              border: "1px solid rgba(21, 33, 51, 0.08)",
+              background:
+                "linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(238,246,255,0.96) 100%)",
+              boxShadow: "0 20px 46px rgba(28, 39, 56, 0.05)",
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 10px",
+                color: "#0b5cab",
+                fontSize: "11px",
+                fontWeight: 800,
+                letterSpacing: "0.16em",
+                textTransform: "uppercase",
+              }}
+            >
+              Search guide
+            </p>
+            <div style={{ display: "grid", gap: "12px" }}>
+              {[
+                "Search works on chunks, not whole documents, so ask about concepts rather than titles only.",
+                "If a result looks close but incomplete, jump into Ask and turn that query into a source-aware follow-up.",
+                "Weak or empty results usually mean the library lacks enough processed context, not necessarily that retrieval is wrong.",
+              ].map((tip, index) => (
+                <div
+                  key={tip}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "26px minmax(0, 1fr)",
+                    gap: "12px",
+                    alignItems: "start",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "26px",
+                      height: "26px",
+                      borderRadius: "999px",
+                      backgroundColor: "#ffffff",
+                      border: "1px solid rgba(94, 182, 255, 0.22)",
+                      color: "#0b5cab",
+                      display: "grid",
+                      placeItems: "center",
+                      fontSize: "12px",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {index + 1}
+                  </span>
+                  <p
+                    style={{
+                      margin: "4px 0 0",
+                      color: "#3b4757",
+                      lineHeight: 1.75,
+                    }}
+                  >
+                    {tip}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </article>
+        </aside>
       </section>
-    </main>
+    </PageShell>
   );
 };
