@@ -70,6 +70,7 @@ interface IngestServiceDependencies {
   ) => Promise<AssetDetail>;
   processPdfAsset: (
     repository: AssetIngestRepository,
+    workflowRepository: WorkflowRepository,
     blobStore: BlobStore,
     vectorStore: VectorStore,
     aiProvider: AIProvider,
@@ -92,6 +93,7 @@ interface IngestServiceDependencies {
   ) => Promise<AssetDetail>;
   getProcessPdfAssetForced: (
     repository: AssetIngestRepository,
+    workflowRepository: WorkflowRepository,
     blobStore: BlobStore,
     vectorStore: VectorStore,
     aiProvider: AIProvider,
@@ -131,14 +133,23 @@ const defaultDependencies: IngestServiceDependencies = {
     processUrlAsset(repository, assetId, { force: true }),
   getProcessPdfAssetForced: (
     repository,
+    workflowRepository,
     blobStore,
     vectorStore,
     aiProvider,
     assetId
   ) =>
-    processPdfAsset(repository, blobStore, vectorStore, aiProvider, assetId, {
-      force: true,
-    }),
+    processPdfAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      assetId,
+      {
+        force: true,
+      }
+    ),
 };
 
 const reprocessExistingAsset = async (
@@ -170,14 +181,17 @@ const reprocessExistingAsset = async (
     case "url":
       return dependencies.getProcessUrlAssetForced(repository, asset.id);
     case "pdf": {
-      const [blobStore, vectorStore, aiProvider] = await Promise.all([
-        dependencies.getBlobStore(bindings),
-        dependencies.getVectorStore(bindings),
-        dependencies.getAIProvider(bindings),
-      ]);
+      const [blobStore, vectorStore, workflowRepository, aiProvider] =
+        await Promise.all([
+          dependencies.getBlobStore(bindings),
+          dependencies.getVectorStore(bindings),
+          dependencies.getWorkflowRepository(bindings),
+          dependencies.getAIProvider(bindings),
+        ]);
 
       return dependencies.getProcessPdfAssetForced(
         repository,
+        workflowRepository,
         blobStore,
         vectorStore,
         aiProvider,
@@ -238,6 +252,8 @@ export const createIngestService = (
       const repository = await dependencies.getAssetRepository(bindings);
       const blobStore = await dependencies.getBlobStore(bindings);
       const vectorStore = await dependencies.getVectorStore(bindings);
+      const workflowRepository =
+        await dependencies.getWorkflowRepository(bindings);
       const aiProvider = await dependencies.getAIProvider(bindings);
       const assetId = crypto.randomUUID();
       const rawR2Key = createRawAssetBlobKey(assetId, input.file.name);
@@ -264,6 +280,7 @@ export const createIngestService = (
 
       return dependencies.processPdfAsset(
         repository,
+        workflowRepository,
         blobStore,
         vectorStore,
         aiProvider,

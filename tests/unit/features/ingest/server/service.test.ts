@@ -479,6 +479,7 @@ describe("ingest service", () => {
 
     expect(getBlobStoreMock).toHaveBeenCalledWith(env);
     expect(getVectorStoreMock).toHaveBeenCalledWith(env);
+    expect(getWorkflowRepositoryMock).toHaveBeenCalledWith(env);
     expect(getAIProviderMock).toHaveBeenCalledWith(env);
     expect(blobStoreMock.put).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -489,6 +490,7 @@ describe("ingest service", () => {
     );
     expect(processPdfAssetMock).toHaveBeenCalledWith(
       repository,
+      workflowRepositoryMock,
       blobStoreMock,
       vectorStoreMock,
       aiProviderMock,
@@ -587,9 +589,11 @@ describe("ingest service", () => {
 
     expect(getBlobStoreMock).toHaveBeenCalledWith(env);
     expect(getVectorStoreMock).toHaveBeenCalledWith(env);
+    expect(getWorkflowRepositoryMock).toHaveBeenCalledWith(env);
     expect(getAIProviderMock).toHaveBeenCalledWith(env);
     expect(processPdfAssetForcedMock).toHaveBeenCalledWith(
       repository,
+      workflowRepositoryMock,
       blobStoreMock,
       vectorStoreMock,
       aiProviderMock,

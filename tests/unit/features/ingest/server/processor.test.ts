@@ -716,9 +716,11 @@ describe("processPdfAsset", () => {
     ]);
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new InMemoryAIProvider();
+    const workflowRepository = new InMemoryWorkflowRepository();
 
     const result = await processPdfAsset(
       repository,
+      workflowRepository,
       blobStore,
       vectorStore,
       aiProvider,
@@ -746,6 +748,38 @@ describe("processPdfAsset", () => {
         }),
       ],
     ]);
+    expect(workflowRepository.runs).toEqual([
+      expect.objectContaining({
+        assetId: "asset-pdf-1",
+        workflowType: "pdf_ingest_v1",
+        triggerType: "ingest",
+        status: "succeeded",
+      }),
+    ]);
+    expect(workflowRepository.steps.map((step) => step.stepKey)).toEqual([
+      "load_source",
+      "clean_content",
+      "summarize",
+      "persist_content",
+      "chunk",
+      "embed",
+      "index",
+      "finalize",
+    ]);
+    expect(
+      workflowRepository.steps.every((step) => step.status === "succeeded")
+    ).toBe(true);
+    expect(workflowRepository.artifacts).toEqual([
+      expect.objectContaining({
+        artifactType: "summary",
+        storageKind: "inline",
+      }),
+      expect.objectContaining({
+        artifactType: "clean_content",
+        storageKind: "r2",
+        r2Key: "assets/asset-pdf-1/content/content.txt",
+      }),
+    ]);
   });
 
   it("marks the asset as failed when the R2 object is missing", async () => {
@@ -761,9 +795,11 @@ describe("processPdfAsset", () => {
     const blobStore = new InMemoryBlobStore();
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new InMemoryAIProvider();
+    const workflowRepository = new InMemoryWorkflowRepository();
 
     const result = await processPdfAsset(
       repository,
+      workflowRepository,
       blobStore,
       vectorStore,
       aiProvider,
@@ -775,6 +811,13 @@ describe("processPdfAsset", () => {
       "Asset file was not found in blob storage."
     );
     expect(result.jobs[0]?.status).toBe("failed");
+    expect(workflowRepository.runs[0]).toEqual(
+      expect.objectContaining({
+        workflowType: "pdf_ingest_v1",
+        status: "failed",
+        currentStep: "load_source",
+      })
+    );
   });
 
   it("marks the asset as failed when the uploaded file is not a PDF", async () => {
@@ -797,9 +840,11 @@ describe("processPdfAsset", () => {
     ]);
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new InMemoryAIProvider();
+    const workflowRepository = new InMemoryWorkflowRepository();
 
     const result = await processPdfAsset(
       repository,
+      workflowRepository,
       blobStore,
       vectorStore,
       aiProvider,
@@ -809,6 +854,12 @@ describe("processPdfAsset", () => {
     expect(result.status).toBe("failed");
     expect(result.errorMessage).toBe("Uploaded file is not a valid PDF.");
     expect(result.jobs[0]?.status).toBe("failed");
+    expect(workflowRepository.runs[0]).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        currentStep: "load_source",
+      })
+    );
   });
 
   it("marks the asset as failed when PDF text extraction fails", async () => {
@@ -831,9 +882,11 @@ describe("processPdfAsset", () => {
     ]);
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new InMemoryAIProvider();
+    const workflowRepository = new InMemoryWorkflowRepository();
 
     const result = await processPdfAsset(
       repository,
+      workflowRepository,
       blobStore,
       vectorStore,
       aiProvider,
@@ -843,5 +896,11 @@ describe("processPdfAsset", () => {
     expect(result.status).toBe("failed");
     expect(result.errorMessage).toBe("Failed to extract text from PDF.");
     expect(result.jobs[0]?.status).toBe("failed");
+    expect(workflowRepository.runs[0]).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        currentStep: "load_source",
+      })
+    );
   });
 });

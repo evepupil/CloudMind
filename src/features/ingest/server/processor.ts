@@ -7,15 +7,8 @@ import type { BlobStore } from "@/core/blob/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
-import {
-  createChunkEmbeddings,
-  createTextSummary,
-  indexPreparedChunks,
-  persistProcessedContent,
-} from "@/features/ingest/server/content-processing";
 import { runNoteIngestWorkflow } from "@/features/workflows/server/note-ingest-workflow";
-
-import { extractPdfText } from "./pdf-extractor";
+import { runPdfIngestWorkflow } from "@/features/workflows/server/pdf-ingest-workflow";
 
 const getLatestJob = (asset: AssetDetail) => {
   return asset.jobs[0] ?? null;
@@ -95,13 +88,7 @@ const runAssetProcessing = async (
   }
 };
 
-const decodePdfSignature = (body: ArrayBuffer): string => {
-  const signatureBytes = body.slice(0, 4);
-
-  return new TextDecoder().decode(signatureBytes);
-};
-
-// 这里实现最小处理器，让采集和重处理共享统一状态流转。
+// 这里实现最小处理器，让采集和重处理共用统一状态流转。
 export const processTextAsset = async (
   repository: AssetIngestRepository,
   workflowRepository: WorkflowRepository,
@@ -152,6 +139,7 @@ export const processUrlAsset = async (
 
 export const processPdfAsset = async (
   repository: AssetIngestRepository,
+  workflowRepository: WorkflowRepository,
   blobStore: BlobStore,
   vectorStore: VectorStore,
   aiProvider: AIProvider,
@@ -160,65 +148,14 @@ export const processPdfAsset = async (
     force?: boolean;
   }
 ): Promise<AssetDetail> => {
-  return runAssetProcessing(
+  return runPdfIngestWorkflow(
     repository,
+    workflowRepository,
+    blobStore,
+    vectorStore,
+    aiProvider,
     assetId,
-    async (asset) => {
-      const rawR2Key = asset.rawR2Key?.trim();
-
-      if (!rawR2Key) {
-        throw new Error("Asset raw file key is missing.");
-      }
-
-      const object = await blobStore.get(rawR2Key);
-
-      if (!object) {
-        throw new Error("Asset file was not found in blob storage.");
-      }
-
-      if (object.size === 0) {
-        throw new Error("Asset file is empty and cannot be processed.");
-      }
-
-      if (decodePdfSignature(object.body) !== "%PDF") {
-        throw new Error("Uploaded file is not a valid PDF.");
-      }
-
-      let extractedText: Awaited<ReturnType<typeof extractPdfText>>;
-
-      try {
-        extractedText = await extractPdfText(object.body);
-      } catch {
-        throw new Error("Failed to extract text from PDF.");
-      }
-
-      if (!extractedText.text) {
-        throw new Error("No extractable text was found in the PDF.");
-      }
-
-      const persistedContent = await persistProcessedContent(
-        blobStore,
-        asset.id,
-        extractedText.text
-      );
-      const embeddings = await createChunkEmbeddings(
-        aiProvider,
-        persistedContent.chunks
-      );
-      const indexedChunks = await indexPreparedChunks(
-        vectorStore,
-        asset,
-        persistedContent.chunks,
-        embeddings
-      );
-
-      return {
-        summary: createTextSummary(extractedText.text),
-        contentText: persistedContent.contentText,
-        contentR2Key: persistedContent.contentR2Key,
-        chunks: indexedChunks,
-      };
-    },
+    options?.force ? "reprocess" : "ingest",
     options
   );
 };
