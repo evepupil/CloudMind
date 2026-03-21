@@ -7,13 +7,15 @@ const assetArtifactTypeValues = [
   "clean_content",
   "summary",
   "classification",
+  "descriptor",
+  "access_policy",
   "entities",
   "image_caption",
   "document_outline",
 ] as const;
 const assetArtifactStorageKindValues = ["inline", "r2"] as const;
 
-// 这里沉淀资产派生结果，避免把摘要、分类、图像描述等全部堆进 assets 主表。
+// 这里沉淀资产派生结果，并补充目录卡片与访问策略产物类型。
 export const assetArtifacts = sqliteTable(
   "asset_artifacts",
   {

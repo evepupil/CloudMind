@@ -1,4 +1,4 @@
-// 这里集中定义 workflow 领域类型，供运行时、仓储和后续队列执行统一复用。
+// 这里集中定义 workflow 领域类型，供运行时、存储和后续队列执行统一复用。
 export type WorkflowType =
   | "note_ingest_v1"
   | "pdf_ingest_v1"
@@ -32,6 +32,8 @@ export type WorkflowStepType =
   | "persist_content"
   | "summarize"
   | "classify"
+  | "derive_descriptor"
+  | "derive_access_policy"
   | "chunk"
   | "embed"
   | "index"
@@ -43,6 +45,8 @@ export type AssetArtifactType =
   | "clean_content"
   | "summary"
   | "classification"
+  | "descriptor"
+  | "access_policy"
   | "entities"
   | "image_caption"
   | "document_outline";

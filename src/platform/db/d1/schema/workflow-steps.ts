@@ -16,6 +16,8 @@ const workflowStepTypeValues = [
   "persist_content",
   "summarize",
   "classify",
+  "derive_descriptor",
+  "derive_access_policy",
   "chunk",
   "embed",
   "index",
@@ -24,7 +26,7 @@ const workflowStepTypeValues = [
   "extract_entities",
 ] as const;
 
-// 这里记录 workflow 每一步的执行状态，后续可支持单步重试和队列恢复。
+// 这里记录 workflow 每一步的执行状态，并补充目录与策略派生步骤。
 export const workflowSteps = sqliteTable(
   "workflow_steps",
   {
