@@ -394,6 +394,7 @@ describe("mcp routes", () => {
         page: 1,
         pageSize: 5,
         profile: "coding",
+        allowFallback: false,
       },
     });
     const askCall = await client.callTool({
@@ -402,6 +403,7 @@ describe("mcp routes", () => {
         question: "How should I debug the vector write bug?",
         topK: 3,
         profile: "coding",
+        allowFallback: false,
       },
     });
 
@@ -409,18 +411,22 @@ describe("mcp routes", () => {
       ...searchResult,
       appliedPolicy: {
         profile: "coding",
+        preferredDomains: ["engineering", "research"],
         boostedDomains: ["engineering", "research"],
         suppressedDomains: ["personal", "finance", "health"],
         includeSummaryOnly: true,
+        allowFallback: false,
       },
     });
     expect(getStructuredContent(askCall)).toEqual({
       ...askResult,
       appliedPolicy: {
         profile: "coding",
+        preferredDomains: ["engineering", "research"],
         boostedDomains: ["engineering", "research"],
         suppressedDomains: ["personal", "finance", "health"],
         includeSummaryOnly: true,
+        allowFallback: false,
       },
     });
     expect(searchService.searchAssetsForContext).toHaveBeenCalledWith(
@@ -430,13 +436,16 @@ describe("mcp routes", () => {
         page: 1,
         pageSize: 5,
         profile: "coding",
+        allowFallback: false,
       },
       {
         profile: "coding",
+        preferredDomains: ["engineering", "research"],
         boostedDomains: ["engineering", "research"],
         suppressedDomains: ["personal", "finance", "health"],
         includeSummaryOnly: true,
         overfetchMultiplier: 3,
+        allowFallback: false,
       }
     );
     expect(chatService.askLibraryForContext).toHaveBeenCalledWith(
@@ -445,13 +454,16 @@ describe("mcp routes", () => {
         question: "How should I debug the vector write bug?",
         topK: 3,
         profile: "coding",
+        allowFallback: false,
       },
       {
         profile: "coding",
+        preferredDomains: ["engineering", "research"],
         boostedDomains: ["engineering", "research"],
         suppressedDomains: ["personal", "finance", "health"],
         includeSummaryOnly: true,
         overfetchMultiplier: 3,
+        allowFallback: false,
       }
     );
   });

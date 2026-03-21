@@ -36,3 +36,22 @@ export const applyContextPolicyScore = (
 
   return baseScore + domainWeight + priorityWeight;
 };
+
+export const matchesContextPolicyAsset = (
+  asset: AssetSummary,
+  policy: ContextRetrievalPolicy | undefined
+): boolean => {
+  if (!policy) {
+    return true;
+  }
+
+  if (policy.allowFallback) {
+    return true;
+  }
+
+  if (policy.preferredDomains.length === 0) {
+    return true;
+  }
+
+  return policy.preferredDomains.includes(asset.domain);
+};

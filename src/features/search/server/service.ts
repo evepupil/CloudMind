@@ -11,7 +11,10 @@ import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provi
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 
-import { applyContextPolicyScore } from "./context-policy";
+import {
+  applyContextPolicyScore,
+  matchesContextPolicyAsset,
+} from "./context-policy";
 import { scoreAssetSummaryMatch } from "./summary-scoring";
 
 const SEARCHABLE_AI_VISIBILITY = ["allow"] as const;
@@ -112,6 +115,9 @@ export const createSearchService = (
           asset: match.asset,
           summary: match.summary,
         }))
+        .filter((match) =>
+          matchesContextPolicyAsset(match.asset, contextPolicy)
+        )
         .sort((left, right) => right.score - left.score);
       const pageItems = orderedSummaryMatches.slice(offset, offset + pageSize);
 
@@ -163,6 +169,9 @@ export const createSearchService = (
           chunk,
         };
       })
+      .filter((item) =>
+        item ? matchesContextPolicyAsset(item.chunk.asset, contextPolicy) : false
+      )
       .filter((item): item is NonNullable<typeof item> => item !== null);
     const orderedSummaryMatches = summaryMatches
       .map((match) => ({
@@ -175,6 +184,7 @@ export const createSearchService = (
         asset: match.asset,
         summary: match.summary,
       }))
+      .filter((match) => matchesContextPolicyAsset(match.asset, contextPolicy))
       .sort((left, right) => right.score - left.score);
     const orderedMatches = [...orderedChunkMatches, ...orderedSummaryMatches]
       .sort((left, right) => right.score - left.score);

@@ -67,6 +67,7 @@ const searchAssetsInputSchema = z.object({
 
 const searchAssetsForContextInputSchema = searchAssetsInputSchema.extend({
   profile: z.enum(contextProfileValues).optional(),
+  allowFallback: z.boolean().optional(),
 });
 
 const getAssetInputSchema = z.object({
@@ -123,6 +124,7 @@ const askLibraryInputSchema = z.object({
 
 const askLibraryForContextInputSchema = askLibraryInputSchema.extend({
   profile: z.enum(contextProfileValues).optional(),
+  allowFallback: z.boolean().optional(),
 });
 
 const normalizeOptionalString = (
@@ -187,6 +189,9 @@ const getErrorMessage = (error: unknown): string => {
 const contextProfileDescriptions = getContextProfileDescriptions()
   .map((profile) => `${profile.name}: ${profile.description}`)
   .join(" ");
+
+const contextFallbackGuidance =
+  "Prefer allowFallback=false first. If results are insufficient, rerun with allowFallback=true only when broader retrieval still matches the user's intent.";
 
 // 这里集中注册 MCP tools，避免在 route 层重复拼装业务调用与错误处理。
 export const createMcpServer = (
@@ -286,12 +291,14 @@ export const createMcpServer = (
       title: "Search Assets For Context",
       description:
         "Search the library with context-aware retrieval weighting for AI clients. " +
-        `Available profiles: ${contextProfileDescriptions}`,
+        `${contextFallbackGuidance} Available profiles: ${contextProfileDescriptions}`,
       inputSchema: searchAssetsForContextInputSchema,
     },
     async (input) => {
       try {
-        const policy = resolveContextRetrievalPolicy(input.profile);
+        const policy = resolveContextRetrievalPolicy(input.profile, {
+          allowFallback: input.allowFallback,
+        });
         const result = await searchAssetsForContext(bindings, input, policy);
 
         return createToolResult({
@@ -475,12 +482,14 @@ export const createMcpServer = (
       title: "Ask Library For Context",
       description:
         "Answer a question using context-aware retrieval weighting for AI clients. " +
-        `Available profiles: ${contextProfileDescriptions}`,
+        `${contextFallbackGuidance} Available profiles: ${contextProfileDescriptions}`,
       inputSchema: askLibraryForContextInputSchema,
     },
     async (input) => {
       try {
-        const policy = resolveContextRetrievalPolicy(input.profile);
+        const policy = resolveContextRetrievalPolicy(input.profile, {
+          allowFallback: input.allowFallback,
+        });
         const result = await askLibraryForContext(bindings, input, policy);
 
         return createToolResult({

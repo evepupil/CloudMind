@@ -596,7 +596,7 @@ describe("chat service", () => {
     expect(aiProvider.generateText).not.toHaveBeenCalled();
   });
 
-  it("askLibraryForContext reranks sources with the requested context policy", async () => {
+  it("askLibraryForContext keeps answers inside preferred domains when fallback is disabled", async () => {
     const repository = new ContextRankingSearchRepository();
     const vectorStore = new InMemoryVectorStore([
       {
@@ -630,10 +630,12 @@ describe("chat service", () => {
       },
       {
         profile: "coding",
+        preferredDomains: ["engineering", "research"],
         boostedDomains: ["engineering", "research"],
         suppressedDomains: ["personal", "finance", "health"],
         includeSummaryOnly: true,
         overfetchMultiplier: 3,
+        allowFallback: false,
       }
     );
 
@@ -653,15 +655,57 @@ describe("chat service", () => {
           sourceUrl: null,
           snippet: "Engineering debugging guide",
         },
-        {
-          sourceType: "chunk",
-          assetId: "asset-personal-1",
-          chunkId: "personal-chunk-1",
-          title: "Personal Bug Diary",
-          sourceUrl: null,
-          snippet: "Personal bug note",
-        },
       ],
     });
+  });
+
+  it("askLibraryForContext can include fallback sources when explicitly enabled", async () => {
+    const repository = new ContextRankingSearchRepository();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        id: "personal-1:0",
+        score: 0.96,
+      },
+      {
+        id: "engineering-1:0",
+        score: 0.9,
+      },
+    ]);
+    const aiProvider: AIProvider = {
+      createEmbeddings: vi.fn(async () => ({
+        embeddings: [[0.11, 0.22, 0.33]],
+      })),
+      generateText: vi.fn(async () => ({
+        text: "Use the engineering guide first [S1].",
+      })),
+    };
+    const service = createChatService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAiProvider: getAiProviderMock.mockResolvedValue(aiProvider),
+    });
+
+    const result = await service.askLibraryForContext(
+      { APP_NAME: "cloudmind-test" },
+      {
+        question: "How should I debug this?",
+        topK: 2,
+      },
+      {
+        profile: "coding",
+        preferredDomains: ["engineering", "research"],
+        boostedDomains: ["engineering", "research"],
+        suppressedDomains: ["personal", "finance", "health"],
+        includeSummaryOnly: true,
+        overfetchMultiplier: 3,
+        allowFallback: true,
+      }
+    );
+
+    expect(result.sources).toHaveLength(2);
+    expect(result.sources.map((source) => source.assetId)).toEqual([
+      "asset-engineering-1",
+      "asset-personal-1",
+    ]);
   });
 });

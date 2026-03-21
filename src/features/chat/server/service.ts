@@ -4,7 +4,10 @@ import type { VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
 import type { AssetSummary } from "@/features/assets/model/types";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
-import { applyContextPolicyScore } from "@/features/search/server/context-policy";
+import {
+  applyContextPolicyScore,
+  matchesContextPolicyAsset,
+} from "@/features/search/server/context-policy";
 import { scoreAssetSummaryMatch } from "@/features/search/server/summary-scoring";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
@@ -98,7 +101,7 @@ const getSummaryGroundingContexts = async (
       ...context,
       score: applyContextPolicyScore(context.score, context.asset, contextPolicy),
     })
-  );
+  ).filter((context) => matchesContextPolicyAsset(context.asset, contextPolicy));
 };
 
 const buildGroundingContexts = (
@@ -258,7 +261,9 @@ export const createChatService = (
     ).map((context) => ({
       ...context,
       score: applyContextPolicyScore(context.score, context.asset, contextPolicy),
-    }));
+    })).filter((context) =>
+      matchesContextPolicyAsset(context.asset, contextPolicy)
+    );
     const allGroundingContexts = [...groundingContexts, ...summaryContexts]
       .sort((left, right) => right.score - left.score)
       .slice(0, topK);

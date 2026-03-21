@@ -408,7 +408,7 @@ describe("search service", () => {
     });
   });
 
-  it("searchAssetsForContext boosts preferred domains without changing visibility filtering", async () => {
+  it("searchAssetsForContext keeps results inside preferred domains when fallback is disabled", async () => {
     const repository = new MixedDomainSearchRepository();
     const service = createSearchService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
@@ -436,24 +436,66 @@ describe("search service", () => {
       },
       {
         profile: "coding",
+        preferredDomains: ["engineering", "research"],
         boostedDomains: ["engineering", "research"],
         suppressedDomains: ["personal", "finance", "health"],
         includeSummaryOnly: true,
         overfetchMultiplier: 3,
+        allowFallback: false,
       }
     );
 
-    expect(result.items).toHaveLength(2);
+    expect(result.items).toHaveLength(1);
     expect(result.items[0]?.kind).toBe("chunk");
     expect(
       result.items[0]?.kind === "chunk"
         ? result.items[0].chunk.asset.domain
         : null
     ).toBe("engineering");
+  });
+
+  it("searchAssetsForContext can widen results when fallback is enabled", async () => {
+    const repository = new MixedDomainSearchRepository();
+    const service = createSearchService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(
+        new FixedVectorStore([
+          {
+            id: "personal-1:0",
+            score: 0.96,
+          },
+          {
+            id: "engineering-1:0",
+            score: 0.9,
+          },
+        ])
+      ),
+      getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+    });
+
+    const result = await service.searchAssetsForContext(
+      { APP_NAME: "cloudmind-test" },
+      {
+        query: "debugging notes",
+        page: 1,
+        pageSize: 2,
+      },
+      {
+        profile: "coding",
+        preferredDomains: ["engineering", "research"],
+        boostedDomains: ["engineering", "research"],
+        suppressedDomains: ["personal", "finance", "health"],
+        includeSummaryOnly: true,
+        overfetchMultiplier: 3,
+        allowFallback: true,
+      }
+    );
+
+    expect(result.items).toHaveLength(2);
     expect(
-      result.items[1]?.kind === "chunk"
-        ? result.items[1].chunk.asset.domain
-        : null
-    ).toBe("personal");
+      result.items.map((item) =>
+        item.kind === "chunk" ? item.chunk.asset.domain : item.asset.domain
+      )
+    ).toEqual(["engineering", "personal"]);
   });
 });
