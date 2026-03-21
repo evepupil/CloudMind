@@ -13,6 +13,7 @@ import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vect
 
 import {
   applyContextPolicyScore,
+  getContextResultScope,
   matchesContextPolicyAsset,
 } from "./context-policy";
 import { scoreAssetSummaryMatch } from "./summary-scoring";
@@ -53,6 +54,20 @@ const getSummaryMatches = async (
     limit,
     aiVisibility: [...SUMMARY_ONLY_AI_VISIBILITY],
   });
+};
+
+const withOptionalResultScope = <T extends SearchResult>(
+  result: T,
+  scope: SearchResult["resultScope"]
+): T => {
+  if (!scope) {
+    return result;
+  }
+
+  return {
+    ...result,
+    resultScope: scope,
+  };
 };
 
 // 这里集中资产语义搜索用例，便于后续扩展为混合检索或重排。
@@ -120,8 +135,12 @@ export const createSearchService = (
         )
         .sort((left, right) => right.score - left.score);
       const pageItems = orderedSummaryMatches.slice(offset, offset + pageSize);
+      const resultScope = getContextResultScope(
+        pageItems.map((item) => item.asset),
+        contextPolicy
+      );
 
-      return {
+      return withOptionalResultScope({
         items: pageItems,
         pagination: {
           page,
@@ -132,7 +151,7 @@ export const createSearchService = (
               ? 0
               : Math.ceil(orderedSummaryMatches.length / pageSize),
         },
-      };
+      }, resultScope);
     }
 
     const vectorMatches = await vectorStore.search({
@@ -189,8 +208,14 @@ export const createSearchService = (
     const orderedMatches = [...orderedChunkMatches, ...orderedSummaryMatches]
       .sort((left, right) => right.score - left.score);
     const pageItems = orderedMatches.slice(offset, offset + pageSize);
+    const resultScope = getContextResultScope(
+      pageItems.map((item) =>
+        item.kind === "chunk" ? item.chunk.asset : item.asset
+      ),
+      contextPolicy
+    );
 
-    return {
+    return withOptionalResultScope({
       items: pageItems,
       pagination: {
         page,
@@ -201,7 +226,7 @@ export const createSearchService = (
             ? 0
             : Math.ceil(orderedMatches.length / pageSize),
       },
-    };
+    }, resultScope);
   };
 
   return {

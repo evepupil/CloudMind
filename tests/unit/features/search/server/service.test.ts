@@ -452,6 +452,7 @@ describe("search service", () => {
         ? result.items[0].chunk.asset.domain
         : null
     ).toBe("engineering");
+    expect(result.resultScope).toBe("preferred_only");
   });
 
   it("searchAssetsForContext can widen results when fallback is enabled", async () => {
@@ -497,5 +498,6 @@ describe("search service", () => {
         item.kind === "chunk" ? item.chunk.asset.domain : item.asset.domain
       )
     ).toEqual(["engineering", "personal"]);
+    expect(result.resultScope).toBe("fallback_expanded");
   });
 });

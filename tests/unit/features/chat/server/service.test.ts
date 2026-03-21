@@ -364,6 +364,70 @@ class ContextRankingSearchRepository implements AssetSearchRepository {
   }
 }
 
+class WeakContextSearchRepository implements AssetSearchRepository {
+  public async searchAssets(): Promise<AssetListResult> {
+    return {
+      items: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      },
+    };
+  }
+
+  public async getChunkMatchesByVectorIds(
+    _vectorIds: string[],
+    query?: {
+      aiVisibility?: AssetAiVisibility[] | undefined;
+    }
+  ): Promise<AssetChunkMatch[]> {
+    const matches: AssetChunkMatch[] = [
+      {
+        id: "weak-engineering-chunk-1",
+        chunkIndex: 0,
+        textPreview: "Engineering team retrospective",
+        contentText: "Engineering team retrospective about sprint cadence.",
+        vectorId: "engineering-weak-1:0",
+        asset: {
+          id: "asset-engineering-weak-1",
+          type: "note",
+          title: "Engineering Retrospective",
+          summary: "A retrospective note about team process",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "engineering",
+          sensitivity: "internal",
+          aiVisibility: "allow",
+          retrievalPriority: 0,
+          collectionKey: "inbox:notes",
+          capturedAt: "2026-03-19T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+      },
+    ];
+    const allowed = query?.aiVisibility;
+
+    if (!allowed?.length) {
+      return matches;
+    }
+
+    return matches.filter((match) => allowed.includes(match.asset.aiVisibility));
+  }
+
+  public async searchAssetSummaries(_input: {
+    query: string;
+    limit: number;
+    aiVisibility: AssetAiVisibility[];
+  }): Promise<AssetSummaryMatch[]> {
+    return [];
+  }
+}
+
 describe("chat service", () => {
   const getAssetRepositoryMock = vi.fn();
   const getVectorStoreMock = vi.fn();
@@ -656,6 +720,7 @@ describe("chat service", () => {
           snippet: "Engineering debugging guide",
         },
       ],
+      resultScope: "preferred_only",
     });
   });
 
@@ -707,5 +772,54 @@ describe("chat service", () => {
       "asset-engineering-1",
       "asset-personal-1",
     ]);
+    expect(result.resultScope).toBe("fallback_expanded");
+  });
+
+  it("askLibraryForContext refuses to answer when the remaining context is too weak", async () => {
+    const repository = new WeakContextSearchRepository();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        id: "engineering-weak-1:0",
+        score: 0.94,
+      },
+    ]);
+    const aiProvider: AIProvider = {
+      createEmbeddings: vi.fn(async () => ({
+        embeddings: [[0.11, 0.22, 0.33]],
+      })),
+      generateText: vi.fn(async () => ({
+        text: "unused",
+      })),
+    };
+    const service = createChatService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAiProvider: getAiProviderMock.mockResolvedValue(aiProvider),
+    });
+
+    const result = await service.askLibraryForContext(
+      { APP_NAME: "cloudmind-test" },
+      {
+        question: "How do descriptor facets drive browse navigation?",
+        topK: 2,
+      },
+      {
+        profile: "coding",
+        preferredDomains: ["engineering", "research"],
+        boostedDomains: ["engineering", "research"],
+        suppressedDomains: ["personal", "finance", "health"],
+        includeSummaryOnly: true,
+        overfetchMultiplier: 3,
+        allowFallback: false,
+      }
+    );
+
+    expect(result).toEqual({
+      answer:
+        "I could not find enough relevant context in your library to answer that yet.",
+      sources: [],
+      resultScope: "preferred_only",
+    });
+    expect(aiProvider.generateText).not.toHaveBeenCalled();
   });
 });

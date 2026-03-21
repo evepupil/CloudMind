@@ -1,3 +1,5 @@
+import type { ContextResultScope } from "@/features/search/model/types";
+
 export interface ChatSource {
   sourceType: "chunk" | "summary";
   assetId: string;
@@ -15,4 +17,5 @@ export interface AskLibraryInput {
 export interface AskLibraryResult {
   answer: string;
   sources: ChatSource[];
+  resultScope?: ContextResultScope | undefined;
 }

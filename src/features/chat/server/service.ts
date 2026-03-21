@@ -6,6 +6,7 @@ import type { AssetSummary } from "@/features/assets/model/types";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
 import {
   applyContextPolicyScore,
+  getContextResultScope,
   matchesContextPolicyAsset,
 } from "@/features/search/server/context-policy";
 import { scoreAssetSummaryMatch } from "@/features/search/server/summary-scoring";
@@ -79,6 +80,87 @@ interface GroundingContext {
   contentText: string;
   asset: AssetSummary;
 }
+
+const MIN_CONTEXT_TOKEN_LENGTH = 4;
+const MIN_CONTEXT_COVERAGE = 0.2;
+const MIN_CONTEXT_SCORE = 0.85;
+const MIN_CONTEXT_COUNT = 2;
+const CONTEXT_STOP_WORDS = new Set([
+  "about",
+  "based",
+  "does",
+  "from",
+  "have",
+  "into",
+  "that",
+  "this",
+  "what",
+  "when",
+  "where",
+  "which",
+  "with",
+  "your",
+]);
+
+const tokenizeForCoverage = (value: string): string[] => {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9_]+/)
+    .map((token) => token.trim())
+    .filter(
+      (token) =>
+        token.length >= MIN_CONTEXT_TOKEN_LENGTH &&
+        !CONTEXT_STOP_WORDS.has(token)
+    );
+};
+
+const getContextCoverage = (
+  question: string,
+  contexts: GroundingContext[]
+): number => {
+  const questionTokens = Array.from(new Set(tokenizeForCoverage(question)));
+
+  if (questionTokens.length === 0) {
+    return 1;
+  }
+
+  const contextText = contexts
+    .map((context) => `${context.source.title} ${context.contentText}`)
+    .join(" ")
+    .toLowerCase();
+  const coveredTokenCount = questionTokens.filter((token) =>
+    contextText.includes(token)
+  ).length;
+
+  return coveredTokenCount / questionTokens.length;
+};
+
+const shouldRejectContextAnswer = (
+  question: string,
+  contexts: GroundingContext[],
+  contextPolicy: ContextRetrievalPolicy | undefined
+): boolean => {
+  if (!contextPolicy) {
+    return false;
+  }
+
+  if (contexts.length === 0) {
+    return true;
+  }
+
+  const topScore = contexts[0]?.score ?? 0;
+  const coverage = getContextCoverage(question, contexts);
+
+  if (contexts.length >= MIN_CONTEXT_COUNT && coverage >= MIN_CONTEXT_COVERAGE) {
+    return false;
+  }
+
+  if (topScore >= MIN_CONTEXT_SCORE && coverage >= MIN_CONTEXT_COVERAGE) {
+    return false;
+  }
+
+  return true;
+};
 
 const getSummaryGroundingContexts = async (
   repository: AssetSearchRepository,
@@ -175,6 +257,20 @@ const buildChatPrompt = (
   return buildPrompt(question, promptSources);
 };
 
+const withOptionalResultScope = <T extends AskLibraryResult>(
+  result: T,
+  scope: AskLibraryResult["resultScope"]
+): T => {
+  if (!scope) {
+    return result;
+  }
+
+  return {
+    ...result,
+    resultScope: scope,
+  };
+};
+
 // 这里实现最小问答链路：query embedding -> Vectorize 召回 -> D1 回填 -> AI 生成答案。
 export const createChatService = (
   dependencies: ChatServiceDependencies = defaultDependencies
@@ -215,15 +311,29 @@ export const createChatService = (
 
     if (!queryVector) {
       if (summaryContexts.length === 0) {
-        return {
+        return withOptionalResultScope({
           answer: createFallbackAnswer(),
           sources: [],
-        };
+        }, getContextResultScope([], contextPolicy));
       }
 
       const orderedSummaryContexts = [...summaryContexts]
         .sort((left, right) => right.score - left.score)
         .slice(0, topK);
+      const resultScope = getContextResultScope(
+        orderedSummaryContexts.map((context) => context.asset),
+        contextPolicy
+      );
+
+      if (
+        shouldRejectContextAnswer(question, orderedSummaryContexts, contextPolicy)
+      ) {
+        return withOptionalResultScope({
+          answer: createFallbackAnswer(),
+          sources: [],
+        }, resultScope);
+      }
+
       const answer = await aiProvider.generateText({
         systemPrompt:
           "You are a source-aware knowledge base assistant. Keep answers concise and grounded in the provided sources.",
@@ -232,13 +342,13 @@ export const createChatService = (
         maxOutputTokens: 700,
       });
 
-      return {
+      return withOptionalResultScope({
         answer:
           answer.text.trim().length > 0
             ? answer.text.trim()
             : createFallbackAnswer(),
         sources: orderedSummaryContexts.map((context) => context.source),
-      };
+      }, resultScope);
     }
 
     const vectorMatches = await vectorStore.search({
@@ -267,12 +377,25 @@ export const createChatService = (
     const allGroundingContexts = [...groundingContexts, ...summaryContexts]
       .sort((left, right) => right.score - left.score)
       .slice(0, topK);
+    const resultScope = getContextResultScope(
+      allGroundingContexts.map((context) => context.asset),
+      contextPolicy
+    );
 
     if (allGroundingContexts.length === 0) {
-      return {
+      return withOptionalResultScope({
         answer: createFallbackAnswer(),
         sources: [],
-      };
+      }, resultScope);
+    }
+
+    if (
+      shouldRejectContextAnswer(question, allGroundingContexts, contextPolicy)
+    ) {
+      return withOptionalResultScope({
+        answer: createFallbackAnswer(),
+        sources: [],
+      }, resultScope);
     }
 
     const answer = await aiProvider.generateText({
@@ -283,13 +406,13 @@ export const createChatService = (
       maxOutputTokens: 700,
     });
 
-    return {
+    return withOptionalResultScope({
       answer:
         answer.text.trim().length > 0
           ? answer.text.trim()
           : createFallbackAnswer(),
       sources: allGroundingContexts.map((context) => context.source),
-    };
+    }, resultScope);
   };
 
   return {

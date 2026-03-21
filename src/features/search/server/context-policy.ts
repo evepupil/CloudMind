@@ -1,5 +1,6 @@
 import type { AssetDomain, AssetSummary } from "@/features/assets/model/types";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
+import type { ContextResultScope } from "@/features/search/model/types";
 
 const DOMAIN_BOOST = 0.12;
 const DOMAIN_SUPPRESSION = -0.1;
@@ -37,6 +38,21 @@ export const applyContextPolicyScore = (
   return baseScore + domainWeight + priorityWeight;
 };
 
+export const matchesPreferredDomains = (
+  asset: AssetSummary,
+  policy: ContextRetrievalPolicy | undefined
+): boolean => {
+  if (!policy) {
+    return true;
+  }
+
+  if (policy.preferredDomains.length === 0) {
+    return true;
+  }
+
+  return policy.preferredDomains.includes(asset.domain);
+};
+
 export const matchesContextPolicyAsset = (
   asset: AssetSummary,
   policy: ContextRetrievalPolicy | undefined
@@ -53,5 +69,23 @@ export const matchesContextPolicyAsset = (
     return true;
   }
 
-  return policy.preferredDomains.includes(asset.domain);
+  return matchesPreferredDomains(asset, policy);
+};
+
+export const getContextResultScope = (
+  assets: AssetSummary[],
+  policy: ContextRetrievalPolicy | undefined
+): ContextResultScope | undefined => {
+  if (!policy) {
+    return undefined;
+  }
+
+  if (
+    policy.allowFallback &&
+    assets.some((asset) => !matchesPreferredDomains(asset, policy))
+  ) {
+    return "fallback_expanded";
+  }
+
+  return "preferred_only";
 };

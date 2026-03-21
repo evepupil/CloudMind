@@ -3,6 +3,8 @@ import type {
   AssetSummary,
 } from "@/features/assets/model/types";
 
+export type ContextResultScope = "preferred_only" | "fallback_expanded";
+
 export interface SearchChunkResultItem {
   kind: "chunk";
   score: number;
@@ -28,4 +30,5 @@ export interface SearchPagination {
 export interface SearchResult {
   items: SearchResultItem[];
   pagination: SearchPagination;
+  resultScope?: ContextResultScope | undefined;
 }

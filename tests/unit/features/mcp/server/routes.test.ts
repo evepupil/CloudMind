@@ -375,8 +375,14 @@ describe("mcp routes", () => {
 
   it("search_assets_for_context and ask_library_for_context apply the requested profile", async () => {
     const app = createApp();
-    const searchResult = createSearchResult();
-    const askResult = createAskLibraryResult();
+    const searchResult = {
+      ...createSearchResult(),
+      resultScope: "preferred_only" as const,
+    };
+    const askResult = {
+      ...createAskLibraryResult(),
+      resultScope: "preferred_only" as const,
+    };
 
     vi.mocked(searchService.searchAssetsForContext).mockResolvedValue(
       searchResult
