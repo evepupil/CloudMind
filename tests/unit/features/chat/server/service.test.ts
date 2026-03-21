@@ -275,6 +275,95 @@ class InMemoryVectorStore implements VectorStore {
   }
 }
 
+class ContextRankingSearchRepository implements AssetSearchRepository {
+  public async searchAssets(): Promise<AssetListResult> {
+    return {
+      items: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      },
+    };
+  }
+
+  public async getChunkMatchesByVectorIds(
+    _vectorIds: string[],
+    query?: {
+      aiVisibility?: AssetAiVisibility[] | undefined;
+    }
+  ): Promise<AssetChunkMatch[]> {
+    const matches: AssetChunkMatch[] = [
+      {
+        id: "personal-chunk-1",
+        chunkIndex: 0,
+        textPreview: "Personal bug note",
+        contentText: "Personal bug note full content",
+        vectorId: "personal-1:0",
+        asset: {
+          id: "asset-personal-1",
+          type: "note",
+          title: "Personal Bug Diary",
+          summary: "A personal note about a debugging issue",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "personal",
+          sensitivity: "private",
+          aiVisibility: "allow",
+          retrievalPriority: 0,
+          collectionKey: "inbox:notes",
+          capturedAt: "2026-03-19T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+      },
+      {
+        id: "engineering-chunk-1",
+        chunkIndex: 1,
+        textPreview: "Engineering debugging guide",
+        contentText: "Engineering debugging guide full content",
+        vectorId: "engineering-1:0",
+        asset: {
+          id: "asset-engineering-1",
+          type: "note",
+          title: "Engineering Debugging Guide",
+          summary: "A team note about debugging patterns",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "engineering",
+          sensitivity: "internal",
+          aiVisibility: "allow",
+          retrievalPriority: 0,
+          collectionKey: "inbox:notes",
+          capturedAt: "2026-03-19T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+      },
+    ];
+    const allowed = query?.aiVisibility;
+
+    if (!allowed?.length) {
+      return matches;
+    }
+
+    return matches.filter((match) => allowed.includes(match.asset.aiVisibility));
+  }
+
+  public async searchAssetSummaries(_input: {
+    query: string;
+    limit: number;
+    aiVisibility: AssetAiVisibility[];
+  }): Promise<AssetSummaryMatch[]> {
+    return [];
+  }
+}
+
 describe("chat service", () => {
   const getAssetRepositoryMock = vi.fn();
   const getVectorStoreMock = vi.fn();
@@ -505,5 +594,74 @@ describe("chat service", () => {
       sources: [],
     });
     expect(aiProvider.generateText).not.toHaveBeenCalled();
+  });
+
+  it("askLibraryForContext reranks sources with the requested context policy", async () => {
+    const repository = new ContextRankingSearchRepository();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        id: "personal-1:0",
+        score: 0.96,
+      },
+      {
+        id: "engineering-1:0",
+        score: 0.9,
+      },
+    ]);
+    const aiProvider: AIProvider = {
+      createEmbeddings: vi.fn(async () => ({
+        embeddings: [[0.11, 0.22, 0.33]],
+      })),
+      generateText: vi.fn(async () => ({
+        text: "Use the engineering guide first [S1].",
+      })),
+    };
+    const service = createChatService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAiProvider: getAiProviderMock.mockResolvedValue(aiProvider),
+    });
+
+    const result = await service.askLibraryForContext(
+      { APP_NAME: "cloudmind-test" },
+      {
+        question: "How should I debug this?",
+        topK: 2,
+      },
+      {
+        profile: "coding",
+        boostedDomains: ["engineering", "research"],
+        suppressedDomains: ["personal", "finance", "health"],
+        includeSummaryOnly: true,
+        overfetchMultiplier: 3,
+      }
+    );
+
+    expect(aiProvider.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining("[S1] Engineering Debugging Guide"),
+      })
+    );
+    expect(result).toEqual({
+      answer: "Use the engineering guide first [S1].",
+      sources: [
+        {
+          sourceType: "chunk",
+          assetId: "asset-engineering-1",
+          chunkId: "engineering-chunk-1",
+          title: "Engineering Debugging Guide",
+          sourceUrl: null,
+          snippet: "Engineering debugging guide",
+        },
+        {
+          sourceType: "chunk",
+          assetId: "asset-personal-1",
+          chunkId: "personal-chunk-1",
+          title: "Personal Bug Diary",
+          sourceUrl: null,
+          snippet: "Personal bug note",
+        },
+      ],
+    });
   });
 });

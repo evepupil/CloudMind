@@ -2,14 +2,37 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { AssetNotFoundError } from "@/core/assets/errors";
+import { WorkflowRunNotFoundError } from "@/core/workflows/errors";
 import type { AppBindings } from "@/env";
-import { getAssetById } from "@/features/assets/server/service";
-import { askLibrary } from "@/features/chat/server/service";
+import {
+  deleteAsset,
+  getAssetById,
+  listAssets,
+  updateAsset,
+} from "@/features/assets/server/service";
+import {
+  askLibrary,
+  askLibraryForContext,
+} from "@/features/chat/server/service";
 import {
   ingestTextAsset,
+  reprocessAsset,
   ingestUrlAsset,
 } from "@/features/ingest/server/service";
-import { searchAssets } from "@/features/search/server/service";
+import {
+  getContextProfileDescriptions,
+  getContextProfileSummary,
+  resolveContextRetrievalPolicy,
+  contextProfileValues,
+} from "@/features/mcp/server/context-profiles";
+import {
+  searchAssets,
+  searchAssetsForContext,
+} from "@/features/search/server/service";
+import {
+  getWorkflowRunDetail,
+  listWorkflowRunsByAssetId,
+} from "@/features/workflows/server/service";
 
 const saveAssetInputSchema = z
   .object({
@@ -42,13 +65,64 @@ const searchAssetsInputSchema = z.object({
   pageSize: z.number().int().positive().max(50).optional(),
 });
 
+const searchAssetsForContextInputSchema = searchAssetsInputSchema.extend({
+  profile: z.enum(contextProfileValues).optional(),
+});
+
 const getAssetInputSchema = z.object({
   id: z.string().trim().min(1),
+});
+
+const listAssetsInputSchema = z.object({
+  status: z.enum(["pending", "processing", "ready", "failed"]).optional(),
+  type: z.enum(["url", "pdf", "note", "image", "chat"]).optional(),
+  query: z.string().trim().min(1).optional(),
+  page: z.number().int().positive().optional(),
+  pageSize: z.number().int().positive().max(50).optional(),
+});
+
+const updateAssetInputSchema = z
+  .object({
+    id: z.string().trim().min(1),
+    title: z.string().trim().min(1).max(300).optional(),
+    summary: z.string().trim().min(1).optional(),
+    sourceUrl: z.string().url().optional(),
+  })
+  .refine(
+    (value) =>
+      value.title !== undefined ||
+      value.summary !== undefined ||
+      value.sourceUrl !== undefined,
+    {
+      message:
+        'At least one of "title", "summary", or "sourceUrl" must be provided.',
+      path: ["title"],
+    }
+  );
+
+const deleteAssetInputSchema = z.object({
+  id: z.string().trim().min(1),
+});
+
+const reprocessAssetInputSchema = z.object({
+  id: z.string().trim().min(1),
+});
+
+const listAssetWorkflowsInputSchema = z.object({
+  assetId: z.string().trim().min(1),
+});
+
+const getWorkflowRunInputSchema = z.object({
+  runId: z.string().trim().min(1),
 });
 
 const askLibraryInputSchema = z.object({
   question: z.string().trim().min(1),
   topK: z.number().int().positive().max(10).optional(),
+});
+
+const askLibraryForContextInputSchema = askLibraryInputSchema.extend({
+  profile: z.enum(contextProfileValues).optional(),
 });
 
 const normalizeOptionalString = (
@@ -99,12 +173,20 @@ const getErrorMessage = (error: unknown): string => {
     return error.message;
   }
 
+  if (error instanceof WorkflowRunNotFoundError) {
+    return error.message;
+  }
+
   if (error instanceof Error) {
     return error.message;
   }
 
   return "Unknown MCP tool error.";
 };
+
+const contextProfileDescriptions = getContextProfileDescriptions()
+  .map((profile) => `${profile.name}: ${profile.description}`)
+  .join(" ");
 
 // 这里集中注册 MCP tools，避免在 route 层重复拼装业务调用与错误处理。
 export const createMcpServer = (
@@ -161,6 +243,25 @@ export const createMcpServer = (
   );
 
   server.registerTool(
+    "list_assets",
+    {
+      title: "List Assets",
+      description:
+        "List assets in the CloudMind library with optional filters and pagination.",
+      inputSchema: listAssetsInputSchema,
+    },
+    async (input) => {
+      try {
+        const result = await listAssets(bindings, input);
+
+        return createToolResult(result);
+      } catch (error) {
+        return createToolErrorResult(getErrorMessage(error));
+      }
+    }
+  );
+
+  server.registerTool(
     "search_assets",
     {
       title: "Search Assets",
@@ -173,6 +274,30 @@ export const createMcpServer = (
         const result = await searchAssets(bindings, input);
 
         return createToolResult(result);
+      } catch (error) {
+        return createToolErrorResult(getErrorMessage(error));
+      }
+    }
+  );
+
+  server.registerTool(
+    "search_assets_for_context",
+    {
+      title: "Search Assets For Context",
+      description:
+        "Search the library with context-aware retrieval weighting for AI clients. " +
+        `Available profiles: ${contextProfileDescriptions}`,
+      inputSchema: searchAssetsForContextInputSchema,
+    },
+    async (input) => {
+      try {
+        const policy = resolveContextRetrievalPolicy(input.profile);
+        const result = await searchAssetsForContext(bindings, input, policy);
+
+        return createToolResult({
+          ...result,
+          appliedPolicy: getContextProfileSummary(policy),
+        });
       } catch (error) {
         return createToolErrorResult(getErrorMessage(error));
       }
@@ -203,6 +328,129 @@ export const createMcpServer = (
   );
 
   server.registerTool(
+    "update_asset",
+    {
+      title: "Update Asset",
+      description: "Update editable asset fields such as title, summary, or source URL.",
+      inputSchema: updateAssetInputSchema,
+    },
+    async (input) => {
+      try {
+        const item = await updateAsset(bindings, input.id, {
+          title: normalizeOptionalString(input.title),
+          summary: normalizeOptionalString(input.summary),
+          sourceUrl: normalizeOptionalString(input.sourceUrl),
+        });
+
+        return createToolResult({ item });
+      } catch (error) {
+        const code =
+          error instanceof AssetNotFoundError
+            ? "ASSET_NOT_FOUND"
+            : "TOOL_ERROR";
+
+        return createToolErrorResult(getErrorMessage(error), code);
+      }
+    }
+  );
+
+  server.registerTool(
+    "delete_asset",
+    {
+      title: "Delete Asset",
+      description: "Soft delete one asset from the CloudMind library.",
+      inputSchema: deleteAssetInputSchema,
+    },
+    async (input) => {
+      try {
+        await deleteAsset(bindings, input.id);
+
+        return createToolResult({
+          ok: true,
+          id: input.id,
+        });
+      } catch (error) {
+        const code =
+          error instanceof AssetNotFoundError
+            ? "ASSET_NOT_FOUND"
+            : "TOOL_ERROR";
+
+        return createToolErrorResult(getErrorMessage(error), code);
+      }
+    }
+  );
+
+  server.registerTool(
+    "reprocess_asset",
+    {
+      title: "Reprocess Asset",
+      description: "Trigger reprocessing for an existing asset and return the updated asset state.",
+      inputSchema: reprocessAssetInputSchema,
+    },
+    async (input) => {
+      try {
+        const item = await reprocessAsset(bindings, input.id);
+
+        return createToolResult({ item });
+      } catch (error) {
+        const code =
+          error instanceof AssetNotFoundError
+            ? "ASSET_NOT_FOUND"
+            : "TOOL_ERROR";
+
+        return createToolErrorResult(getErrorMessage(error), code);
+      }
+    }
+  );
+
+  server.registerTool(
+    "list_asset_workflows",
+    {
+      title: "List Asset Workflows",
+      description: "List workflow runs associated with one asset.",
+      inputSchema: listAssetWorkflowsInputSchema,
+    },
+    async (input) => {
+      try {
+        await getAssetById(bindings, input.assetId);
+        const items = await listWorkflowRunsByAssetId(bindings, input.assetId);
+
+        return createToolResult({ items });
+      } catch (error) {
+        const code =
+          error instanceof AssetNotFoundError
+            ? "ASSET_NOT_FOUND"
+            : "TOOL_ERROR";
+
+        return createToolErrorResult(getErrorMessage(error), code);
+      }
+    }
+  );
+
+  server.registerTool(
+    "get_workflow_run",
+    {
+      title: "Get Workflow Run",
+      description: "Fetch the detail of one workflow run including steps and artifacts.",
+      inputSchema: getWorkflowRunInputSchema,
+    },
+    async (input) => {
+      try {
+        const item = await getWorkflowRunDetail(bindings, input.runId);
+
+        return createToolResult({ item });
+      } catch (error) {
+        const code =
+          error instanceof WorkflowRunNotFoundError
+            ? "WORKFLOW_RUN_NOT_FOUND"
+            : "TOOL_ERROR";
+
+        return createToolErrorResult(getErrorMessage(error), code);
+      }
+    }
+  );
+
+  server.registerTool(
     "ask_library",
     {
       title: "Ask Library",
@@ -215,6 +463,30 @@ export const createMcpServer = (
         const result = await askLibrary(bindings, input);
 
         return createToolResult(result);
+      } catch (error) {
+        return createToolErrorResult(getErrorMessage(error));
+      }
+    }
+  );
+
+  server.registerTool(
+    "ask_library_for_context",
+    {
+      title: "Ask Library For Context",
+      description:
+        "Answer a question using context-aware retrieval weighting for AI clients. " +
+        `Available profiles: ${contextProfileDescriptions}`,
+      inputSchema: askLibraryForContextInputSchema,
+    },
+    async (input) => {
+      try {
+        const policy = resolveContextRetrievalPolicy(input.profile);
+        const result = await askLibraryForContext(bindings, input, policy);
+
+        return createToolResult({
+          ...result,
+          appliedPolicy: getContextProfileSummary(policy),
+        });
       } catch (error) {
         return createToolErrorResult(getErrorMessage(error));
       }

@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssetNotFoundError } from "@/core/assets/errors";
+import { WorkflowRunNotFoundError } from "@/core/workflows/errors";
 import type { AppEnv } from "@/env";
 import type { AssetDetail } from "@/features/assets/model/types";
 import * as assetService from "@/features/assets/server/service";
@@ -14,22 +15,28 @@ import * as ingestService from "@/features/ingest/server/service";
 import { registerMcpRoutes } from "@/features/mcp/server/routes";
 import type { SearchResult } from "@/features/search/model/types";
 import * as searchService from "@/features/search/server/service";
+import * as workflowService from "@/features/workflows/server/service";
 
 vi.mock("@/features/assets/server/service", () => {
   return {
+    deleteAsset: vi.fn(),
     getAssetById: vi.fn(),
+    listAssets: vi.fn(),
+    updateAsset: vi.fn(),
   };
 });
 
 vi.mock("@/features/chat/server/service", () => {
   return {
     askLibrary: vi.fn(),
+    askLibraryForContext: vi.fn(),
   };
 });
 
 vi.mock("@/features/ingest/server/service", () => {
   return {
     ingestTextAsset: vi.fn(),
+    reprocessAsset: vi.fn(),
     ingestUrlAsset: vi.fn(),
   };
 });
@@ -37,6 +44,14 @@ vi.mock("@/features/ingest/server/service", () => {
 vi.mock("@/features/search/server/service", () => {
   return {
     searchAssets: vi.fn(),
+    searchAssetsForContext: vi.fn(),
+  };
+});
+
+vi.mock("@/features/workflows/server/service", () => {
+  return {
+    getWorkflowRunDetail: vi.fn(),
+    listWorkflowRunsByAssetId: vi.fn(),
   };
 });
 
@@ -217,7 +232,7 @@ describe("mcp routes", () => {
     transport = null;
   });
 
-  it("lists the four CloudMind MCP tools", async () => {
+  it("lists the CloudMind MCP tools", async () => {
     const app = createApp();
     const connected = await createConnectedClient(app);
 
@@ -228,9 +243,17 @@ describe("mcp routes", () => {
 
     expect(result.tools.map((tool) => tool.name)).toEqual([
       "save_asset",
+      "list_assets",
       "search_assets",
+      "search_assets_for_context",
       "get_asset",
+      "update_asset",
+      "delete_asset",
+      "reprocess_asset",
+      "list_asset_workflows",
+      "get_workflow_run",
       "ask_library",
+      "ask_library_for_context",
     ]);
   });
 
@@ -350,6 +373,244 @@ describe("mcp routes", () => {
     });
   });
 
+  it("search_assets_for_context and ask_library_for_context apply the requested profile", async () => {
+    const app = createApp();
+    const searchResult = createSearchResult();
+    const askResult = createAskLibraryResult();
+
+    vi.mocked(searchService.searchAssetsForContext).mockResolvedValue(
+      searchResult
+    );
+    vi.mocked(chatService.askLibraryForContext).mockResolvedValue(askResult);
+    const connected = await createConnectedClient(app);
+
+    client = connected.client;
+    transport = connected.transport;
+
+    const searchCall = await client.callTool({
+      name: "search_assets_for_context",
+      arguments: {
+        query: "fix vector write bug",
+        page: 1,
+        pageSize: 5,
+        profile: "coding",
+      },
+    });
+    const askCall = await client.callTool({
+      name: "ask_library_for_context",
+      arguments: {
+        question: "How should I debug the vector write bug?",
+        topK: 3,
+        profile: "coding",
+      },
+    });
+
+    expect(getStructuredContent(searchCall)).toEqual({
+      ...searchResult,
+      appliedPolicy: {
+        profile: "coding",
+        boostedDomains: ["engineering", "research"],
+        suppressedDomains: ["personal", "finance", "health"],
+        includeSummaryOnly: true,
+      },
+    });
+    expect(getStructuredContent(askCall)).toEqual({
+      ...askResult,
+      appliedPolicy: {
+        profile: "coding",
+        boostedDomains: ["engineering", "research"],
+        suppressedDomains: ["personal", "finance", "health"],
+        includeSummaryOnly: true,
+      },
+    });
+    expect(searchService.searchAssetsForContext).toHaveBeenCalledWith(
+      env,
+      {
+        query: "fix vector write bug",
+        page: 1,
+        pageSize: 5,
+        profile: "coding",
+      },
+      {
+        profile: "coding",
+        boostedDomains: ["engineering", "research"],
+        suppressedDomains: ["personal", "finance", "health"],
+        includeSummaryOnly: true,
+        overfetchMultiplier: 3,
+      }
+    );
+    expect(chatService.askLibraryForContext).toHaveBeenCalledWith(
+      env,
+      {
+        question: "How should I debug the vector write bug?",
+        topK: 3,
+        profile: "coding",
+      },
+      {
+        profile: "coding",
+        boostedDomains: ["engineering", "research"],
+        suppressedDomains: ["personal", "finance", "health"],
+        includeSummaryOnly: true,
+        overfetchMultiplier: 3,
+      }
+    );
+  });
+
+  it("list_assets, update_asset, delete_asset, reprocess_asset and workflow tools reuse existing services", async () => {
+    const app = createApp();
+    const item = createAssetDetail({
+      id: "asset-manage-1",
+      title: "Managed Asset",
+    });
+    const workflowRun = {
+      id: "run-1",
+      assetId: "asset-manage-1",
+      workflowType: "note_ingest_v1" as const,
+      triggerType: "ingest" as const,
+      status: "succeeded" as const,
+      stateJson: "{}",
+      currentStep: null,
+      errorMessage: null,
+      startedAt: "2026-03-20T00:01:00.000Z",
+      finishedAt: "2026-03-20T00:02:00.000Z",
+      createdAt: "2026-03-20T00:00:00.000Z",
+      updatedAt: "2026-03-20T00:02:00.000Z",
+    };
+    const workflowDetail = {
+      run: workflowRun,
+      steps: [],
+      artifacts: [],
+    };
+
+    vi.mocked(assetService.listAssets).mockResolvedValue({
+      items: [item],
+      pagination: {
+        page: 1,
+        pageSize: 10,
+        total: 1,
+        totalPages: 1,
+      },
+    });
+    vi.mocked(assetService.updateAsset).mockResolvedValue({
+      ...item,
+      title: "Updated Managed Asset",
+      summary: "Updated summary",
+    });
+    vi.mocked(assetService.deleteAsset).mockResolvedValue(undefined);
+    vi.mocked(ingestService.reprocessAsset).mockResolvedValue({
+      ...item,
+      status: "processing",
+    });
+    vi.mocked(assetService.getAssetById).mockResolvedValue(item);
+    vi.mocked(workflowService.listWorkflowRunsByAssetId).mockResolvedValue([
+      workflowRun,
+    ]);
+    vi.mocked(workflowService.getWorkflowRunDetail).mockResolvedValue(
+      workflowDetail
+    );
+    const connected = await createConnectedClient(app);
+
+    client = connected.client;
+    transport = connected.transport;
+
+    const listCall = await client.callTool({
+      name: "list_assets",
+      arguments: {
+        status: "ready",
+        page: 1,
+        pageSize: 10,
+      },
+    });
+    const updateCall = await client.callTool({
+      name: "update_asset",
+      arguments: {
+        id: "asset-manage-1",
+        title: "Updated Managed Asset",
+        summary: "Updated summary",
+      },
+    });
+    const deleteCall = await client.callTool({
+      name: "delete_asset",
+      arguments: {
+        id: "asset-manage-1",
+      },
+    });
+    const reprocessCall = await client.callTool({
+      name: "reprocess_asset",
+      arguments: {
+        id: "asset-manage-1",
+      },
+    });
+    const listWorkflowsCall = await client.callTool({
+      name: "list_asset_workflows",
+      arguments: {
+        assetId: "asset-manage-1",
+      },
+    });
+    const getWorkflowCall = await client.callTool({
+      name: "get_workflow_run",
+      arguments: {
+        runId: "run-1",
+      },
+    });
+
+    expect(getStructuredContent(listCall)).toEqual({
+      items: [item],
+      pagination: {
+        page: 1,
+        pageSize: 10,
+        total: 1,
+        totalPages: 1,
+      },
+    });
+    expect(getStructuredContent(updateCall)).toEqual({
+      item: expect.objectContaining({
+        id: "asset-manage-1",
+        title: "Updated Managed Asset",
+      }),
+    });
+    expect(getStructuredContent(deleteCall)).toEqual({
+      ok: true,
+      id: "asset-manage-1",
+    });
+    expect(getStructuredContent(reprocessCall)).toEqual({
+      item: expect.objectContaining({
+        id: "asset-manage-1",
+        status: "processing",
+      }),
+    });
+    expect(getStructuredContent(listWorkflowsCall)).toEqual({
+      items: [workflowRun],
+    });
+    expect(getStructuredContent(getWorkflowCall)).toEqual({
+      item: workflowDetail,
+    });
+    expect(assetService.listAssets).toHaveBeenCalledWith(env, {
+      status: "ready",
+      page: 1,
+      pageSize: 10,
+    });
+    expect(assetService.updateAsset).toHaveBeenCalledWith(env, "asset-manage-1", {
+      title: "Updated Managed Asset",
+      summary: "Updated summary",
+      sourceUrl: undefined,
+    });
+    expect(assetService.deleteAsset).toHaveBeenCalledWith(env, "asset-manage-1");
+    expect(ingestService.reprocessAsset).toHaveBeenCalledWith(
+      env,
+      "asset-manage-1"
+    );
+    expect(assetService.getAssetById).toHaveBeenCalledWith(env, "asset-manage-1");
+    expect(workflowService.listWorkflowRunsByAssetId).toHaveBeenCalledWith(
+      env,
+      "asset-manage-1"
+    );
+    expect(workflowService.getWorkflowRunDetail).toHaveBeenCalledWith(
+      env,
+      "run-1"
+    );
+  });
+
   it("get_asset returns an MCP tool error payload when the asset is missing", async () => {
     const app = createApp();
 
@@ -374,6 +635,34 @@ describe("mcp routes", () => {
       error: {
         code: "ASSET_NOT_FOUND",
         message: 'Asset "missing-asset" was not found.',
+      },
+    });
+  });
+
+  it("get_workflow_run returns an MCP tool error payload when the run is missing", async () => {
+    const app = createApp();
+
+    vi.mocked(workflowService.getWorkflowRunDetail).mockRejectedValue(
+      new WorkflowRunNotFoundError("missing-run")
+    );
+    const connected = await createConnectedClient(app);
+
+    client = connected.client;
+    transport = connected.transport;
+
+    const result = await client.callTool({
+      name: "get_workflow_run",
+      arguments: {
+        runId: "missing-run",
+      },
+    });
+
+    expect("isError" in result ? result.isError : false).toBe(true);
+    expect(getStructuredContent(result)).toEqual({
+      ok: false,
+      error: {
+        code: "WORKFLOW_RUN_NOT_FOUND",
+        message: 'Workflow run "missing-run" was not found.',
       },
     });
   });

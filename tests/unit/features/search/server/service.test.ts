@@ -137,6 +137,106 @@ class InMemoryVectorStore implements VectorStore {
   }
 }
 
+class FixedVectorStore implements VectorStore {
+  public constructor(private readonly matches: VectorSearchMatch[]) {}
+
+  public async upsert(): Promise<void> {
+    return undefined;
+  }
+
+  public async search(): Promise<VectorSearchMatch[]> {
+    return this.matches;
+  }
+
+  public async deleteByIds(): Promise<void> {
+    return undefined;
+  }
+}
+
+class MixedDomainSearchRepository implements AssetSearchRepository {
+  public async searchAssets(
+    _input: AssetSearchInput
+  ): Promise<AssetListResult> {
+    return {
+      items: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      },
+    };
+  }
+
+  public async getChunkMatchesByVectorIds(
+    _vectorIds: string[],
+    _query?: {
+      aiVisibility?: AssetAiVisibility[] | undefined;
+    }
+  ): Promise<AssetChunkMatch[]> {
+    return [
+      {
+        id: "chunk-personal-1",
+        chunkIndex: 0,
+        textPreview: "Personal note preview",
+        contentText: "Personal note full content",
+        vectorId: "personal-1:0",
+        asset: {
+          id: "asset-personal-1",
+          type: "note",
+          title: "Personal Debug Note",
+          summary: "A personal note about a bug",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "personal",
+          sensitivity: "private",
+          aiVisibility: "allow",
+          retrievalPriority: 0,
+          collectionKey: "inbox:notes",
+          capturedAt: "2026-03-19T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+      },
+      {
+        id: "chunk-engineering-1",
+        chunkIndex: 1,
+        textPreview: "Engineering design note",
+        contentText: "Engineering design full content",
+        vectorId: "engineering-1:0",
+        asset: {
+          id: "asset-engineering-1",
+          type: "note",
+          title: "Engineering Design Note",
+          summary: "A design note for system work",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "engineering",
+          sensitivity: "internal",
+          aiVisibility: "allow",
+          retrievalPriority: 0,
+          collectionKey: "inbox:notes",
+          capturedAt: "2026-03-19T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+      },
+    ];
+  }
+
+  public async searchAssetSummaries(_input: {
+    query: string;
+    limit: number;
+    aiVisibility: AssetAiVisibility[];
+  }): Promise<AssetSummaryMatch[]> {
+    return [];
+  }
+}
+
 const embeddingProvider: AIProvider = {
   generateText: vi.fn(async () => ({
     text: "",
@@ -306,5 +406,54 @@ describe("search service", () => {
         totalPages: 1,
       },
     });
+  });
+
+  it("searchAssetsForContext boosts preferred domains without changing visibility filtering", async () => {
+    const repository = new MixedDomainSearchRepository();
+    const service = createSearchService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(
+        new FixedVectorStore([
+          {
+            id: "personal-1:0",
+            score: 0.96,
+          },
+          {
+            id: "engineering-1:0",
+            score: 0.9,
+          },
+        ])
+      ),
+      getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+    });
+
+    const result = await service.searchAssetsForContext(
+      { APP_NAME: "cloudmind-test" },
+      {
+        query: "debugging notes",
+        page: 1,
+        pageSize: 2,
+      },
+      {
+        profile: "coding",
+        boostedDomains: ["engineering", "research"],
+        suppressedDomains: ["personal", "finance", "health"],
+        includeSummaryOnly: true,
+        overfetchMultiplier: 3,
+      }
+    );
+
+    expect(result.items).toHaveLength(2);
+    expect(result.items[0]?.kind).toBe("chunk");
+    expect(
+      result.items[0]?.kind === "chunk"
+        ? result.items[0].chunk.asset.domain
+        : null
+    ).toBe("engineering");
+    expect(
+      result.items[1]?.kind === "chunk"
+        ? result.items[1].chunk.asset.domain
+        : null
+    ).toBe("personal");
   });
 });
