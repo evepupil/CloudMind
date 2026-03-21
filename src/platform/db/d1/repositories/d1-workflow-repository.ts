@@ -20,6 +20,8 @@ import {
   workflowSteps,
 } from "@/platform/db/d1/schema";
 
+const MAX_WORKFLOW_STEP_INSERT_BATCH_SIZE = 7;
+
 const mapWorkflowStepRecord = (
   record: typeof workflowSteps.$inferSelect
 ): WorkflowStepRecord => {
@@ -172,7 +174,19 @@ export class D1WorkflowRepository implements WorkflowRepository {
     }));
 
     if (rows.length > 0) {
-      await this.db.insert(workflowSteps).values(rows);
+      // 这里按小批次写入，避开远端 D1 参数化批量插入的绑定参数上限。
+      for (
+        let startIndex = 0;
+        startIndex < rows.length;
+        startIndex += MAX_WORKFLOW_STEP_INSERT_BATCH_SIZE
+      ) {
+        const batch = rows.slice(
+          startIndex,
+          startIndex + MAX_WORKFLOW_STEP_INSERT_BATCH_SIZE
+        );
+
+        await this.db.insert(workflowSteps).values(batch);
+      }
     }
 
     return rows.map(mapWorkflowStepRecord);
