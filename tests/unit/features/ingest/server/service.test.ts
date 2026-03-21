@@ -43,7 +43,15 @@ const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
     title: "Test asset",
     summary: null,
     sourceUrl: null,
+    sourceKind: "manual",
     status: "pending",
+    domain: "general",
+    sensitivity: "internal",
+    aiVisibility: "allow",
+    retrievalPriority: 0,
+    collectionKey: "inbox:notes",
+    capturedAt: "2026-03-19T00:00:00.000Z",
+    descriptorJson: null,
     createdAt: "2026-03-19T00:00:00.000Z",
     updatedAt: "2026-03-19T00:00:00.000Z",
     contentText: "Default content",
@@ -114,6 +122,7 @@ class InMemoryAssetRepository implements AssetRepository {
       ...this.asset,
       title: input.title?.trim() || this.asset.title,
       contentText: input.content,
+      sourceKind: input.sourceKind ?? "manual",
       source: {
         kind: input.sourceKind ?? "manual",
         sourceUrl: null,
@@ -133,6 +142,7 @@ class InMemoryAssetRepository implements AssetRepository {
       type: "url",
       title: input.title?.trim() || input.url,
       sourceUrl: input.url,
+      sourceKind: input.sourceKind ?? "manual",
       contentText: null,
       source: {
         kind: input.sourceKind ?? "manual",
@@ -158,6 +168,7 @@ class InMemoryAssetRepository implements AssetRepository {
       contentR2Key: null,
       mimeType: input.mimeType,
       sourceUrl: null,
+      sourceKind: "upload",
       source: {
         kind: "upload",
         sourceUrl: null,
@@ -179,6 +190,8 @@ class InMemoryAssetRepository implements AssetRepository {
   public async completeAssetProcessing(): Promise<void> {}
 
   public async replaceAssetChunks(): Promise<void> {}
+
+  public async updateAssetIndexing(): Promise<void> {}
 
   public async failAssetProcessing(): Promise<void> {}
 

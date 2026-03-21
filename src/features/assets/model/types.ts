@@ -12,6 +12,23 @@ export type AssetSourceKind =
   | "mcp"
   | "import";
 
+// 这里约束资产的粗粒度领域，先服务检索分区与访问策略。
+export type AssetDomain =
+  | "engineering"
+  | "product"
+  | "research"
+  | "personal"
+  | "finance"
+  | "health"
+  | "archive"
+  | "general";
+
+// 这里区分敏感级别，供 AI 可见性与后续权限边界复用。
+export type AssetSensitivity = "public" | "internal" | "private" | "restricted";
+
+// 这里表达 AI 在读取资产时的可见范围。
+export type AssetAiVisibility = "allow" | "summary_only" | "deny";
+
 // 这里统一异步任务状态，便于详情页和重试能力复用。
 export type IngestJobStatus = "queued" | "running" | "succeeded" | "failed";
 
@@ -54,7 +71,15 @@ export interface AssetSummary {
   title: string;
   summary: string | null;
   sourceUrl: string | null;
+  sourceKind: AssetSourceKind | null;
   status: AssetStatus;
+  domain: AssetDomain;
+  sensitivity: AssetSensitivity;
+  aiVisibility: AssetAiVisibility;
+  retrievalPriority: number;
+  collectionKey: string | null;
+  capturedAt: string | null;
+  descriptorJson: string | null;
   createdAt: string;
   updatedAt: string;
 }

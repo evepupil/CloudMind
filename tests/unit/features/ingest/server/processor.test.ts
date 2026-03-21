@@ -94,7 +94,15 @@ const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
     title: "Test asset",
     summary: null,
     sourceUrl: null,
+    sourceKind: "manual",
     status: "pending",
+    domain: "general",
+    sensitivity: "internal",
+    aiVisibility: "allow",
+    retrievalPriority: 0,
+    collectionKey: "inbox:notes",
+    capturedAt: "2026-03-19T00:00:00.000Z",
+    descriptorJson: null,
     createdAt: "2026-03-19T00:00:00.000Z",
     updatedAt: "2026-03-19T00:00:00.000Z",
     contentText: "Default content",
@@ -167,6 +175,8 @@ class InMemoryAssetRepository implements AssetRepository {
       metadataJson: null,
       createdAt: "2026-03-19T00:00:00.000Z",
     };
+    this.asset.sourceKind =
+      input.sourceKind ?? ("manual" satisfies AssetSourceKind);
     return structuredClone(this.asset);
   }
 
@@ -179,12 +189,16 @@ class InMemoryAssetRepository implements AssetRepository {
       metadataJson: null,
       createdAt: "2026-03-19T00:00:00.000Z",
     };
+    this.asset.sourceKind =
+      input.sourceKind ?? ("manual" satisfies AssetSourceKind);
+    this.asset.sourceUrl = input.url;
     return structuredClone(this.asset);
   }
 
   public async createFileAsset(
     _input: CreateFileAssetInput
   ): Promise<AssetDetail> {
+    this.asset.sourceKind = "upload";
     return structuredClone(this.asset);
   }
 
@@ -237,6 +251,47 @@ class InMemoryAssetRepository implements AssetRepository {
       contentText: chunk.contentText,
       vectorId: chunk.vectorId ?? null,
     }));
+  }
+
+  public async updateAssetIndexing(
+    id: string,
+    input: {
+      sourceKind?: AssetSourceKind | null | undefined;
+      domain?: AssetDetail["domain"] | undefined;
+      sensitivity?: AssetDetail["sensitivity"] | undefined;
+      aiVisibility?: AssetDetail["aiVisibility"] | undefined;
+      retrievalPriority?: number | undefined;
+      collectionKey?: string | null | undefined;
+      capturedAt?: string | null | undefined;
+      descriptorJson?: string | null | undefined;
+    }
+  ): Promise<void> {
+    this.assertId(id);
+
+    this.asset = {
+      ...this.asset,
+      sourceKind:
+        input.sourceKind !== undefined
+          ? input.sourceKind
+          : this.asset.sourceKind,
+      domain: input.domain ?? this.asset.domain,
+      sensitivity: input.sensitivity ?? this.asset.sensitivity,
+      aiVisibility: input.aiVisibility ?? this.asset.aiVisibility,
+      retrievalPriority:
+        input.retrievalPriority ?? this.asset.retrievalPriority,
+      collectionKey:
+        input.collectionKey !== undefined
+          ? input.collectionKey
+          : this.asset.collectionKey,
+      capturedAt:
+        input.capturedAt !== undefined
+          ? input.capturedAt
+          : this.asset.capturedAt,
+      descriptorJson:
+        input.descriptorJson !== undefined
+          ? input.descriptorJson
+          : this.asset.descriptorJson,
+    };
   }
 
   public async failAssetProcessing(id: string, message: string): Promise<void> {
@@ -653,6 +708,21 @@ const drainWorkflowQueue = async (
   }
 };
 
+const getArtifactContent = (
+  repository: InMemoryWorkflowRepository,
+  artifactType: string
+) => {
+  const artifact = repository.artifacts.find(
+    (item) => item.artifactType === artifactType
+  );
+
+  if (!artifact?.contentText) {
+    throw new Error(`Artifact "${artifactType}" is missing content.`);
+  }
+
+  return JSON.parse(artifact.contentText) as Record<string, unknown>;
+};
+
 describe("processTextAsset", () => {
   it("promotes a pending text asset to ready and completes the latest job", async () => {
     const repository = new InMemoryAssetRepository(
@@ -712,6 +782,12 @@ describe("processTextAsset", () => {
       },
     ]);
     expect(result.processedAt).toBe("2026-03-19T00:02:00.000Z");
+    expect(result.domain).toBe("general");
+    expect(result.sensitivity).toBe("internal");
+    expect(result.aiVisibility).toBe("allow");
+    expect(result.retrievalPriority).toBe(10);
+    expect(result.collectionKey).toBe("inbox:notes");
+    expect(result.sourceKind).toBe("manual");
     expect(result.jobs[0]?.status).toBe("succeeded");
     expect(result.jobs[0]?.errorMessage).toBeNull();
     expect(vectorStore.upsertCalls).toEqual([
@@ -732,6 +808,8 @@ describe("processTextAsset", () => {
     expect(workflowRepository.steps.map((step) => step.stepKey)).toEqual([
       "clean_content",
       "summarize",
+      "derive_descriptor",
+      "derive_access_policy",
       "persist_content",
       "chunk",
       "embed",
@@ -747,11 +825,32 @@ describe("processTextAsset", () => {
         storageKind: "inline",
       }),
       expect.objectContaining({
+        artifactType: "descriptor",
+        storageKind: "inline",
+      }),
+      expect.objectContaining({
+        artifactType: "access_policy",
+        storageKind: "inline",
+      }),
+      expect.objectContaining({
         artifactType: "clean_content",
         storageKind: "r2",
         r2Key: "assets/asset-1/content/content.txt",
       }),
     ]);
+    expect(getArtifactContent(workflowRepository, "descriptor")).toMatchObject({
+      domain: "general",
+      collectionKey: "inbox:notes",
+      strategy: "heuristic_v1",
+    });
+    expect(
+      getArtifactContent(workflowRepository, "access_policy")
+    ).toMatchObject({
+      sensitivity: "internal",
+      aiVisibility: "allow",
+      retrievalPriority: 10,
+      strategy: "heuristic_v1",
+    });
   });
 
   it("marks the asset and job as failed when content is empty", async () => {
@@ -887,6 +986,11 @@ describe("processUrlAsset", () => {
     expect(result.summary).toBe(
       "Saved URL asset for https://developers.cloudflare.com"
     );
+    expect(result.domain).toBe("engineering");
+    expect(result.sensitivity).toBe("public");
+    expect(result.aiVisibility).toBe("allow");
+    expect(result.retrievalPriority).toBe(50);
+    expect(result.collectionKey).toBe("site:developers.cloudflare.com");
     expect(result.jobs[0]?.status).toBe("succeeded");
     expect(workflowRepository.runs).toEqual([
       expect.objectContaining({
@@ -899,6 +1003,8 @@ describe("processUrlAsset", () => {
     expect(workflowRepository.steps.map((step) => step.stepKey)).toEqual([
       "load_source",
       "summarize",
+      "derive_descriptor",
+      "derive_access_policy",
       "finalize",
     ]);
     expect(workflowRepository.artifacts).toEqual([
@@ -907,7 +1013,27 @@ describe("processUrlAsset", () => {
         storageKind: "inline",
         contentText: "Saved URL asset for https://developers.cloudflare.com",
       }),
+      expect.objectContaining({
+        artifactType: "descriptor",
+        storageKind: "inline",
+      }),
+      expect.objectContaining({
+        artifactType: "access_policy",
+        storageKind: "inline",
+      }),
     ]);
+    expect(getArtifactContent(workflowRepository, "descriptor")).toMatchObject({
+      domain: "engineering",
+      collectionKey: "site:developers.cloudflare.com",
+      sourceHost: "developers.cloudflare.com",
+    });
+    expect(
+      getArtifactContent(workflowRepository, "access_policy")
+    ).toMatchObject({
+      sensitivity: "public",
+      aiVisibility: "allow",
+      retrievalPriority: 50,
+    });
   });
 
   it("marks the asset as failed when the URL is empty", async () => {
@@ -1022,6 +1148,11 @@ describe("processPdfAsset", () => {
     expect(result.summary).toBe("Hello CloudMind PDF");
     expect(result.contentText).toBe("Hello CloudMind PDF");
     expect(result.contentR2Key).toBe("assets/asset-pdf-1/content/content.txt");
+    expect(result.domain).toBe("research");
+    expect(result.sensitivity).toBe("internal");
+    expect(result.aiVisibility).toBe("allow");
+    expect(result.retrievalPriority).toBe(30);
+    expect(result.collectionKey).toBe("library:pdf");
     expect(result.chunks).toEqual([
       {
         id: "chunk-1",
@@ -1051,6 +1182,8 @@ describe("processPdfAsset", () => {
       "load_source",
       "clean_content",
       "summarize",
+      "derive_descriptor",
+      "derive_access_policy",
       "persist_content",
       "chunk",
       "embed",
@@ -1066,11 +1199,31 @@ describe("processPdfAsset", () => {
         storageKind: "inline",
       }),
       expect.objectContaining({
+        artifactType: "descriptor",
+        storageKind: "inline",
+      }),
+      expect.objectContaining({
+        artifactType: "access_policy",
+        storageKind: "inline",
+      }),
+      expect.objectContaining({
         artifactType: "clean_content",
         storageKind: "r2",
         r2Key: "assets/asset-pdf-1/content/content.txt",
       }),
     ]);
+    expect(getArtifactContent(workflowRepository, "descriptor")).toMatchObject({
+      domain: "research",
+      collectionKey: "library:pdf",
+      strategy: "heuristic_v1",
+    });
+    expect(
+      getArtifactContent(workflowRepository, "access_policy")
+    ).toMatchObject({
+      sensitivity: "internal",
+      aiVisibility: "allow",
+      retrievalPriority: 30,
+    });
   });
 
   it("marks the asset as failed when the R2 object is missing", async () => {

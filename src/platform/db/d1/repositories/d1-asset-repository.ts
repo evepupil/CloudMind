@@ -19,6 +19,7 @@ import type {
   CreateFileAssetInput,
   CreateTextAssetInput,
   CreateUrlAssetInput,
+  UpdateAssetIndexingInput,
   UpdateAssetMetadataInput,
 } from "@/core/assets/ports";
 import type {
@@ -47,7 +48,15 @@ const mapAssetSummary = (record: typeof assets.$inferSelect): AssetSummary => {
     title: record.title,
     summary: record.summary,
     sourceUrl: record.sourceUrl,
+    sourceKind: record.sourceKind,
     status: record.status,
+    domain: record.domain,
+    sensitivity: record.sensitivity,
+    aiVisibility: record.aiVisibility,
+    retrievalPriority: record.retrievalPriority,
+    collectionKey: record.collectionKey,
+    capturedAt: record.capturedAt,
+    descriptorJson: record.descriptorJson,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
@@ -283,7 +292,15 @@ export class D1AssetRepository implements AssetRepository {
       title,
       summary: null,
       sourceUrl: null,
+      sourceKind,
       status: "pending",
+      domain: "general",
+      sensitivity: "internal",
+      aiVisibility: "allow",
+      retrievalPriority: 0,
+      collectionKey: null,
+      capturedAt: now,
+      descriptorJson: null,
       contentText: input.content,
       rawR2Key: null,
       contentR2Key: null,
@@ -342,7 +359,15 @@ export class D1AssetRepository implements AssetRepository {
       title,
       summary: null,
       sourceUrl: input.url,
+      sourceKind,
       status: "pending",
+      domain: "general",
+      sensitivity: "internal",
+      aiVisibility: "allow",
+      retrievalPriority: 0,
+      collectionKey: null,
+      capturedAt: now,
+      descriptorJson: null,
       contentText: null,
       rawR2Key: null,
       contentR2Key: null,
@@ -400,7 +425,15 @@ export class D1AssetRepository implements AssetRepository {
       title,
       summary: null,
       sourceUrl: null,
+      sourceKind: "upload",
       status: "pending",
+      domain: "general",
+      sensitivity: "internal",
+      aiVisibility: "allow",
+      retrievalPriority: 0,
+      collectionKey: null,
+      capturedAt: now,
+      descriptorJson: null,
       contentText: null,
       rawR2Key: input.rawR2Key,
       contentR2Key: null,
@@ -510,6 +543,49 @@ export class D1AssetRepository implements AssetRepository {
     for (const batch of splitIntoBatches(rows, 12)) {
       await this.db.insert(assetChunks).values(batch);
     }
+  }
+
+  public async updateAssetIndexing(
+    id: string,
+    input: UpdateAssetIndexingInput
+  ): Promise<void> {
+    const updatePayload: Partial<typeof assets.$inferInsert> = {
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (input.sourceKind !== undefined) {
+      updatePayload.sourceKind = input.sourceKind;
+    }
+
+    if (input.domain !== undefined) {
+      updatePayload.domain = input.domain;
+    }
+
+    if (input.sensitivity !== undefined) {
+      updatePayload.sensitivity = input.sensitivity;
+    }
+
+    if (input.aiVisibility !== undefined) {
+      updatePayload.aiVisibility = input.aiVisibility;
+    }
+
+    if (input.retrievalPriority !== undefined) {
+      updatePayload.retrievalPriority = input.retrievalPriority;
+    }
+
+    if (input.collectionKey !== undefined) {
+      updatePayload.collectionKey = input.collectionKey;
+    }
+
+    if (input.capturedAt !== undefined) {
+      updatePayload.capturedAt = input.capturedAt;
+    }
+
+    if (input.descriptorJson !== undefined) {
+      updatePayload.descriptorJson = input.descriptorJson;
+    }
+
+    await this.db.update(assets).set(updatePayload).where(eq(assets.id, id));
   }
 
   public async failAssetProcessing(id: string, message: string): Promise<void> {

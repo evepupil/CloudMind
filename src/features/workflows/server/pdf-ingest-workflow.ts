@@ -18,6 +18,11 @@ import {
 } from "@/features/ingest/server/content-processing";
 import { extractPdfText } from "@/features/ingest/server/pdf-extractor";
 
+import {
+  type AssetDescriptor,
+  deriveAccessPolicy,
+  deriveDescriptor,
+} from "./indexing-policy";
 import { enqueueWorkflow, type WorkflowDefinition } from "./runtime";
 
 const decodePdfSignature = (body: ArrayBuffer): string => {
@@ -131,6 +136,96 @@ export const createPdfIngestWorkflowDefinition = (): WorkflowDefinition => {
                 contentText: summary,
                 metadataJson: JSON.stringify({
                   workflowType: "pdf_ingest_v1",
+                }),
+              },
+            ],
+          };
+        },
+      },
+      {
+        key: "derive_descriptor",
+        type: "derive_descriptor",
+        execute: async (context) => {
+          const summary = context.state.summary;
+          const normalizedContent = context.state.normalizedContent;
+          const derived = deriveDescriptor({
+            asset: context.asset,
+            normalizedContent:
+              typeof normalizedContent === "string" ? normalizedContent : null,
+            summary: typeof summary === "string" ? summary : null,
+          });
+
+          await context.services.assetRepository.updateAssetIndexing(
+            context.asset.id,
+            derived.indexing
+          );
+
+          return {
+            output: {
+              domain: derived.descriptor.domain,
+              collectionKey: derived.descriptor.collectionKey,
+            },
+            state: {
+              descriptor: derived.descriptor,
+            },
+            artifacts: [
+              {
+                artifactType: "descriptor",
+                storageKind: "inline",
+                contentText: JSON.stringify(derived.descriptor),
+                metadataJson: JSON.stringify({
+                  strategy: derived.descriptor.strategy,
+                }),
+              },
+            ],
+          };
+        },
+      },
+      {
+        key: "derive_access_policy",
+        type: "derive_access_policy",
+        execute: async (context) => {
+          const descriptor = context.state.descriptor;
+          const summary = context.state.summary;
+          const normalizedContent = context.state.normalizedContent;
+
+          if (!descriptor || typeof descriptor !== "object") {
+            throw new Error("Workflow state is missing descriptor.");
+          }
+
+          const derived = deriveAccessPolicy(
+            {
+              asset: context.asset,
+              normalizedContent:
+                typeof normalizedContent === "string"
+                  ? normalizedContent
+                  : null,
+              summary: typeof summary === "string" ? summary : null,
+            },
+            descriptor as AssetDescriptor
+          );
+
+          await context.services.assetRepository.updateAssetIndexing(
+            context.asset.id,
+            derived.indexing
+          );
+
+          return {
+            output: {
+              sensitivity: derived.policy.sensitivity,
+              aiVisibility: derived.policy.aiVisibility,
+              retrievalPriority: derived.policy.retrievalPriority,
+            },
+            state: {
+              accessPolicy: derived.policy,
+            },
+            artifacts: [
+              {
+                artifactType: "access_policy",
+                storageKind: "inline",
+                contentText: JSON.stringify(derived.policy),
+                metadataJson: JSON.stringify({
+                  strategy: derived.policy.strategy,
                 }),
               },
             ],

@@ -35,7 +35,15 @@ const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
     title: "Test asset",
     summary: null,
     sourceUrl: null,
+    sourceKind: "manual",
     status: "pending",
+    domain: "general",
+    sensitivity: "internal",
+    aiVisibility: "allow",
+    retrievalPriority: 0,
+    collectionKey: "inbox:notes",
+    capturedAt: "2026-03-19T00:00:00.000Z",
+    descriptorJson: null,
     createdAt: "2026-03-19T00:00:00.000Z",
     updatedAt: "2026-03-19T00:00:00.000Z",
     contentText: "Default content",
@@ -115,6 +123,8 @@ class InMemoryAssetRepository implements AssetRepository {
   public async completeAssetProcessing(): Promise<void> {}
 
   public async replaceAssetChunks(): Promise<void> {}
+
+  public async updateAssetIndexing(): Promise<void> {}
 
   public async failAssetProcessing(): Promise<void> {}
 

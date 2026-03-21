@@ -1,8 +1,11 @@
 import type {
+  AssetAiVisibility,
   AssetChunkMatch,
   AssetDetail,
+  AssetDomain,
   AssetListQuery,
   AssetListResult,
+  AssetSensitivity,
   AssetSourceKind,
 } from "@/features/assets/model/types";
 
@@ -52,6 +55,17 @@ export interface UpdateAssetMetadataInput {
   sourceUrl?: string | null | undefined;
 }
 
+export interface UpdateAssetIndexingInput {
+  sourceKind?: AssetSourceKind | null | undefined;
+  domain?: AssetDomain | undefined;
+  sensitivity?: AssetSensitivity | undefined;
+  aiVisibility?: AssetAiVisibility | undefined;
+  retrievalPriority?: number | undefined;
+  collectionKey?: string | null | undefined;
+  capturedAt?: string | null | undefined;
+  descriptorJson?: string | null | undefined;
+}
+
 // 这里定义资产读取侧接口，供列表与详情等读模型复用。
 export interface AssetQueryRepository {
   listAssets(query?: AssetListQuery): Promise<AssetListResult>;
@@ -79,6 +93,10 @@ export interface AssetIngestRepository {
   replaceAssetChunks(
     assetId: string,
     chunks: CreateAssetChunkInput[]
+  ): Promise<void>;
+  updateAssetIndexing(
+    id: string,
+    input: UpdateAssetIndexingInput
   ): Promise<void>;
   failAssetProcessing(id: string, message: string): Promise<void>;
   markIngestJobRunning(jobId: string): Promise<void>;
