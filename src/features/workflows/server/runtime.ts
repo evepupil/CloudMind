@@ -3,6 +3,7 @@ import type { AssetIngestRepository } from "@/core/assets/ports";
 import type { BlobStore } from "@/core/blob/ports";
 import type { JobQueue, JobQueueMessage } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
+import type { WebPageFetcher } from "@/core/web/ports";
 import type {
   CreateAssetArtifactInput,
   WorkflowRepository,
@@ -22,6 +23,7 @@ export interface WorkflowServices {
   vectorStore: VectorStore;
   aiProvider: AIProvider;
   jobQueue: JobQueue;
+  webPageFetcher?: WebPageFetcher | undefined;
 }
 
 export interface WorkflowExecutionContext {

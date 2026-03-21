@@ -568,6 +568,10 @@ export class D1AssetRepository implements AssetRepository {
       updatePayload.contentText = input.contentText;
     }
 
+    if (input.rawR2Key !== undefined) {
+      updatePayload.rawR2Key = input.rawR2Key;
+    }
+
     if (input.contentR2Key !== undefined) {
       updatePayload.contentR2Key = input.contentR2Key;
     }

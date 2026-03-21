@@ -20,6 +20,7 @@ import type {
   VectorSearchMatch,
   VectorStore,
 } from "@/core/vector/ports";
+import type { WebPageFetchResult, WebPageFetcher } from "@/core/web/ports";
 import type {
   CreateAssetArtifactInput,
   CreateWorkflowRunInput,
@@ -219,6 +220,7 @@ class InMemoryAssetRepository implements AssetRepository {
     input: {
       summary: string;
       contentText?: string | null;
+      rawR2Key?: string | null;
       contentR2Key?: string | null;
     }
   ): Promise<void> {
@@ -232,6 +234,10 @@ class InMemoryAssetRepository implements AssetRepository {
 
     if (input.contentText !== undefined) {
       this.asset.contentText = input.contentText;
+    }
+
+    if (input.rawR2Key !== undefined) {
+      this.asset.rawR2Key = input.rawR2Key;
     }
 
     if (input.contentR2Key !== undefined) {
@@ -435,6 +441,20 @@ class InMemoryAIProvider implements AIProvider {
     return {
       embeddings: input.texts.map((_, index) => [index + 0.1, index + 0.2]),
     };
+  }
+}
+
+class InMemoryWebPageFetcher implements WebPageFetcher {
+  public constructor(
+    private readonly fetchUrlResult: WebPageFetchResult | Error
+  ) {}
+
+  public async fetchUrl(_url: string): Promise<WebPageFetchResult> {
+    if (this.fetchUrlResult instanceof Error) {
+      throw this.fetchUrlResult;
+    }
+
+    return structuredClone(this.fetchUrlResult);
   }
 }
 
@@ -683,7 +703,8 @@ const drainWorkflowQueue = async (
   workflowRepository: InMemoryWorkflowRepository,
   blobStore: InMemoryBlobStore,
   vectorStore: InMemoryVectorStore,
-  aiProvider: InMemoryAIProvider
+  aiProvider: InMemoryAIProvider,
+  webPageFetcher?: WebPageFetcher
 ): Promise<void> => {
   while (jobQueue.messages.length > 0) {
     const message = jobQueue.messages.shift();
@@ -708,6 +729,7 @@ const drainWorkflowQueue = async (
       vectorStore,
       aiProvider,
       jobQueue,
+      webPageFetcher,
     });
   }
 };
@@ -945,7 +967,7 @@ describe("processTextAsset", () => {
 });
 
 describe("processUrlAsset", () => {
-  it("summarizes the saved URL and completes the latest job", async () => {
+  it("fetches URL content, stores blobs, and promotes the asset to ready", async () => {
     const repository = new InMemoryAssetRepository(
       createAsset({
         id: "asset-url-1",
@@ -958,6 +980,19 @@ describe("processUrlAsset", () => {
     const blobStore = new InMemoryBlobStore();
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new InMemoryAIProvider();
+    const webPageFetcher = new InMemoryWebPageFetcher({
+      title: "Cloudflare Developers",
+      sourceUrl: "https://developers.cloudflare.com/workers/",
+      rawContent:
+        "Title: Cloudflare Developers\n" +
+        "URL Source: https://developers.cloudflare.com/workers/\n" +
+        "Markdown Content:\n" +
+        "Cloudflare Workers runtime guide for building APIs with D1 and R2.",
+      content:
+        "Cloudflare Workers runtime guide for building APIs with D1 and R2.",
+      fetchedAt: "2026-03-19T00:00:30.000Z",
+      provider: "jina_reader",
+    });
     const workflowRepository = new InMemoryWorkflowRepository();
 
     const jobQueue = new InMemoryJobQueue();
@@ -969,6 +1004,7 @@ describe("processUrlAsset", () => {
       vectorStore,
       aiProvider,
       jobQueue,
+      webPageFetcher,
       "asset-url-1"
     );
 
@@ -981,21 +1017,39 @@ describe("processUrlAsset", () => {
       workflowRepository,
       blobStore,
       vectorStore,
-      aiProvider
+      aiProvider,
+      webPageFetcher
     );
 
     const result = await repository.getAssetById("asset-url-1");
 
     expect(result.status).toBe("ready");
     expect(result.summary).toBe(
-      "Saved URL asset for https://developers.cloudflare.com"
+      "Cloudflare Workers runtime guide for building APIs with D1 and R2."
+    );
+    expect(result.rawR2Key).toBe("assets/asset-url-1/raw/source.md");
+    expect(result.contentR2Key).toBe("assets/asset-url-1/content/content.txt");
+    expect(result.contentText).toBe(
+      "Cloudflare Workers runtime guide for building APIs with D1 and R2."
     );
     expect(result.domain).toBe("engineering");
     expect(result.sensitivity).toBe("public");
     expect(result.aiVisibility).toBe("allow");
     expect(result.retrievalPriority).toBe(50);
     expect(result.collectionKey).toBe("site:developers.cloudflare.com");
+    expect(result.sourceUrl).toBe("https://developers.cloudflare.com/workers/");
     expect(result.jobs[0]?.status).toBe("succeeded");
+    expect(result.chunks).toEqual([
+      {
+        id: "chunk-1",
+        chunkIndex: 0,
+        textPreview:
+          "Cloudflare Workers runtime guide for building APIs with D1 and R2.",
+        contentText:
+          "Cloudflare Workers runtime guide for building APIs with D1 and R2.",
+        vectorId: "asset-url-1:0",
+      },
+    ]);
     expect(workflowRepository.runs).toEqual([
       expect.objectContaining({
         assetId: "asset-url-1",
@@ -1006,16 +1060,22 @@ describe("processUrlAsset", () => {
     ]);
     expect(workflowRepository.steps.map((step) => step.stepKey)).toEqual([
       "load_source",
+      "clean_content",
       "summarize",
       "derive_descriptor",
       "derive_access_policy",
+      "persist_content",
+      "chunk",
+      "embed",
+      "index",
       "finalize",
     ]);
     expect(workflowRepository.artifacts).toEqual([
       expect.objectContaining({
         artifactType: "summary",
         storageKind: "inline",
-        contentText: "Saved URL asset for https://developers.cloudflare.com",
+        contentText:
+          "Cloudflare Workers runtime guide for building APIs with D1 and R2.",
       }),
       expect.objectContaining({
         artifactType: "descriptor",
@@ -1024,6 +1084,11 @@ describe("processUrlAsset", () => {
       expect.objectContaining({
         artifactType: "access_policy",
         storageKind: "inline",
+      }),
+      expect.objectContaining({
+        artifactType: "clean_content",
+        storageKind: "r2",
+        r2Key: "assets/asset-url-1/content/content.txt",
       }),
     ]);
     expect(getArtifactContent(workflowRepository, "descriptor")).toMatchObject({
@@ -1053,6 +1118,9 @@ describe("processUrlAsset", () => {
     const blobStore = new InMemoryBlobStore();
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new InMemoryAIProvider();
+    const webPageFetcher = new InMemoryWebPageFetcher(
+      new Error("unused fetcher")
+    );
     const workflowRepository = new InMemoryWorkflowRepository();
 
     const jobQueue = new InMemoryJobQueue();
@@ -1064,6 +1132,7 @@ describe("processUrlAsset", () => {
       vectorStore,
       aiProvider,
       jobQueue,
+      webPageFetcher,
       "asset-url-empty"
     );
 
@@ -1086,6 +1155,66 @@ describe("processUrlAsset", () => {
     expect(result.status).toBe("failed");
     expect(result.errorMessage).toBe(
       "Asset URL is empty and cannot be processed."
+    );
+    expect(result.jobs[0]?.status).toBe("failed");
+    expect(workflowRepository.runs[0]).toEqual(
+      expect.objectContaining({
+        workflowType: "url_ingest_v1",
+        status: "failed",
+        currentStep: "load_source",
+      })
+    );
+  });
+
+  it("marks the asset as failed when Jina Reader fetch fails", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-url-fetch-failed",
+        type: "url",
+        title: "Broken URL",
+        contentText: null,
+        sourceUrl: "https://example.com/broken",
+      })
+    );
+    const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new InMemoryAIProvider();
+    const webPageFetcher = new InMemoryWebPageFetcher(
+      new Error("Jina Reader request failed with status 429.")
+    );
+    const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
+
+    const enqueued = await processUrlAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      webPageFetcher,
+      "asset-url-fetch-failed"
+    );
+
+    expect(enqueued.status).toBe("processing");
+
+    await expect(
+      drainWorkflowQueue(
+        jobQueue,
+        repository,
+        workflowRepository,
+        blobStore,
+        vectorStore,
+        aiProvider,
+        webPageFetcher
+      )
+    ).rejects.toThrow("Jina Reader request failed with status 429.");
+
+    const result = await repository.getAssetById("asset-url-fetch-failed");
+
+    expect(result.status).toBe("failed");
+    expect(result.errorMessage).toBe(
+      "Jina Reader request failed with status 429."
     );
     expect(result.jobs[0]?.status).toBe("failed");
     expect(workflowRepository.runs[0]).toEqual(

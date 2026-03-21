@@ -3,6 +3,7 @@ import type { AssetIngestRepository } from "@/core/assets/ports";
 import type { BlobStore } from "@/core/blob/ports";
 import type { JobQueue } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
+import type { WebPageFetcher } from "@/core/web/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
 import { runNoteIngestWorkflow } from "@/features/workflows/server/note-ingest-workflow";
@@ -42,6 +43,7 @@ export const processUrlAsset = async (
   vectorStore: VectorStore,
   aiProvider: AIProvider,
   jobQueue: JobQueue,
+  webPageFetcher: WebPageFetcher,
   assetId: string,
   options?: {
     force?: boolean;
@@ -54,6 +56,7 @@ export const processUrlAsset = async (
     vectorStore,
     aiProvider,
     jobQueue,
+    webPageFetcher,
     assetId,
     options?.force ? "reprocess" : "ingest",
     options

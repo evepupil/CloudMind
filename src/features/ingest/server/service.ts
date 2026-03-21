@@ -8,6 +8,7 @@ import { createRawAssetBlobKey } from "@/core/blob/keys";
 import type { BlobStore } from "@/core/blob/ports";
 import type { JobQueue } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
+import type { WebPageFetcher } from "@/core/web/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AppBindings } from "@/env";
 import type { AssetDetail } from "@/features/assets/model/types";
@@ -17,6 +18,7 @@ import { getAssetIngestRepositoryFromBindings } from "@/platform/db/d1/repositor
 import { getWorkflowRepositoryFromBindings } from "@/platform/db/d1/repositories/get-workflow-repository";
 import { getJobQueueFromBindings } from "@/platform/queue/cloudflare/get-job-queue";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
+import { getWebPageFetcherFromBindings } from "@/platform/web/jina/get-web-page-fetcher";
 
 import {
   processPdfAsset,
@@ -58,6 +60,9 @@ interface IngestServiceDependencies {
   getAIProvider: (
     bindings: AppBindings | undefined
   ) => AIProvider | Promise<AIProvider>;
+  getWebPageFetcher: (
+    bindings: AppBindings | undefined
+  ) => WebPageFetcher | Promise<WebPageFetcher>;
   processTextAsset: (
     repository: AssetIngestRepository,
     workflowRepository: WorkflowRepository,
@@ -77,6 +82,7 @@ interface IngestServiceDependencies {
     vectorStore: VectorStore,
     aiProvider: AIProvider,
     jobQueue: JobQueue,
+    webPageFetcher: WebPageFetcher,
     assetId: string
   ) => Promise<AssetDetail>;
   processPdfAsset: (
@@ -107,6 +113,7 @@ interface IngestServiceDependencies {
     vectorStore: VectorStore,
     aiProvider: AIProvider,
     jobQueue: JobQueue,
+    webPageFetcher: WebPageFetcher,
     assetId: string
   ) => Promise<AssetDetail>;
   getProcessPdfAssetForced: (
@@ -127,6 +134,7 @@ const defaultDependencies: IngestServiceDependencies = {
   getWorkflowRepository: getWorkflowRepositoryFromBindings,
   getJobQueue: getJobQueueFromBindings,
   getAIProvider: getAIProviderFromBindings,
+  getWebPageFetcher: getWebPageFetcherFromBindings,
   processTextAsset,
   processUrlAsset,
   processPdfAsset,
@@ -158,6 +166,7 @@ const defaultDependencies: IngestServiceDependencies = {
     vectorStore,
     aiProvider,
     jobQueue,
+    webPageFetcher,
     assetId
   ) =>
     processUrlAsset(
@@ -167,6 +176,7 @@ const defaultDependencies: IngestServiceDependencies = {
       vectorStore,
       aiProvider,
       jobQueue,
+      webPageFetcher,
       assetId,
       { force: true }
     ),
@@ -238,6 +248,7 @@ const reprocessExistingAsset = async (
         vectorStore,
         aiProvider,
         jobQueue,
+        await dependencies.getWebPageFetcher(bindings),
         asset.id
       );
     }
@@ -308,6 +319,7 @@ export const createIngestService = (
         await dependencies.getWorkflowRepository(bindings);
       const jobQueue = await dependencies.getJobQueue(bindings);
       const aiProvider = await dependencies.getAIProvider(bindings);
+      const webPageFetcher = await dependencies.getWebPageFetcher(bindings);
       const createdAsset = await repository.createUrlAsset(input);
 
       return dependencies.processUrlAsset(
@@ -317,6 +329,7 @@ export const createIngestService = (
         vectorStore,
         aiProvider,
         jobQueue,
+        webPageFetcher,
         createdAsset.id
       );
     },

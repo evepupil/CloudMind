@@ -6,6 +6,7 @@ export interface AppBindings {
   ASSET_VECTORS?: Vectorize;
   AI?: Ai;
   WORKFLOW_QUEUE?: Queue;
+  JINA_API_KEY?: string;
 }
 
 // 这里导出全局环境类型，供 Hono 与 feature 路由复用。

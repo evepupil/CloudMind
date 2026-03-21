@@ -6,6 +6,7 @@ import { getAssetIngestRepositoryFromBindings } from "@/platform/db/d1/repositor
 import { getWorkflowRepositoryFromBindings } from "@/platform/db/d1/repositories/get-workflow-repository";
 import { getJobQueueFromBindings } from "@/platform/queue/cloudflare/get-job-queue";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
+import { getWebPageFetcherFromBindings } from "@/platform/web/jina/get-web-page-fetcher";
 
 import { getWorkflowDefinition } from "./registry";
 import {
@@ -38,5 +39,6 @@ export const consumeWorkflowQueueMessage = async (
     vectorStore: await getVectorStoreFromBindings(bindings),
     aiProvider: await getAIProviderFromBindings(bindings),
     jobQueue: getJobQueueFromBindings(bindings),
+    webPageFetcher: getWebPageFetcherFromBindings(bindings),
   });
 };

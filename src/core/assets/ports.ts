@@ -50,6 +50,7 @@ export interface SearchAssetSummaryInput {
 export interface CompleteAssetProcessingInput {
   summary: string;
   contentText?: string | null;
+  rawR2Key?: string | null;
   contentR2Key?: string | null;
 }
 
@@ -119,6 +120,10 @@ export interface AssetIngestRepository {
   markIngestJobRunning(jobId: string): Promise<void>;
   completeIngestJob(jobId: string): Promise<void>;
   failIngestJob(jobId: string, message: string): Promise<void>;
+  updateAssetMetadata(
+    id: string,
+    input: UpdateAssetMetadataInput
+  ): Promise<AssetDetail>;
 }
 
 // 这里补充资产管理写侧接口，承接人工编辑与软删除场景。

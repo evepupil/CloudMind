@@ -10,6 +10,7 @@ import type {
 import type { BlobStore } from "@/core/blob/ports";
 import type { JobQueue } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
+import type { WebPageFetcher } from "@/core/web/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type {
   AssetChunkMatch,
@@ -261,12 +262,23 @@ describe("ingest service", () => {
       embeddings: [[0.11, 0.22]],
     })),
   };
+  const webPageFetcherMock: WebPageFetcher = {
+    fetchUrl: vi.fn(async (url: string) => ({
+      title: "Fetched title",
+      sourceUrl: url,
+      rawContent: "Markdown Content:\nFetched content",
+      content: "Fetched content",
+      fetchedAt: "2026-03-19T00:00:00.000Z",
+      provider: "jina_reader" as const,
+    })),
+  };
   const getAssetRepositoryMock = vi.fn();
   const getBlobStoreMock = vi.fn();
   const getVectorStoreMock = vi.fn();
   const getWorkflowRepositoryMock = vi.fn();
   const getJobQueueMock = vi.fn();
   const getAIProviderMock = vi.fn();
+  const getWebPageFetcherMock = vi.fn();
   const workflowRepositoryMock = {} as WorkflowRepository;
   const jobQueueMock = {} as JobQueue;
   const processTextAssetMock = vi.fn();
@@ -308,6 +320,8 @@ describe("ingest service", () => {
       ),
       getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
       processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
       processUrlAsset: processUrlAssetMock,
       processPdfAsset: processPdfAssetMock,
@@ -369,6 +383,8 @@ describe("ingest service", () => {
       ),
       getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock.mockResolvedValue(processedAsset),
       processPdfAsset: processPdfAssetMock,
@@ -395,6 +411,7 @@ describe("ingest service", () => {
       vectorStoreMock,
       aiProviderMock,
       jobQueueMock,
+      webPageFetcherMock,
       "asset-url-1"
     );
     expect(await repository.getAssetById("asset-url-1")).toMatchObject({
@@ -432,6 +449,8 @@ describe("ingest service", () => {
       ),
       getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
       processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
       processUrlAsset: processUrlAssetMock,
       processPdfAsset: processPdfAssetMock,
@@ -479,6 +498,8 @@ describe("ingest service", () => {
       ),
       getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock.mockResolvedValue(processedAsset),
       processPdfAsset: processPdfAssetMock,
@@ -526,6 +547,8 @@ describe("ingest service", () => {
       ),
       getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
       processPdfAsset: processPdfAssetMock,
@@ -549,6 +572,7 @@ describe("ingest service", () => {
       vectorStoreMock,
       aiProviderMock,
       jobQueueMock,
+      webPageFetcherMock,
       "asset-url-1"
     );
     expect(result).toEqual(processedAsset);
@@ -591,6 +615,8 @@ describe("ingest service", () => {
       ),
       getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
       processPdfAsset: processPdfAssetMock.mockResolvedValue(processedAsset),
@@ -652,6 +678,8 @@ describe("ingest service", () => {
       ),
       getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
       processPdfAsset: processPdfAssetMock,
@@ -711,6 +739,8 @@ describe("ingest service", () => {
       ),
       getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
       processPdfAsset: processPdfAssetMock,
@@ -755,6 +785,8 @@ describe("ingest service", () => {
       ),
       getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
       processPdfAsset: processPdfAssetMock,
@@ -782,6 +814,8 @@ describe("ingest service", () => {
       ),
       getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
       processPdfAsset: processPdfAssetMock,
@@ -828,6 +862,8 @@ describe("ingest service", () => {
       ),
       getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
       getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
       processTextAsset: processTextAssetMock,
       processUrlAsset: processUrlAssetMock,
       processPdfAsset: processPdfAssetMock,
