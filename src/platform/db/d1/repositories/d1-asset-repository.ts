@@ -5,6 +5,7 @@ import {
   desc,
   eq,
   inArray,
+  isNotNull,
   isNull,
   like,
   or,
@@ -14,11 +15,13 @@ import { AssetNotFoundError } from "@/core/assets/errors";
 import type {
   AssetRepository,
   AssetSearchInput,
+  ChunkMatchQuery,
   CompleteAssetProcessingInput,
   CreateAssetChunkInput,
   CreateFileAssetInput,
   CreateTextAssetInput,
   CreateUrlAssetInput,
+  SearchAssetSummaryInput,
   UpdateAssetIndexingInput,
   UpdateAssetMetadataInput,
 } from "@/core/assets/ports";
@@ -30,6 +33,7 @@ import type {
   AssetListResult,
   AssetSourceKind,
   AssetSummary,
+  AssetSummaryMatch,
   AssetType,
   IngestJobSummary,
 } from "@/features/assets/model/types";
@@ -183,10 +187,20 @@ export class D1AssetRepository implements AssetRepository {
   }
 
   public async getChunkMatchesByVectorIds(
-    vectorIds: string[]
+    vectorIds: string[],
+    query?: ChunkMatchQuery
   ): Promise<AssetChunkMatch[]> {
     if (vectorIds.length === 0) {
       return [];
+    }
+
+    const conditions = [
+      inArray(assetChunks.vectorId, vectorIds),
+      isNull(assets.deletedAt),
+    ];
+
+    if (query?.aiVisibility?.length) {
+      conditions.push(inArray(assets.aiVisibility, query.aiVisibility));
     }
 
     const records = await this.db
@@ -196,11 +210,55 @@ export class D1AssetRepository implements AssetRepository {
       })
       .from(assetChunks)
       .innerJoin(assets, eq(assetChunks.assetId, assets.id))
-      .where(
-        and(inArray(assetChunks.vectorId, vectorIds), isNull(assets.deletedAt))
-      );
+      .where(and(...conditions));
 
     return records.map(mapChunkMatch);
+  }
+
+  public async searchAssetSummaries(
+    input: SearchAssetSummaryInput
+  ): Promise<AssetSummaryMatch[]> {
+    const query = input.query.trim();
+
+    if (!query || input.limit <= 0 || input.aiVisibility.length === 0) {
+      return [];
+    }
+
+    const search = `%${query}%`;
+    const searchCondition = or(
+      like(assets.title, search),
+      like(assets.summary, search),
+      like(assets.sourceUrl, search)
+    );
+
+    if (!searchCondition) {
+      return [];
+    }
+
+    const records = await this.db
+      .select()
+      .from(assets)
+      .where(
+        and(
+          isNull(assets.deletedAt),
+          eq(assets.status, "ready"),
+          isNotNull(assets.summary),
+          inArray(assets.aiVisibility, input.aiVisibility),
+          searchCondition
+        )
+      )
+      .orderBy(desc(assets.retrievalPriority), desc(assets.updatedAt))
+      .limit(input.limit);
+
+    return records
+      .filter(
+        (record): record is typeof assets.$inferSelect & { summary: string } =>
+          typeof record.summary === "string" && record.summary.trim().length > 0
+      )
+      .map((record) => ({
+        asset: mapAssetSummary(record),
+        summary: record.summary,
+      }));
   }
 
   public async listAssetIdsMissingChunkContent(limit = 50): Promise<string[]> {

@@ -8,12 +8,23 @@ import type {
   VectorStore,
 } from "@/core/vector/ports";
 import type {
+  AssetAiVisibility,
   AssetChunkMatch,
   AssetListResult,
+  AssetSummaryMatch,
 } from "@/features/assets/model/types";
 import { createChatService } from "@/features/chat/server/service";
 
 class InMemorySearchRepository implements AssetSearchRepository {
+  public readonly chunkMatchQueries: Array<AssetAiVisibility[] | undefined> =
+    [];
+
+  public readonly summaryQueries: Array<{
+    query: string;
+    limit: number;
+    aiVisibility: AssetAiVisibility[];
+  }> = [];
+
   public async searchAssets(): Promise<AssetListResult> {
     return {
       items: [],
@@ -27,33 +38,224 @@ class InMemorySearchRepository implements AssetSearchRepository {
   }
 
   public async getChunkMatchesByVectorIds(
-    vectorIds: string[]
+    vectorIds: string[],
+    query?: {
+      aiVisibility?: AssetAiVisibility[] | undefined;
+    }
   ): Promise<AssetChunkMatch[]> {
-    return vectorIds.map((vectorId, index) => ({
-      id: `chunk-${index + 1}`,
-      chunkIndex: index,
-      textPreview: `Source snippet ${index + 1}`,
-      contentText: `Full chunk body ${index + 1}`,
-      vectorId,
-      asset: {
-        id: `asset-${index + 1}`,
-        type: "note",
-        title: `Asset ${index + 1}`,
-        summary: `Summary ${index + 1}`,
-        sourceUrl: index === 0 ? "https://example.com/cloudmind" : null,
-        sourceKind: "manual",
-        status: "ready",
-        domain: "engineering",
-        sensitivity: "internal",
-        aiVisibility: "allow",
-        retrievalPriority: 10,
-        collectionKey: "inbox:notes",
-        capturedAt: "2026-03-19T00:00:00.000Z",
-        descriptorJson: null,
-        createdAt: "2026-03-19T00:00:00.000Z",
-        updatedAt: "2026-03-19T00:00:00.000Z",
+    this.chunkMatchQueries.push(query?.aiVisibility);
+
+    return vectorIds
+      .map((vectorId, index) => ({
+        id: `chunk-${index + 1}`,
+        chunkIndex: index,
+        textPreview: `Source snippet ${index + 1}`,
+        contentText: `Full chunk body ${index + 1}`,
+        vectorId,
+        asset: {
+          id: `asset-${index + 1}`,
+          type: "note" as const,
+          title: `Asset ${index + 1}`,
+          summary: `Summary ${index + 1}`,
+          sourceUrl: index === 0 ? "https://example.com/cloudmind" : null,
+          sourceKind: "manual" as const,
+          status: "ready" as const,
+          domain: "engineering" as const,
+          sensitivity: "internal" as const,
+          aiVisibility: index === 1 ? ("deny" as const) : ("allow" as const),
+          retrievalPriority: 10,
+          collectionKey: "inbox:notes",
+          capturedAt: "2026-03-19T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+      }))
+      .filter((chunkMatch) => {
+        const allowed = query?.aiVisibility;
+
+        if (!allowed?.length) {
+          return true;
+        }
+
+        return allowed.includes(chunkMatch.asset.aiVisibility);
+      });
+  }
+
+  public async searchAssetSummaries(input: {
+    query: string;
+    limit: number;
+    aiVisibility: AssetAiVisibility[];
+  }): Promise<AssetSummaryMatch[]> {
+    this.summaryQueries.push(input);
+
+    return [
+      {
+        asset: {
+          id: "asset-summary-1",
+          type: "note",
+          title: "Summary Asset 1",
+          summary: "Summary-only note about deployment tradeoffs.",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "product",
+          sensitivity: "private",
+          aiVisibility: "summary_only",
+          retrievalPriority: 24,
+          collectionKey: "inbox:notes",
+          capturedAt: "2026-03-19T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+        summary: "Summary-only note about deployment tradeoffs.",
       },
-    }));
+    ];
+  }
+}
+
+class DeniedOnlySearchRepository implements AssetSearchRepository {
+  public readonly chunkMatchQueries: Array<AssetAiVisibility[] | undefined> =
+    [];
+
+  public readonly summaryQueries: Array<{
+    query: string;
+    limit: number;
+    aiVisibility: AssetAiVisibility[];
+  }> = [];
+
+  public async searchAssets(): Promise<AssetListResult> {
+    return {
+      items: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      },
+    };
+  }
+
+  public async getChunkMatchesByVectorIds(
+    vectorIds: string[],
+    query?: {
+      aiVisibility?: AssetAiVisibility[] | undefined;
+    }
+  ): Promise<AssetChunkMatch[]> {
+    this.chunkMatchQueries.push(query?.aiVisibility);
+
+    return vectorIds
+      .map((vectorId, index) => ({
+        id: `denied-chunk-${index + 1}`,
+        chunkIndex: index,
+        textPreview: `Denied snippet ${index + 1}`,
+        contentText: `Denied body ${index + 1}`,
+        vectorId,
+        asset: {
+          id: `denied-asset-${index + 1}`,
+          type: "note" as const,
+          title: `Denied Asset ${index + 1}`,
+          summary: `Denied Summary ${index + 1}`,
+          sourceUrl: null,
+          sourceKind: "manual" as const,
+          status: "ready" as const,
+          domain: "personal" as const,
+          sensitivity: "restricted" as const,
+          aiVisibility: "deny" as const,
+          retrievalPriority: -30,
+          collectionKey: "inbox:notes",
+          capturedAt: "2026-03-19T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+      }))
+      .filter((chunkMatch) => {
+        const allowed = query?.aiVisibility;
+
+        if (!allowed?.length) {
+          return true;
+        }
+
+        return allowed.includes(chunkMatch.asset.aiVisibility);
+      });
+  }
+
+  public async searchAssetSummaries(input: {
+    query: string;
+    limit: number;
+    aiVisibility: AssetAiVisibility[];
+  }): Promise<AssetSummaryMatch[]> {
+    this.summaryQueries.push(input);
+
+    return [];
+  }
+}
+
+class SummaryOnlySearchRepository implements AssetSearchRepository {
+  public readonly chunkMatchQueries: Array<AssetAiVisibility[] | undefined> =
+    [];
+
+  public readonly summaryQueries: Array<{
+    query: string;
+    limit: number;
+    aiVisibility: AssetAiVisibility[];
+  }> = [];
+
+  public async searchAssets(): Promise<AssetListResult> {
+    return {
+      items: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      },
+    };
+  }
+
+  public async getChunkMatchesByVectorIds(
+    _vectorIds: string[],
+    query?: {
+      aiVisibility?: AssetAiVisibility[] | undefined;
+    }
+  ): Promise<AssetChunkMatch[]> {
+    this.chunkMatchQueries.push(query?.aiVisibility);
+
+    return [];
+  }
+
+  public async searchAssetSummaries(input: {
+    query: string;
+    limit: number;
+    aiVisibility: AssetAiVisibility[];
+  }): Promise<AssetSummaryMatch[]> {
+    this.summaryQueries.push(input);
+
+    return [
+      {
+        asset: {
+          id: "asset-summary-only-1",
+          type: "note",
+          title: "Private deployment notes",
+          summary: "Summary-only note about a previous deployment incident.",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "engineering",
+          sensitivity: "private",
+          aiVisibility: "summary_only",
+          retrievalPriority: 28,
+          collectionKey: "inbox:notes",
+          capturedAt: "2026-03-19T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+        summary: "Summary-only note about a previous deployment incident.",
+      },
+    ];
   }
 }
 
@@ -120,6 +322,14 @@ describe("chat service", () => {
       texts: ["What does CloudMind emphasize?"],
       purpose: "query",
     });
+    expect(repository.chunkMatchQueries).toEqual([["allow"]]);
+    expect(repository.summaryQueries).toEqual([
+      {
+        query: "What does CloudMind emphasize?",
+        limit: 2,
+        aiVisibility: ["summary_only"],
+      },
+    ]);
     expect(aiProvider.generateText).toHaveBeenCalledWith(
       expect.objectContaining({
         prompt: expect.stringContaining("[S1] Asset 1"),
@@ -130,10 +340,18 @@ describe("chat service", () => {
         prompt: expect.stringContaining("Snippet: Full chunk body 1"),
       })
     );
+    expect(aiProvider.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining(
+          "Summary-only note about deployment tradeoffs."
+        ),
+      })
+    );
     expect(result).toEqual({
       answer: "CloudMind emphasizes source-aware answers [S1].",
       sources: [
         {
+          sourceType: "chunk",
           assetId: "asset-1",
           chunkId: "chunk-1",
           title: "Asset 1",
@@ -141,18 +359,117 @@ describe("chat service", () => {
           snippet: "Source snippet 1",
         },
         {
-          assetId: "asset-2",
-          chunkId: "chunk-2",
-          title: "Asset 2",
+          sourceType: "summary",
+          assetId: "asset-summary-1",
+          title: "Summary Asset 1",
           sourceUrl: null,
-          snippet: "Source snippet 2",
+          snippet: "Summary-only note about deployment tradeoffs.",
+        },
+      ],
+    });
+  });
+
+  it("askLibrary returns a fallback answer when all retrieved chunks are not AI-visible", async () => {
+    const repository = new DeniedOnlySearchRepository();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        id: "denied-asset-1:0",
+        score: 0.91,
+      },
+    ]);
+    const aiProvider: AIProvider = {
+      createEmbeddings: vi.fn(async () => ({
+        embeddings: [[0.11, 0.22, 0.33]],
+      })),
+      generateText: vi.fn(async () => ({
+        text: "unused",
+      })),
+    };
+    const service = createChatService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAiProvider: getAiProviderMock.mockResolvedValue(aiProvider),
+    });
+
+    const result = await service.askLibrary(
+      { APP_NAME: "cloudmind-test" },
+      {
+        question: "What is hidden?",
+        topK: 1,
+      }
+    );
+
+    expect(repository.chunkMatchQueries).toEqual([["allow"]]);
+    expect(repository.summaryQueries).toEqual([
+      {
+        query: "What is hidden?",
+        limit: 1,
+        aiVisibility: ["summary_only"],
+      },
+    ]);
+    expect(result).toEqual({
+      answer:
+        "I could not find enough relevant context in your library to answer that yet.",
+      sources: [],
+    });
+    expect(aiProvider.generateText).not.toHaveBeenCalled();
+  });
+
+  it("askLibrary can answer from summary-only assets when chunk retrieval is empty", async () => {
+    const repository = new SummaryOnlySearchRepository();
+    const vectorStore = new InMemoryVectorStore([]);
+    const aiProvider: AIProvider = {
+      createEmbeddings: vi.fn(async () => ({
+        embeddings: [[0.11, 0.22, 0.33]],
+      })),
+      generateText: vi.fn(async () => ({
+        text: "A previous deployment incident was captured in a summary-only note [S1].",
+      })),
+    };
+    const service = createChatService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAiProvider: getAiProviderMock.mockResolvedValue(aiProvider),
+    });
+
+    const result = await service.askLibrary(
+      { APP_NAME: "cloudmind-test" },
+      {
+        question: "What happened in the previous deployment incident?",
+        topK: 3,
+      }
+    );
+
+    expect(repository.chunkMatchQueries).toEqual([]);
+    expect(repository.summaryQueries).toEqual([
+      {
+        query: "What happened in the previous deployment incident?",
+        limit: 3,
+        aiVisibility: ["summary_only"],
+      },
+    ]);
+    expect(aiProvider.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining("Source Type: summary"),
+      })
+    );
+    expect(result).toEqual({
+      answer:
+        "A previous deployment incident was captured in a summary-only note [S1].",
+      sources: [
+        {
+          sourceType: "summary",
+          assetId: "asset-summary-only-1",
+          title: "Private deployment notes",
+          sourceUrl: null,
+          snippet: "Summary-only note about a previous deployment incident.",
         },
       ],
     });
   });
 
   it("askLibrary returns a fallback answer when vector search finds nothing", async () => {
-    const repository = new InMemorySearchRepository();
+    const repository = new DeniedOnlySearchRepository();
     const vectorStore = new InMemoryVectorStore([]);
     const aiProvider: AIProvider = {
       createEmbeddings: vi.fn(async () => ({
@@ -175,6 +492,13 @@ describe("chat service", () => {
       }
     );
 
+    expect(repository.summaryQueries).toEqual([
+      {
+        query: "What does CloudMind emphasize?",
+        limit: 5,
+        aiVisibility: ["summary_only"],
+      },
+    ]);
     expect(result).toEqual({
       answer:
         "I could not find enough relevant context in your library to answer that yet.",

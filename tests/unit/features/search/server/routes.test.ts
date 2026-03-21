@@ -31,6 +31,7 @@ describe("search routes", () => {
     vi.mocked(searchService.searchAssets).mockResolvedValue({
       items: [
         {
+          kind: "chunk",
           score: 0.96,
           chunk: {
             id: "chunk-1",
@@ -86,6 +87,7 @@ describe("search routes", () => {
     await expect(response.json()).resolves.toEqual({
       items: [
         expect.objectContaining({
+          kind: "chunk",
           score: 0.96,
           chunk: expect.objectContaining({
             id: "chunk-1",

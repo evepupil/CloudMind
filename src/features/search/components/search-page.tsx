@@ -21,6 +21,10 @@ const formatScore = (value: number): string => {
   return value.toFixed(3);
 };
 
+const getMatchLabel = (kind: SearchResult["items"][number]["kind"]): string => {
+  return kind === "chunk" ? "Chunk match" : "Summary match";
+};
+
 const getScoreStyles = (value: number) => {
   if (value >= 0.85) {
     return {
@@ -161,7 +165,7 @@ export const SearchPage = ({
                   fontSize: "13px",
                 }}
               >
-                {result.pagination.total} chunk matches
+                {result.pagination.total} retrieval matches
               </div>
             </div>
 
@@ -236,7 +240,7 @@ export const SearchPage = ({
                       fontWeight: 700,
                     }}
                   >
-                    Chunk-first retrieval
+                    Chunk + summary retrieval
                   </span>
                 </div>
                 <span
@@ -367,10 +371,20 @@ export const SearchPage = ({
               <div style={{ display: "grid", gap: "12px" }}>
                 {result.items.map((item, index) => {
                   const scoreStyle = getScoreStyles(item.score);
+                  const asset =
+                    item.kind === "chunk" ? item.chunk.asset : item.asset;
+                  const excerpt =
+                    item.kind === "chunk"
+                      ? item.chunk.textPreview
+                      : item.summary;
 
                   return (
                     <article
-                      key={item.chunk.id}
+                      key={
+                        item.kind === "chunk"
+                          ? item.chunk.id
+                          : `summary:${item.asset.id}`
+                      }
                       style={{
                         padding: "18px 18px 20px",
                         borderRadius: "22px",
@@ -409,7 +423,22 @@ export const SearchPage = ({
                                 textTransform: "uppercase",
                               }}
                             >
-                              {item.chunk.asset.type}
+                              {asset.type}
+                            </span>
+                            <span
+                              style={{
+                                padding: "5px 8px",
+                                borderRadius: "999px",
+                                backgroundColor: "#f8f0ff",
+                                color: "#7a3fb2",
+                                border: "1px solid rgba(122, 63, 178, 0.16)",
+                                fontSize: "11px",
+                                fontWeight: 800,
+                                letterSpacing: "0.08em",
+                                textTransform: "uppercase",
+                              }}
+                            >
+                              {getMatchLabel(item.kind)}
                             </span>
                             <span
                               style={{
@@ -428,7 +457,7 @@ export const SearchPage = ({
                             </span>
                           </div>
                           <a
-                            href={`/assets/${item.chunk.asset.id}`}
+                            href={`/assets/${asset.id}`}
                             style={{
                               color: "#16202d",
                               textDecoration: "none",
@@ -436,7 +465,7 @@ export const SearchPage = ({
                               fontWeight: 800,
                             }}
                           >
-                            {item.chunk.asset.title}
+                            {asset.title}
                           </a>
                         </div>
 
@@ -478,11 +507,14 @@ export const SearchPage = ({
                           fontSize: "13px",
                         }}
                       >
-                        <span>Chunk #{item.chunk.chunkIndex}</span>
-                        <span>{formatDate(item.chunk.asset.createdAt)}</span>
+                        {item.kind === "chunk" ? (
+                          <span>Chunk #{item.chunk.chunkIndex}</span>
+                        ) : (
+                          <span>Summary-only access</span>
+                        )}
+                        <span>{formatDate(asset.createdAt)}</span>
                         <span>
-                          {item.chunk.asset.sourceUrl ??
-                            `Asset ID: ${item.chunk.asset.id}`}
+                          {asset.sourceUrl ?? `Asset ID: ${asset.id}`}
                         </span>
                       </div>
 
@@ -494,7 +526,7 @@ export const SearchPage = ({
                           fontSize: "15px",
                         }}
                       >
-                        {item.chunk.textPreview}
+                        {excerpt}
                       </p>
 
                       <div
@@ -505,7 +537,7 @@ export const SearchPage = ({
                         }}
                       >
                         <a
-                          href={`/assets/${item.chunk.asset.id}`}
+                          href={`/assets/${asset.id}`}
                           style={{
                             padding: "10px 12px",
                             borderRadius: "14px",
@@ -520,7 +552,7 @@ export const SearchPage = ({
                         </a>
                         <a
                           href={`/ask?question=${encodeURIComponent(
-                            `Based on ${item.chunk.asset.title}, ${trimmedQuery}`
+                            `Based on ${asset.title}, ${trimmedQuery}`
                           )}`}
                           style={{
                             padding: "10px 12px",
@@ -637,6 +669,7 @@ export const SearchPage = ({
             <div style={{ display: "grid", gap: "12px" }}>
               {[
                 "Search works on chunks, not whole documents, so ask about concepts rather than titles only.",
+                "Summary-only assets can appear as abstracted matches when the raw body is not AI-visible.",
                 "If a result looks close but incomplete, jump into Ask and turn that query into a source-aware follow-up.",
                 "Weak or empty results usually mean the library lacks enough processed context, not necessarily that retrieval is wrong.",
               ].map((tip, index) => (

@@ -154,6 +154,10 @@ class InMemoryAssetRepository implements AssetRepository {
     return [];
   }
 
+  public async searchAssetSummaries() {
+    return [];
+  }
+
   public async getAssetById(id: string): Promise<AssetDetail> {
     if (id !== this.asset.id) {
       throw new Error(`Asset "${id}" not found.`);

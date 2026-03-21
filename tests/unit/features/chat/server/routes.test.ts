@@ -32,6 +32,7 @@ describe("chat routes", () => {
       answer: "CloudMind emphasizes source-aware answers [S1].",
       sources: [
         {
+          sourceType: "chunk",
           assetId: "asset-1",
           chunkId: "chunk-1",
           title: "Asset 1",
@@ -61,6 +62,7 @@ describe("chat routes", () => {
       answer: "CloudMind emphasizes source-aware answers [S1].",
       sources: [
         {
+          sourceType: "chunk",
           assetId: "asset-1",
           chunkId: "chunk-1",
           title: "Asset 1",

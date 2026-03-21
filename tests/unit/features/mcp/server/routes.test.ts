@@ -86,6 +86,7 @@ const createSearchResult = (): SearchResult => {
   return {
     items: [
       {
+        kind: "chunk",
         score: 0.91,
         chunk: {
           id: "chunk-1",
@@ -128,6 +129,7 @@ const createAskLibraryResult = (): AskLibraryResult => {
     answer: "CloudMind exposes MCP tools for remote clients [S1].",
     sources: [
       {
+        sourceType: "chunk",
         assetId: "asset-1",
         chunkId: "chunk-1",
         title: "MCP Search Asset",

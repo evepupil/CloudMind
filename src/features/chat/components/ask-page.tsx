@@ -129,7 +129,7 @@ export const AskPage = ({
                 fontSize: "13px",
               }}
             >
-              Retrieval mode: top 5 chunks
+              Retrieval mode: chunks + summary-only assets
             </div>
           </div>
 
@@ -426,7 +426,9 @@ export const AskPage = ({
                           textTransform: "uppercase",
                         }}
                       >
-                        Match {index + 1}
+                        {source.sourceType === "chunk"
+                          ? `Chunk ${index + 1}`
+                          : `Summary ${index + 1}`}
                       </span>
                     </div>
                     <p
@@ -461,8 +463,8 @@ export const AskPage = ({
                     lineHeight: 1.75,
                   }}
                 >
-                  Submit a question to see the retrieved chunks and source cards
-                  here.
+                  Submit a question to see retrieved chunks, summary-only
+                  sources, and evidence cards here.
                 </article>
               )}
             </div>

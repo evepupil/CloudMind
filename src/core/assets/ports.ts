@@ -7,6 +7,7 @@ import type {
   AssetListResult,
   AssetSensitivity,
   AssetSourceKind,
+  AssetSummaryMatch,
 } from "@/features/assets/model/types";
 
 export interface CreateTextAssetInput {
@@ -34,6 +35,16 @@ export interface AssetSearchInput {
   query: string;
   page?: number | undefined;
   pageSize?: number | undefined;
+}
+
+export interface ChunkMatchQuery {
+  aiVisibility?: AssetAiVisibility[] | undefined;
+}
+
+export interface SearchAssetSummaryInput {
+  query: string;
+  limit: number;
+  aiVisibility: AssetAiVisibility[];
 }
 
 export interface CompleteAssetProcessingInput {
@@ -75,7 +86,13 @@ export interface AssetQueryRepository {
 // 这里单独抽出搜索端口，避免未来把语义检索继续堆进列表接口。
 export interface AssetSearchRepository {
   searchAssets(input: AssetSearchInput): Promise<AssetListResult>;
-  getChunkMatchesByVectorIds(vectorIds: string[]): Promise<AssetChunkMatch[]>;
+  getChunkMatchesByVectorIds(
+    vectorIds: string[],
+    query?: ChunkMatchQuery
+  ): Promise<AssetChunkMatch[]>;
+  searchAssetSummaries(
+    input: SearchAssetSummaryInput
+  ): Promise<AssetSummaryMatch[]>;
 }
 
 // 这里保留采集与处理链路需要的写侧接口。

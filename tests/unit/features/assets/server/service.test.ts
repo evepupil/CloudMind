@@ -102,6 +102,10 @@ class InMemoryAssetRepository implements AssetRepository {
     return [];
   }
 
+  public async searchAssetSummaries() {
+    return [];
+  }
+
   public async listAssetIdsMissingChunkContent(): Promise<string[]> {
     return [];
   }

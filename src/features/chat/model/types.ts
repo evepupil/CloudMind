@@ -1,4 +1,5 @@
 export interface ChatSource {
+  sourceType: "chunk" | "summary";
   assetId: string;
   chunkId?: string | undefined;
   title: string;
