@@ -5,8 +5,15 @@ import type {
 } from "@/core/assets/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
+import type {
+  AssetAssertionKind,
+  AssetSummary,
+} from "@/features/assets/model/types";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
-import type { SearchResult } from "@/features/search/model/types";
+import type {
+  SearchResult,
+  SearchResultIndexingView,
+} from "@/features/search/model/types";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
@@ -21,6 +28,10 @@ import { scoreAssetSummaryMatch } from "./summary-scoring";
 
 const SEARCHABLE_AI_VISIBILITY = ["allow"] as const;
 const SUMMARY_ONLY_AI_VISIBILITY = ["summary_only"] as const;
+
+interface DescriptorTopicsView {
+  topics?: string[] | undefined;
+}
 
 interface SearchServiceDependencies {
   getAssetRepository: (
@@ -92,6 +103,44 @@ const withOptionalResultScope = <T extends SearchResult>(
   };
 };
 
+const parseDescriptorTopics = (descriptorJson: string | null): string[] => {
+  if (!descriptorJson) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(descriptorJson) as DescriptorTopicsView | null;
+
+    if (!parsed || !Array.isArray(parsed.topics)) {
+      return [];
+    }
+
+    return parsed.topics.filter(
+      (topic: unknown): topic is string => typeof topic === "string"
+    );
+  } catch {
+    return [];
+  }
+};
+
+const buildSearchResultIndexing = (
+  asset: AssetSummary,
+  matchedLayer: SearchResultIndexingView["matchedLayer"],
+  assertionKind?: AssetAssertionKind
+): SearchResultIndexingView => {
+  return {
+    matchedLayer,
+    domain: asset.domain,
+    documentClass: asset.documentClass ?? null,
+    sourceHost: asset.sourceHost ?? null,
+    collectionKey: asset.collectionKey,
+    aiVisibility: asset.aiVisibility,
+    sourceKind: asset.sourceKind ?? null,
+    topics: parseDescriptorTopics(asset.descriptorJson),
+    assertionKind: assertionKind ?? null,
+  };
+};
+
 // 这里集中资产语义搜索用例，便于后续扩展为混合检索或重排。
 export const createSearchService = (
   dependencies: SearchServiceDependencies = defaultDependencies
@@ -156,6 +205,11 @@ export const createSearchService = (
             contextPolicy
           ),
           assertion: match,
+          indexing: buildSearchResultIndexing(
+            match.asset,
+            "assertion",
+            match.kind
+          ),
         }))
         .filter((match) =>
           matchesContextPolicyAsset(match.assertion.asset, contextPolicy)
@@ -171,6 +225,7 @@ export const createSearchService = (
           ),
           asset: match.asset,
           summary: match.summary,
+          indexing: buildSearchResultIndexing(match.asset, "summary"),
         }))
         .filter((match) =>
           matchesContextPolicyAsset(match.asset, contextPolicy)
@@ -234,6 +289,7 @@ export const createSearchService = (
             contextPolicy
           ),
           chunk,
+          indexing: buildSearchResultIndexing(chunk.asset, "chunk"),
         };
       })
       .filter((item) =>
@@ -250,6 +306,7 @@ export const createSearchService = (
         ),
         asset: match.asset,
         summary: match.summary,
+        indexing: buildSearchResultIndexing(match.asset, "summary"),
       }))
       .filter((match) => matchesContextPolicyAsset(match.asset, contextPolicy))
       .sort((left, right) => right.score - left.score);
@@ -262,6 +319,11 @@ export const createSearchService = (
           contextPolicy
         ),
         assertion: match,
+        indexing: buildSearchResultIndexing(
+          match.asset,
+          "assertion",
+          match.kind
+        ),
       }))
       .filter((match) =>
         matchesContextPolicyAsset(match.assertion.asset, contextPolicy)

@@ -300,6 +300,11 @@ describe("search service", () => {
         {
           kind: "chunk",
           score: 0.95,
+          indexing: expect.objectContaining({
+            matchedLayer: "chunk",
+            domain: "engineering",
+            aiVisibility: "allow",
+          }),
           chunk: expect.objectContaining({
             vectorId: "asset-1:0",
             textPreview: "Semantic preview 1",
@@ -312,6 +317,11 @@ describe("search service", () => {
         {
           kind: "summary",
           score: expect.any(Number),
+          indexing: expect.objectContaining({
+            matchedLayer: "summary",
+            domain: "product",
+            aiVisibility: "summary_only",
+          }),
           asset: expect.objectContaining({
             id: "asset-summary-1",
             aiVisibility: "summary_only",
@@ -394,6 +404,10 @@ describe("search service", () => {
         {
           kind: "summary",
           score: expect.any(Number),
+          indexing: expect.objectContaining({
+            matchedLayer: "summary",
+            domain: "product",
+          }),
           asset: expect.objectContaining({
             id: "asset-summary-1",
             aiVisibility: "summary_only",

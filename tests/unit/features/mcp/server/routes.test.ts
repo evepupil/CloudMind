@@ -103,6 +103,17 @@ const createSearchResult = (): SearchResult => {
       {
         kind: "chunk",
         score: 0.91,
+        indexing: {
+          matchedLayer: "chunk",
+          domain: "general",
+          documentClass: "general_note",
+          sourceHost: null,
+          collectionKey: "inbox:notes",
+          aiVisibility: "allow",
+          sourceKind: "manual",
+          topics: ["mcp"],
+          assertionKind: null,
+        },
         chunk: {
           id: "chunk-1",
           chunkIndex: 0,

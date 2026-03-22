@@ -33,6 +33,17 @@ describe("search routes", () => {
         {
           kind: "chunk",
           score: 0.96,
+          indexing: {
+            matchedLayer: "chunk",
+            domain: "engineering",
+            documentClass: "design_doc",
+            sourceHost: "developers.cloudflare.com",
+            collectionKey: "inbox:notes",
+            aiVisibility: "allow",
+            sourceKind: "manual",
+            topics: ["cloudflare", "database"],
+            assertionKind: null,
+          },
           chunk: {
             id: "chunk-1",
             chunkIndex: 0,
@@ -50,6 +61,8 @@ describe("search routes", () => {
               sensitivity: "internal",
               aiVisibility: "allow",
               retrievalPriority: 10,
+              documentClass: "design_doc",
+              sourceHost: "developers.cloudflare.com",
               collectionKey: "inbox:notes",
               capturedAt: "2026-03-19T00:00:00.000Z",
               descriptorJson: null,
@@ -89,6 +102,10 @@ describe("search routes", () => {
         expect.objectContaining({
           kind: "chunk",
           score: 0.96,
+          indexing: expect.objectContaining({
+            matchedLayer: "chunk",
+            domain: "engineering",
+          }),
           chunk: expect.objectContaining({
             id: "chunk-1",
             asset: expect.objectContaining({

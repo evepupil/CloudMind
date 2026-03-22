@@ -1,4 +1,5 @@
 import type {
+  AssetAssertionKind,
   AssetAssertionMatch,
   AssetChunkMatch,
   AssetSummary,
@@ -6,10 +7,23 @@ import type {
 
 export type ContextResultScope = "preferred_only" | "fallback_expanded";
 
+export interface SearchResultIndexingView {
+  matchedLayer: "chunk" | "assertion" | "summary";
+  domain: AssetSummary["domain"];
+  documentClass: AssetSummary["documentClass"] | null;
+  sourceHost: string | null;
+  collectionKey: string | null;
+  aiVisibility: AssetSummary["aiVisibility"];
+  sourceKind: AssetSummary["sourceKind"] | null;
+  topics: string[];
+  assertionKind?: AssetAssertionKind | null | undefined;
+}
+
 export interface SearchChunkResultItem {
   kind: "chunk";
   score: number;
   chunk: AssetChunkMatch;
+  indexing: SearchResultIndexingView;
 }
 
 export interface SearchSummaryResultItem {
@@ -17,12 +31,14 @@ export interface SearchSummaryResultItem {
   score: number;
   asset: AssetSummary;
   summary: string;
+  indexing: SearchResultIndexingView;
 }
 
 export interface SearchAssertionResultItem {
   kind: "assertion";
   score: number;
   assertion: AssetAssertionMatch;
+  indexing: SearchResultIndexingView;
 }
 
 export type SearchResultItem =

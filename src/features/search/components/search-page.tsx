@@ -21,6 +21,17 @@ const formatScore = (value: number): string => {
   return value.toFixed(3);
 };
 
+const formatLabel = (value: string): string => {
+  return value
+    .split("_")
+    .map((segment) =>
+      segment.length > 0
+        ? `${segment[0]?.toUpperCase() ?? ""}${segment.slice(1)}`
+        : segment
+    )
+    .join(" ");
+};
+
 const getMatchLabel = (kind: SearchResult["items"][number]["kind"]): string => {
   if (kind === "chunk") {
     return "Chunk match";
@@ -248,7 +259,7 @@ export const SearchPage = ({
                       fontWeight: 700,
                     }}
                   >
-                    Chunk + summary retrieval
+                    Chunk + assertion + summary retrieval
                   </span>
                 </div>
                 <span
@@ -391,6 +402,14 @@ export const SearchPage = ({
                       : item.kind === "assertion"
                         ? item.assertion.text
                         : item.summary;
+                  const indexing = item.indexing;
+                  const indexingTags = [
+                    indexing.domain,
+                    indexing.documentClass,
+                    indexing.assertionKind,
+                    indexing.sourceHost,
+                    ...indexing.topics,
+                  ].filter((value): value is string => Boolean(value?.trim()));
 
                   return (
                     <article
@@ -472,6 +491,32 @@ export const SearchPage = ({
                               {scoreStyle.label}
                             </span>
                           </div>
+                          {indexingTags.length > 0 ? (
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: "8px",
+                                flexWrap: "wrap",
+                                marginBottom: "8px",
+                              }}
+                            >
+                              {indexingTags.map((tag) => (
+                                <span
+                                  key={`${asset.id}:${item.kind}:${tag}`}
+                                  style={{
+                                    padding: "5px 8px",
+                                    borderRadius: "999px",
+                                    backgroundColor: "#f4f7fb",
+                                    color: "#4b5a6b",
+                                    fontSize: "11px",
+                                    fontWeight: 800,
+                                  }}
+                                >
+                                  {formatLabel(tag)}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                           <a
                             href={`/assets/${asset.id}`}
                             style={{
@@ -530,6 +575,11 @@ export const SearchPage = ({
                         ) : (
                           <span>Summary-only access</span>
                         )}
+                        <span>{`Layer: ${formatLabel(indexing.matchedLayer)}`}</span>
+                        <span>{`Visibility: ${formatLabel(indexing.aiVisibility)}`}</span>
+                        {indexing.collectionKey ? (
+                          <span>{`Collection: ${indexing.collectionKey}`}</span>
+                        ) : null}
                         <span>{formatDate(asset.createdAt)}</span>
                         <span>
                           {asset.sourceUrl ?? `Asset ID: ${asset.id}`}
@@ -687,6 +737,7 @@ export const SearchPage = ({
             <div style={{ display: "grid", gap: "12px" }}>
               {[
                 "Search works on chunks, not whole documents, so ask about concepts rather than titles only.",
+                "Layered index chips show domain, document class, assertion kind, and topics extracted during ingest.",
                 "Summary-only assets can appear as abstracted matches when the raw body is not AI-visible.",
                 "If a result looks close but incomplete, jump into Ask and turn that query into a source-aware follow-up.",
                 "Weak or empty results usually mean the library lacks enough processed context, not necessarily that retrieval is wrong.",
