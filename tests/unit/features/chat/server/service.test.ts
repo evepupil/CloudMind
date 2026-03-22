@@ -983,6 +983,51 @@ describe("chat service", () => {
     );
   });
 
+  it("askLibrary preserves bullet formatting while removing echoed source blocks", async () => {
+    const repository = new InMemorySearchRepository();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        id: "asset-1:0",
+        score: 0.97,
+      },
+    ]);
+    const aiProvider: AIProvider = {
+      createEmbeddings: vi.fn(async () => ({
+        embeddings: [[0.11, 0.22, 0.33]],
+      })),
+      generateText: vi.fn(async () => ({
+        text: [
+          "Key points:",
+          "- Use HonoX routes [S1]",
+          "- Keep bindings in the request context [S1]",
+          "",
+          "Sources:",
+          "[S1] Asset 1",
+          "Asset ID: asset-1",
+          "Source Type: chunk",
+          "Snippet: Full chunk body 1",
+        ].join("\n"),
+      })),
+    };
+    const service = createChatService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAiProvider: getAiProviderMock.mockResolvedValue(aiProvider),
+    });
+
+    const result = await service.askLibrary(
+      { APP_NAME: "cloudmind-test" },
+      {
+        question: "How should I structure HonoX routes?",
+        topK: 1,
+      }
+    );
+
+    expect(result.answer).toBe(
+      "Key points:\n- Use HonoX routes [S1]\n- Keep bindings in the request context [S1]"
+    );
+  });
+
   it("askLibrary drops noisy fallback sources from the final source list", async () => {
     const repository = new NoisySourceSearchRepository();
     const vectorStore = new InMemoryVectorStore([
@@ -1076,6 +1121,96 @@ describe("chat service", () => {
         snippet: "D1 and Vectorize tradeoff preview",
       },
     ]);
+  });
+
+  it("askLibrary retries when the model replies with insufficient-context text despite strong evidence", async () => {
+    const repository = new AssertionFailureSearchRepository();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        id: "stable-1:0",
+        score: 0.93,
+      },
+    ]);
+    const aiProvider: AIProvider = {
+      createEmbeddings: vi.fn(async () => ({
+        embeddings: [[0.31, 0.22, 0.13]],
+      })),
+      generateText: vi
+        .fn()
+        .mockResolvedValueOnce({
+          text: "I could not find enough relevant context in your library to answer that yet.",
+        })
+        .mockResolvedValueOnce({
+          text: "D1 stores metadata while Vectorize handles semantic retrieval [S1].",
+        }),
+    };
+    const service = createChatService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAiProvider: getAiProviderMock.mockResolvedValue(aiProvider),
+    });
+
+    const result = await service.askLibrary(
+      { APP_NAME: "cloudmind-test" },
+      {
+        question: "What is the D1 Vectorize tradeoff?",
+        topK: 2,
+      }
+    );
+
+    expect(aiProvider.generateText).toHaveBeenCalledTimes(2);
+    expect(result.answer).toBe(
+      "D1 stores metadata while Vectorize handles semantic retrieval [S1]."
+    );
+  });
+
+  it("askLibrary retries low-quality long-answer output like version references", async () => {
+    const repository = new AssertionFailureSearchRepository();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        id: "stable-1:0",
+        score: 0.93,
+      },
+    ]);
+    const aiProvider: AIProvider = {
+      createEmbeddings: vi.fn(async () => ({
+        embeddings: [[0.31, 0.22, 0.13]],
+      })),
+      generateText: vi
+        .fn()
+        .mockResolvedValueOnce({
+          text: "The same as v2.",
+        })
+        .mockResolvedValueOnce({
+          text: "CloudMind uses D1 for structured metadata and Vectorize for semantic recall [S1].",
+        }),
+    };
+    const service = createChatService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAiProvider: getAiProviderMock.mockResolvedValue(aiProvider),
+    });
+
+    const result = await service.askLibrary(
+      { APP_NAME: "cloudmind-test" },
+      {
+        question:
+          "Please explain in a complete way how D1 and Vectorize are divided in CloudMind for long-question answering.",
+        topK: 2,
+      }
+    );
+
+    expect(aiProvider.generateText).toHaveBeenCalledTimes(2);
+    expect(aiProvider.generateText).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining(
+          "Do not say 'same as above', 'same as v2'"
+        ),
+      })
+    );
+    expect(result.answer).toBe(
+      "CloudMind uses D1 for structured metadata and Vectorize for semantic recall [S1]."
+    );
   });
 
   it("askLibraryForContext answers from a single strong relevant chunk", async () => {

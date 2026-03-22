@@ -48,6 +48,16 @@ const createFallbackAnswer = (): string => {
 
 const CHAT_ALLOWED_AI_VISIBILITY = ["allow"] as const;
 const CHAT_SUMMARY_ONLY_AI_VISIBILITY = ["summary_only"] as const;
+const BASE_CHAT_SYSTEM_PROMPT =
+  "You are a source-aware knowledge base assistant. " +
+  "Keep answers concise and grounded in the provided sources. " +
+  "Do not repeat the source list. Do not output labels such as " +
+  "'Asset ID', 'Source Type', 'Source URL', or 'Snippet'.";
+const RETRY_CHAT_SYSTEM_PROMPT =
+  `${BASE_CHAT_SYSTEM_PROMPT} ` +
+  "Return a complete standalone answer. " +
+  "Do not say 'same as above', 'same as v2', or refer to an unseen " +
+  "previous answer. Preserve bullet formatting when using lists.";
 const SOURCE_TYPE_PRIORITY: Record<ChatSource["sourceType"], number> = {
   chunk: 3,
   assertion: 2,
@@ -652,10 +662,160 @@ const dedupeRepeatedSentences = (text: string): string => {
   return dedupedParagraphs.join("\n\n");
 };
 
+const dedupeRepeatedPlainSentences = (value: string): string => {
+  const sentences = value
+    .split(/(?<=[.!?。！？])\s+/g)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0);
+
+  if (sentences.length <= 1) {
+    return value.trim();
+  }
+
+  const seenSentences = new Set<string>();
+
+  return sentences
+    .filter((sentence) => {
+      const normalizedSentence = normalizeComparableText(sentence);
+
+      if (!normalizedSentence || seenSentences.has(normalizedSentence)) {
+        return false;
+      }
+
+      seenSentences.add(normalizedSentence);
+
+      return true;
+    })
+    .join(" ");
+};
+
+const dedupeRepeatedContent = (text: string): string => {
+  const blocks = text
+    .split(/\n\s*\n/g)
+    .map((block) => block.trim())
+    .filter((block) => block.length > 0);
+  const seenBlocks = new Set<string>();
+
+  return blocks
+    .reduce<string[]>((result, block) => {
+      const lines = block
+        .split("\n")
+        .map((line) => line.trimEnd())
+        .filter((line, index, source) => {
+          const normalizedLine = normalizeComparableText(line);
+          const previousLine = source[index - 1];
+
+          if (!normalizedLine) {
+            return true;
+          }
+
+          return normalizedLine !== normalizeComparableText(previousLine ?? "");
+        });
+      const blockText = lines.join("\n").trim();
+      const normalizedBlock = normalizeComparableText(blockText);
+
+      if (!normalizedBlock || seenBlocks.has(normalizedBlock)) {
+        return result;
+      }
+
+      seenBlocks.add(normalizedBlock);
+
+      if (lines.length === 1 && !/^[-*>\d.]/.test(lines[0] ?? "")) {
+        result.push(
+          dedupeRepeatedPlainSentences(dedupeRepeatedSentences(blockText))
+        );
+
+        return result;
+      }
+
+      result.push(blockText);
+
+      return result;
+    }, [])
+    .join("\n\n");
+};
+
 const sanitizeAnswerText = (text: string): string => {
-  return dedupeRepeatedSentences(stripEchoedSourceBlocks(text))
+  return dedupeRepeatedContent(stripEchoedSourceBlocks(text))
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+};
+
+const INVALID_REFERENCE_PATTERNS = [
+  /\bthe same as v\d+\b/i,
+  /\bsame as above\b/i,
+  /\bsame as previous\b/i,
+  /\bsame answer\b/i,
+];
+
+const INSUFFICIENT_ANSWER_PATTERNS = [
+  /not enough relevant context/i,
+  /could not find enough relevant context/i,
+  /sources are insufficient/i,
+  /insufficient context/i,
+];
+
+const isLowQualityAnswer = (text: string): boolean => {
+  const normalized = text.trim();
+
+  if (!normalized) {
+    return true;
+  }
+
+  return INVALID_REFERENCE_PATTERNS.some((pattern) => pattern.test(normalized));
+};
+
+const isInsufficientAnswer = (text: string): boolean => {
+  return INSUFFICIENT_ANSWER_PATTERNS.some((pattern) => pattern.test(text));
+};
+
+const hasStrongAnswerEvidence = (
+  question: string,
+  contexts: GroundingContext[]
+): boolean => {
+  if (contexts.length === 0) {
+    return false;
+  }
+
+  const topContext = contexts[0];
+  const topScore = topContext?.score ?? 0;
+  const topRelevance = topContext
+    ? getContextQueryRelevance(question, topContext)
+    : 0;
+  const coverage = getContextCoverage(question, contexts);
+
+  return (
+    (topScore >= 0.8 && topRelevance >= 0.38) ||
+    (topScore >= 0.72 && topRelevance >= 0.5) ||
+    coverage >= 0.22
+  );
+};
+
+const buildExtractiveFallbackAnswer = (
+  contexts: GroundingContext[]
+): string => {
+  const primaryContext = contexts[0];
+
+  if (!primaryContext) {
+    return createFallbackAnswer();
+  }
+
+  const excerpt = primaryContext.contentText
+    .replace(/\s+/g, " ")
+    .replace(/\[(S\d+)\]/g, "$1")
+    .trim()
+    .slice(0, 240)
+    .trim();
+
+  if (!excerpt) {
+    return createFallbackAnswer();
+  }
+
+  const normalizedExcerpt = /[.!?。！？]$/.test(excerpt)
+    ? excerpt
+    : `${excerpt}.`;
+
+  return `${normalizedExcerpt} [S1]`;
 };
 
 const selectGroundingContexts = (
@@ -751,6 +911,56 @@ const selectGroundingContexts = (
   }
 
   return selected;
+};
+
+const generateGroundedAnswer = async (
+  aiProvider: AIProvider,
+  question: string,
+  contexts: GroundingContext[]
+): Promise<string> => {
+  const prompt = buildChatPrompt(question, contexts);
+  const initialAnswer = await aiProvider.generateText({
+    systemPrompt: BASE_CHAT_SYSTEM_PROMPT,
+    prompt,
+    temperature: 0.2,
+    maxOutputTokens: 700,
+  });
+  const sanitizedInitialAnswer = sanitizeAnswerText(initialAnswer.text);
+
+  if (
+    !isLowQualityAnswer(sanitizedInitialAnswer) &&
+    !(
+      isInsufficientAnswer(sanitizedInitialAnswer) &&
+      hasStrongAnswerEvidence(question, contexts)
+    )
+  ) {
+    return sanitizedInitialAnswer;
+  }
+
+  const retryAnswer = await aiProvider.generateText({
+    systemPrompt: RETRY_CHAT_SYSTEM_PROMPT,
+    prompt,
+    temperature: 0.1,
+    maxOutputTokens: 700,
+  });
+  const sanitizedRetryAnswer = sanitizeAnswerText(retryAnswer.text);
+
+  if (
+    sanitizedRetryAnswer.length > 0 &&
+    !isLowQualityAnswer(sanitizedRetryAnswer) &&
+    !(
+      isInsufficientAnswer(sanitizedRetryAnswer) &&
+      hasStrongAnswerEvidence(question, contexts)
+    )
+  ) {
+    return sanitizedRetryAnswer;
+  }
+
+  if (hasStrongAnswerEvidence(question, contexts)) {
+    return buildExtractiveFallbackAnswer(contexts);
+  }
+
+  return sanitizedRetryAnswer;
 };
 
 const withOptionalResultScope = <T extends AskLibraryResult>(
@@ -855,17 +1065,11 @@ export const createChatService = (
         );
       }
 
-      const answer = await aiProvider.generateText({
-        systemPrompt:
-          "You are a source-aware knowledge base assistant. " +
-          "Keep answers concise and grounded in the provided sources. " +
-          "Do not repeat the source list. Do not output labels such as " +
-          "'Asset ID', 'Source Type', 'Source URL', or 'Snippet'.",
-        prompt: buildChatPrompt(question, selectedLexicalContexts),
-        temperature: 0.2,
-        maxOutputTokens: 700,
-      });
-      const sanitizedAnswer = sanitizeAnswerText(answer.text);
+      const sanitizedAnswer = await generateGroundedAnswer(
+        aiProvider,
+        question,
+        selectedLexicalContexts
+      );
 
       return withOptionalResultScope(
         {
@@ -953,17 +1157,11 @@ export const createChatService = (
       );
     }
 
-    const answer = await aiProvider.generateText({
-      systemPrompt:
-        "You are a source-aware knowledge base assistant. " +
-        "Keep answers concise and grounded in the provided sources. " +
-        "Do not repeat the source list. Do not output labels such as " +
-        "'Asset ID', 'Source Type', 'Source URL', or 'Snippet'.",
-      prompt: buildChatPrompt(question, selectedGroundingContexts),
-      temperature: 0.2,
-      maxOutputTokens: 700,
-    });
-    const sanitizedAnswer = sanitizeAnswerText(answer.text);
+    const sanitizedAnswer = await generateGroundedAnswer(
+      aiProvider,
+      question,
+      selectedGroundingContexts
+    );
 
     return withOptionalResultScope(
       {
