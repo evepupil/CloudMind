@@ -542,6 +542,160 @@ class NoisySourceSearchRepository implements AssetSearchRepository {
   }
 }
 
+class AssertionFailureSearchRepository implements AssetSearchRepository {
+  public async searchAssets(): Promise<AssetListResult> {
+    return {
+      items: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      },
+    };
+  }
+
+  public async getChunkMatchesByVectorIds(
+    vectorIds: string[],
+    query?: {
+      aiVisibility?: AssetAiVisibility[] | undefined;
+    }
+  ): Promise<AssetChunkMatch[]> {
+    const matches = vectorIds.map((vectorId) => ({
+      id: "stable-chunk-1",
+      chunkIndex: 0,
+      textPreview: "D1 and Vectorize tradeoff preview",
+      contentText:
+        "This note explains the D1 and Vectorize tradeoff for CloudMind search.",
+      vectorId,
+      asset: {
+        id: "asset-stable-1",
+        type: "note" as const,
+        title: "D1 Vectorize Tradeoffs",
+        summary: "Tradeoffs between D1 metadata and Vectorize retrieval.",
+        sourceUrl: null,
+        sourceKind: "manual" as const,
+        status: "ready" as const,
+        domain: "engineering" as const,
+        sensitivity: "internal" as const,
+        aiVisibility: "allow" as const,
+        retrievalPriority: 14,
+        collectionKey: "engineering:notes",
+        capturedAt: "2026-03-19T00:00:00.000Z",
+        descriptorJson: null,
+        createdAt: "2026-03-19T00:00:00.000Z",
+        updatedAt: "2026-03-19T00:00:00.000Z",
+      },
+    }));
+    const allowed = query?.aiVisibility;
+
+    if (!allowed?.length) {
+      return matches;
+    }
+
+    return matches.filter((match) =>
+      allowed.includes(match.asset.aiVisibility)
+    );
+  }
+
+  public async searchAssetSummaries(): Promise<AssetSummaryMatch[]> {
+    return [];
+  }
+
+  public async searchAssetAssertions(): Promise<never> {
+    throw new Error("D1_ERROR: too many SQL variables");
+  }
+}
+
+class QueryRelevanceSearchRepository implements AssetSearchRepository {
+  public async searchAssets(): Promise<AssetListResult> {
+    return {
+      items: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      },
+    };
+  }
+
+  public async getChunkMatchesByVectorIds(
+    _vectorIds: string[],
+    query?: {
+      aiVisibility?: AssetAiVisibility[] | undefined;
+    }
+  ): Promise<AssetChunkMatch[]> {
+    const matches: AssetChunkMatch[] = [
+      {
+        id: "chunk-architecture-1",
+        chunkIndex: 0,
+        textPreview: "General architecture decision preview",
+        contentText:
+          "This architecture decision discusses serverless deployment patterns and storage choices.",
+        vectorId: "architecture-1:0",
+        asset: {
+          id: "asset-architecture-1",
+          type: "note",
+          title: "Architecture Decision Record",
+          summary: "General architecture notes",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "engineering",
+          sensitivity: "internal",
+          aiVisibility: "allow",
+          retrievalPriority: 10,
+          collectionKey: "architecture:adrs",
+          capturedAt: "2026-03-19T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+      },
+      {
+        id: "chunk-honox-1",
+        chunkIndex: 1,
+        textPreview: "HonoX monorepo notes preview",
+        contentText:
+          "These HonoX monorepo notes compare monorepo structure decisions in CloudMind.",
+        vectorId: "honox-1:0",
+        asset: {
+          id: "asset-honox-1",
+          type: "note",
+          title: "HonoX Monorepo Notes",
+          summary: "HonoX and monorepo implementation notes",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "engineering",
+          sensitivity: "internal",
+          aiVisibility: "allow",
+          retrievalPriority: 8,
+          collectionKey: "engineering:notes",
+          capturedAt: "2026-03-19T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+      },
+    ];
+    const allowed = query?.aiVisibility;
+
+    if (!allowed?.length) {
+      return matches;
+    }
+
+    return matches.filter((match) =>
+      allowed.includes(match.asset.aiVisibility)
+    );
+  }
+
+  public async searchAssetSummaries(): Promise<AssetSummaryMatch[]> {
+    return [];
+  }
+}
+
 describe("chat service", () => {
   const getAssetRepositoryMock = vi.fn();
   const getVectorStoreMock = vi.fn();
@@ -607,13 +761,6 @@ describe("chat service", () => {
         prompt: expect.stringContaining("Snippet: Full chunk body 1"),
       })
     );
-    expect(aiProvider.generateText).toHaveBeenCalledWith(
-      expect.objectContaining({
-        prompt: expect.stringContaining(
-          "Summary-only note about deployment tradeoffs."
-        ),
-      })
-    );
     expect(result).toEqual({
       answer: "CloudMind emphasizes source-aware answers [S1].",
       sources: [
@@ -625,17 +772,10 @@ describe("chat service", () => {
           sourceUrl: "https://example.com/cloudmind",
           snippet: "Source snippet 1",
         },
-        {
-          sourceType: "summary",
-          assetId: "asset-summary-1",
-          title: "Summary Asset 1",
-          sourceUrl: null,
-          snippet: "Summary-only note about deployment tradeoffs.",
-        },
       ],
       indexingSummary: {
-        matchedLayers: ["chunk", "summary"],
-        domains: ["engineering", "product"],
+        matchedLayers: ["chunk"],
+        domains: ["engineering"],
         documentClasses: [],
         sourceKinds: ["manual"],
         sourceHosts: [],
@@ -892,6 +1032,141 @@ describe("chat service", () => {
       collections: ["ops:runbooks"],
       topics: [],
     });
+  });
+
+  it("askLibrary keeps answering when assertion lexical search fails", async () => {
+    const repository = new AssertionFailureSearchRepository();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        id: "stable-1:0",
+        score: 0.93,
+      },
+    ]);
+    const aiProvider: AIProvider = {
+      createEmbeddings: vi.fn(async () => ({
+        embeddings: [[0.31, 0.22, 0.13]],
+      })),
+      generateText: vi.fn(async () => ({
+        text: "CloudMind splits metadata in D1 and semantic recall in Vectorize [S1].",
+      })),
+    };
+    const service = createChatService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAiProvider: getAiProviderMock.mockResolvedValue(aiProvider),
+    });
+
+    const result = await service.askLibrary(
+      { APP_NAME: "cloudmind-test" },
+      {
+        question:
+          "Can you explain the D1 and Vectorize tradeoff in CloudMind using a longer natural language query that would previously blow up lexical assertion search?",
+        topK: 2,
+      }
+    );
+
+    expect(result.answer).toContain("D1");
+    expect(result.sources).toEqual([
+      {
+        sourceType: "chunk",
+        assetId: "asset-stable-1",
+        chunkId: "stable-chunk-1",
+        title: "D1 Vectorize Tradeoffs",
+        sourceUrl: null,
+        snippet: "D1 and Vectorize tradeoff preview",
+      },
+    ]);
+  });
+
+  it("askLibraryForContext answers from a single strong relevant chunk", async () => {
+    const repository = new AssertionFailureSearchRepository();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        id: "stable-1:0",
+        score: 0.91,
+      },
+    ]);
+    const aiProvider: AIProvider = {
+      createEmbeddings: vi.fn(async () => ({
+        embeddings: [[0.31, 0.22, 0.13]],
+      })),
+      generateText: vi.fn(async () => ({
+        text: "D1 keeps metadata queryable while Vectorize handles semantic retrieval [S1].",
+      })),
+    };
+    const service = createChatService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAiProvider: getAiProviderMock.mockResolvedValue(aiProvider),
+    });
+
+    const result = await service.askLibraryForContext(
+      { APP_NAME: "cloudmind-test" },
+      {
+        question: "What is the D1 Vectorize tradeoff?",
+        topK: 2,
+      },
+      {
+        profile: "coding",
+        preferredDomains: ["engineering"],
+        boostedDomains: ["engineering"],
+        suppressedDomains: ["personal", "finance", "health"],
+        includeSummaryOnly: true,
+        overfetchMultiplier: 2,
+        allowFallback: false,
+      }
+    );
+
+    expect(result.answer).toContain("Vectorize");
+    expect(result.sources).toHaveLength(1);
+    expect(result.sources[0]?.assetId).toBe("asset-stable-1");
+    expect(result.resultScope).toBe("preferred_only");
+  });
+
+  it("askLibrary prefers query-relevant chunk sources over generic architecture notes", async () => {
+    const repository = new QueryRelevanceSearchRepository();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        id: "architecture-1:0",
+        score: 0.97,
+      },
+      {
+        id: "honox-1:0",
+        score: 0.95,
+      },
+    ]);
+    const aiProvider: AIProvider = {
+      createEmbeddings: vi.fn(async () => ({
+        embeddings: [[0.19, 0.22, 0.27]],
+      })),
+      generateText: vi.fn(async () => ({
+        text: "Use the HonoX monorepo notes for this decision [S1].",
+      })),
+    };
+    const service = createChatService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAiProvider: getAiProviderMock.mockResolvedValue(aiProvider),
+    });
+
+    const result = await service.askLibrary(
+      { APP_NAME: "cloudmind-test" },
+      {
+        question: "Should CloudMind use monorepo or HonoX?",
+        topK: 2,
+      }
+    );
+
+    expect(result.sources).toEqual([
+      {
+        sourceType: "chunk",
+        assetId: "asset-honox-1",
+        chunkId: "chunk-honox-1",
+        title: "HonoX Monorepo Notes",
+        sourceUrl: null,
+        snippet: "HonoX monorepo notes preview",
+      },
+    ]);
   });
 
   it("askLibraryForContext keeps answers inside preferred domains when fallback is disabled", async () => {

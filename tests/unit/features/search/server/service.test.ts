@@ -237,6 +237,70 @@ class MixedDomainSearchRepository implements AssetSearchRepository {
   }
 }
 
+class AssertionFailureSearchRepository implements AssetSearchRepository {
+  public async searchAssets(
+    _input: AssetSearchInput
+  ): Promise<AssetListResult> {
+    return {
+      items: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      },
+    };
+  }
+
+  public async getChunkMatchesByVectorIds(
+    _vectorIds: string[],
+    _query?: {
+      aiVisibility?: AssetAiVisibility[] | undefined;
+    }
+  ): Promise<AssetChunkMatch[]> {
+    return [
+      {
+        id: "chunk-d1-1",
+        chunkIndex: 0,
+        textPreview: "D1 and Vectorize tradeoff preview",
+        contentText:
+          "D1 stores structured metadata while Vectorize handles semantic recall.",
+        vectorId: "asset-d1-1:0",
+        asset: {
+          id: "asset-d1-1",
+          type: "note",
+          title: "D1 Vectorize Tradeoffs",
+          summary: "Tradeoff note",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "engineering",
+          sensitivity: "internal",
+          aiVisibility: "allow",
+          retrievalPriority: 12,
+          collectionKey: "engineering:notes",
+          capturedAt: "2026-03-19T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+      },
+    ];
+  }
+
+  public async searchAssetSummaries(_input: {
+    query: string;
+    limit: number;
+    aiVisibility: AssetAiVisibility[];
+  }): Promise<AssetSummaryMatch[]> {
+    return [];
+  }
+
+  public async searchAssetAssertions(): Promise<never> {
+    throw new Error("D1_ERROR: too many SQL variables");
+  }
+}
+
 const embeddingProvider: AIProvider = {
   generateText: vi.fn(async () => ({
     text: "",
@@ -370,7 +434,9 @@ describe("search service", () => {
         item.kind === "chunk"
           ? item.chunk.asset.aiVisibility === "allow"
           : item.kind === "assertion"
-            ? ["allow", "summary_only"].includes(item.assertion.asset.aiVisibility)
+            ? ["allow", "summary_only"].includes(
+                item.assertion.asset.aiVisibility
+              )
             : item.asset.aiVisibility === "summary_only"
       )
     ).toBe(true);
@@ -519,5 +585,37 @@ describe("search service", () => {
       )
     ).toEqual(["engineering", "personal"]);
     expect(result.resultScope).toBe("fallback_expanded");
+  });
+
+  it("searchAssets keeps working when assertion lexical search fails", async () => {
+    const repository = new AssertionFailureSearchRepository();
+    const service = createSearchService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(
+        new FixedVectorStore([
+          {
+            id: "asset-d1-1:0",
+            score: 0.93,
+          },
+        ])
+      ),
+      getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+    });
+
+    const result = await service.searchAssets(
+      { APP_NAME: "cloudmind-test" },
+      {
+        query:
+          "Can you explain the D1 and Vectorize tradeoff in CloudMind using a long natural language query that used to trigger lexical assertion SQL errors?",
+        page: 1,
+        pageSize: 5,
+      }
+    );
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.kind).toBe("chunk");
+    expect(
+      result.items[0]?.kind === "chunk" ? result.items[0].chunk.asset.id : null
+    ).toBe("asset-d1-1");
   });
 });

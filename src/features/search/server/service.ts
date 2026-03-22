@@ -17,13 +17,12 @@ import type {
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
-
+import { scoreAssetAssertionMatch } from "./assertion-scoring";
 import {
   applyContextPolicyScore,
   getContextResultScope,
   matchesContextPolicyAsset,
 } from "./context-policy";
-import { scoreAssetAssertionMatch } from "./assertion-scoring";
 import { scoreAssetSummaryMatch } from "./summary-scoring";
 
 const SEARCHABLE_AI_VISIBILITY = ["allow"] as const;
@@ -61,11 +60,16 @@ const getSummaryMatches = async (
     return [];
   }
 
-  return repository.searchAssetSummaries({
-    query,
-    limit,
-    aiVisibility: [...SUMMARY_ONLY_AI_VISIBILITY],
-  });
+  try {
+    return await repository.searchAssetSummaries({
+      query,
+      limit,
+      aiVisibility: [...SUMMARY_ONLY_AI_VISIBILITY],
+    });
+  } catch {
+    // 这里对 lexical summary 检索做兜底，避免边缘 SQL 失败拖垮主链路。
+    return [];
+  }
 };
 
 const getAssertionMatches = async (
@@ -82,11 +86,19 @@ const getAssertionMatches = async (
     return [];
   }
 
-  return repository.searchAssetAssertions({
-    query,
-    limit,
-    aiVisibility: [...SUMMARY_ONLY_AI_VISIBILITY, ...SEARCHABLE_AI_VISIBILITY],
-  });
+  try {
+    return await repository.searchAssetAssertions({
+      query,
+      limit,
+      aiVisibility: [
+        ...SUMMARY_ONLY_AI_VISIBILITY,
+        ...SEARCHABLE_AI_VISIBILITY,
+      ],
+    });
+  } catch {
+    // 这里对 lexical assertion 检索做兜底，避免长 query 时直接报错。
+    return [];
+  }
 };
 
 const withOptionalResultScope = <T extends SearchResult>(
@@ -243,18 +255,21 @@ export const createSearchService = (
         contextPolicy
       );
 
-      return withOptionalResultScope({
-        items: pageItems,
-        pagination: {
-          page,
-          pageSize,
-          total: orderedMatches.length,
-          totalPages:
-            orderedMatches.length === 0
-              ? 0
-              : Math.ceil(orderedMatches.length / pageSize),
+      return withOptionalResultScope(
+        {
+          items: pageItems,
+          pagination: {
+            page,
+            pageSize,
+            total: orderedMatches.length,
+            totalPages:
+              orderedMatches.length === 0
+                ? 0
+                : Math.ceil(orderedMatches.length / pageSize),
+          },
         },
-      }, resultScope);
+        resultScope
+      );
     }
 
     const vectorMatches = await vectorStore.search({
@@ -293,7 +308,9 @@ export const createSearchService = (
         };
       })
       .filter((item) =>
-        item ? matchesContextPolicyAsset(item.chunk.asset, contextPolicy) : false
+        item
+          ? matchesContextPolicyAsset(item.chunk.asset, contextPolicy)
+          : false
       )
       .filter((item): item is NonNullable<typeof item> => item !== null);
     const orderedSummaryMatches = summaryMatches
@@ -333,8 +350,7 @@ export const createSearchService = (
       ...orderedChunkMatches,
       ...orderedAssertionMatches,
       ...orderedSummaryMatches,
-    ]
-      .sort((left, right) => right.score - left.score);
+    ].sort((left, right) => right.score - left.score);
     const pageItems = orderedMatches.slice(offset, offset + pageSize);
     const resultScope = getContextResultScope(
       pageItems.map((item) =>
@@ -347,18 +363,21 @@ export const createSearchService = (
       contextPolicy
     );
 
-    return withOptionalResultScope({
-      items: pageItems,
-      pagination: {
-        page,
-        pageSize,
-        total: orderedMatches.length,
-        totalPages:
-          orderedMatches.length === 0
-            ? 0
-            : Math.ceil(orderedMatches.length / pageSize),
+    return withOptionalResultScope(
+      {
+        items: pageItems,
+        pagination: {
+          page,
+          pageSize,
+          total: orderedMatches.length,
+          totalPages:
+            orderedMatches.length === 0
+              ? 0
+              : Math.ceil(orderedMatches.length / pageSize),
+        },
       },
-    }, resultScope);
+      resultScope
+    );
   };
 
   return {

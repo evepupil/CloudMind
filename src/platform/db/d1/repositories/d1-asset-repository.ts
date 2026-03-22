@@ -53,9 +53,11 @@ import {
   ingestJobs,
 } from "@/platform/db/d1/schema";
 import {
+  ASSERTION_SEARCH_TERM_BUDGETS,
   expandSearchTerms,
   MAX_ASSERTION_SEARCH_TERMS,
   MAX_SUMMARY_SEARCH_TERMS,
+  SUMMARY_SEARCH_TERM_BUDGETS,
 } from "./search-term-expansion";
 
 const mapAssetSummary = (record: typeof assets.$inferSelect): AssetSummary => {
@@ -277,23 +279,30 @@ export class D1AssetRepository implements AssetRepository {
       return [];
     }
 
-    const conditions = [
-      inArray(assetChunks.vectorId, vectorIds),
-      isNull(assets.deletedAt),
-    ];
+    const records = [];
 
-    if (query?.aiVisibility?.length) {
-      conditions.push(inArray(assets.aiVisibility, query.aiVisibility));
+    // 这里按批读取 vectorId，避免 inArray 参数过多时触发 D1 绑定上限。
+    for (const batch of splitIntoBatches(vectorIds, 80)) {
+      const conditions = [
+        inArray(assetChunks.vectorId, batch),
+        isNull(assets.deletedAt),
+      ];
+
+      if (query?.aiVisibility?.length) {
+        conditions.push(inArray(assets.aiVisibility, query.aiVisibility));
+      }
+
+      const batchRecords = await this.db
+        .select({
+          chunk: assetChunks,
+          asset: assets,
+        })
+        .from(assetChunks)
+        .innerJoin(assets, eq(assetChunks.assetId, assets.id))
+        .where(and(...conditions));
+
+      records.push(...batchRecords);
     }
-
-    const records = await this.db
-      .select({
-        chunk: assetChunks,
-        asset: assets,
-      })
-      .from(assetChunks)
-      .innerJoin(assets, eq(assetChunks.assetId, assets.id))
-      .where(and(...conditions));
 
     return records.map(mapChunkMatch);
   }
@@ -307,43 +316,59 @@ export class D1AssetRepository implements AssetRepository {
       return [];
     }
 
-    const searchTerms = expandSearchTerms(query, MAX_SUMMARY_SEARCH_TERMS);
-    const searchCondition = or(
-      ...searchTerms.flatMap((term) => [
-        like(assets.title, `%${term}%`),
-        like(assets.summary, `%${term}%`),
-        like(assets.sourceUrl, `%${term}%`),
-      ])
-    );
+    for (const budget of SUMMARY_SEARCH_TERM_BUDGETS) {
+      const searchTerms = expandSearchTerms(
+        query,
+        Math.min(budget, MAX_SUMMARY_SEARCH_TERMS)
+      );
+      const searchCondition = or(
+        ...searchTerms.flatMap((term) => [
+          like(assets.title, `%${term}%`),
+          like(assets.summary, `%${term}%`),
+          like(assets.sourceUrl, `%${term}%`),
+        ])
+      );
 
-    if (!searchCondition) {
-      return [];
+      if (!searchCondition) {
+        continue;
+      }
+
+      try {
+        const records = await this.db
+          .select()
+          .from(assets)
+          .where(
+            and(
+              isNull(assets.deletedAt),
+              eq(assets.status, "ready"),
+              isNotNull(assets.summary),
+              inArray(assets.aiVisibility, input.aiVisibility),
+              searchCondition
+            )
+          )
+          .orderBy(desc(assets.retrievalPriority), desc(assets.updatedAt))
+          .limit(input.limit);
+
+        return records
+          .filter(
+            (
+              record
+            ): record is typeof assets.$inferSelect & { summary: string } =>
+              typeof record.summary === "string" &&
+              record.summary.trim().length > 0
+          )
+          .map((record) => ({
+            asset: mapAssetSummary(record),
+            summary: record.summary,
+          }));
+      } catch (error) {
+        if (budget === SUMMARY_SEARCH_TERM_BUDGETS.at(-1)) {
+          throw error;
+        }
+      }
     }
 
-    const records = await this.db
-      .select()
-      .from(assets)
-      .where(
-        and(
-          isNull(assets.deletedAt),
-          eq(assets.status, "ready"),
-          isNotNull(assets.summary),
-          inArray(assets.aiVisibility, input.aiVisibility),
-          searchCondition
-        )
-      )
-      .orderBy(desc(assets.retrievalPriority), desc(assets.updatedAt))
-      .limit(input.limit);
-
-    return records
-      .filter(
-        (record): record is typeof assets.$inferSelect & { summary: string } =>
-          typeof record.summary === "string" && record.summary.trim().length > 0
-      )
-      .map((record) => ({
-        asset: mapAssetSummary(record),
-        summary: record.summary,
-      }));
+    return [];
   }
 
   public async searchAssetAssertions(
@@ -355,38 +380,51 @@ export class D1AssetRepository implements AssetRepository {
       return [];
     }
 
-    const searchTerms = expandSearchTerms(query, MAX_ASSERTION_SEARCH_TERMS);
-    const searchCondition = or(
-      ...searchTerms.map((term) => like(assetAssertions.text, `%${term}%`))
-    );
+    for (const budget of ASSERTION_SEARCH_TERM_BUDGETS) {
+      const searchTerms = expandSearchTerms(
+        query,
+        Math.min(budget, MAX_ASSERTION_SEARCH_TERMS)
+      );
+      const searchCondition = or(
+        ...searchTerms.map((term) => like(assetAssertions.text, `%${term}%`))
+      );
 
-    if (!searchCondition) {
-      return [];
+      if (!searchCondition) {
+        continue;
+      }
+
+      try {
+        const records = await this.db
+          .select({
+            assertion: assetAssertions,
+            asset: assets,
+          })
+          .from(assetAssertions)
+          .innerJoin(assets, eq(assetAssertions.assetId, assets.id))
+          .where(
+            and(
+              isNull(assets.deletedAt),
+              eq(assets.status, "ready"),
+              inArray(assets.aiVisibility, input.aiVisibility),
+              searchCondition
+            )
+          )
+          .orderBy(
+            desc(assetAssertions.confidence),
+            desc(assets.retrievalPriority),
+            desc(assetAssertions.updatedAt)
+          )
+          .limit(input.limit);
+
+        return records.map(mapAssertionMatch);
+      } catch (error) {
+        if (budget === ASSERTION_SEARCH_TERM_BUDGETS.at(-1)) {
+          throw error;
+        }
+      }
     }
 
-    const records = await this.db
-      .select({
-        assertion: assetAssertions,
-        asset: assets,
-      })
-      .from(assetAssertions)
-      .innerJoin(assets, eq(assetAssertions.assetId, assets.id))
-      .where(
-        and(
-          isNull(assets.deletedAt),
-          eq(assets.status, "ready"),
-          inArray(assets.aiVisibility, input.aiVisibility),
-          searchCondition
-        )
-      )
-      .orderBy(
-        desc(assetAssertions.confidence),
-        desc(assets.retrievalPriority),
-        desc(assetAssertions.updatedAt)
-      )
-      .limit(input.limit);
-
-    return records.map(mapAssertionMatch);
+    return [];
   }
 
   public async listAssetIdsMissingChunkContent(limit = 50): Promise<string[]> {

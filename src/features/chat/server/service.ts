@@ -53,9 +53,10 @@ const SOURCE_TYPE_PRIORITY: Record<ChatSource["sourceType"], number> = {
   assertion: 2,
   summary: 1,
 };
-const MIN_RELATIVE_CONTEXT_SCORE_RATIO = 0.35;
+const MIN_RELATIVE_CONTEXT_SCORE_RATIO = 0.42;
 const MIN_SECONDARY_ASSET_SCORE_RATIO = 0.65;
 const MAX_CONTEXTS_PER_ASSET = 2;
+const MIN_SECONDARY_CONTEXT_RELEVANCE = 0.22;
 
 const buildPrompt = (question: string, sources: ChatSource[]): string => {
   const sourceBlocks = sources
@@ -177,19 +178,35 @@ interface DescriptorTopicsView {
   topics?: string[] | undefined;
 }
 
-const MIN_CONTEXT_TOKEN_LENGTH = 4;
-const MIN_CONTEXT_COVERAGE = 0.2;
-const MIN_CONTEXT_SCORE = 0.85;
+const MIN_CONTEXT_TOKEN_LENGTH = 2;
+const MIN_CONTEXT_COVERAGE = 0.18;
+const MIN_CONTEXT_SCORE = 0.8;
 const MIN_CONTEXT_COUNT = 2;
 const CONTEXT_STOP_WORDS = new Set([
   "about",
+  "also",
   "based",
+  "been",
+  "best",
+  "both",
+  "could",
+  "each",
   "does",
   "from",
   "have",
+  "how",
   "into",
+  "just",
+  "more",
+  "need",
+  "only",
+  "over",
+  "should",
   "that",
   "this",
+  "those",
+  "through",
+  "using",
   "what",
   "when",
   "where",
@@ -210,6 +227,89 @@ const tokenizeForCoverage = (value: string): string[] => {
     );
 };
 
+const clamp = (value: number, min: number, max: number): number => {
+  return Math.min(Math.max(value, min), max);
+};
+
+const buildTokenSet = (value: string): Set<string> => {
+  return new Set(tokenizeForCoverage(value));
+};
+
+const matchesContextToken = (
+  questionToken: string,
+  contextToken: string
+): boolean => {
+  if (questionToken === contextToken) {
+    return true;
+  }
+
+  if (questionToken.length < 4 || contextToken.length < 4) {
+    return false;
+  }
+
+  return (
+    questionToken.startsWith(contextToken) ||
+    contextToken.startsWith(questionToken)
+  );
+};
+
+const getMatchedTokenCount = (
+  tokens: string[],
+  haystackTokens: Set<string>
+): number => {
+  return tokens.filter((token) =>
+    Array.from(haystackTokens).some((haystackToken) =>
+      matchesContextToken(token, haystackToken)
+    )
+  ).length;
+};
+
+const getContextQueryRelevance = (
+  question: string,
+  context: GroundingContext
+): number => {
+  const questionTokens = Array.from(new Set(tokenizeForCoverage(question)));
+
+  if (questionTokens.length === 0) {
+    return 0.5;
+  }
+
+  const title = context.source.title.toLowerCase();
+  const content = context.contentText.toLowerCase();
+  const combined = `${title}\n${content}`;
+  const matchedTokens = getMatchedTokenCount(
+    questionTokens,
+    buildTokenSet(combined)
+  );
+  const matchedTitleTokens = getMatchedTokenCount(
+    questionTokens,
+    buildTokenSet(title)
+  );
+  const exactQueryBonus = combined.includes(question.trim().toLowerCase())
+    ? 0.1
+    : 0;
+
+  return clamp(
+    0.08 +
+      (matchedTokens / questionTokens.length) * 0.58 +
+      (matchedTitleTokens / questionTokens.length) * 0.24 +
+      exactQueryBonus,
+    0,
+    1
+  );
+};
+
+const getContextSelectionScore = (
+  question: string,
+  context: GroundingContext
+): number => {
+  return (
+    context.score +
+    getContextQueryRelevance(question, context) * 0.45 +
+    SOURCE_TYPE_PRIORITY[context.source.sourceType] * 0.01
+  );
+};
+
 const getContextCoverage = (
   question: string,
   contexts: GroundingContext[]
@@ -220,12 +320,15 @@ const getContextCoverage = (
     return 1;
   }
 
-  const contextText = contexts
-    .map((context) => `${context.source.title} ${context.contentText}`)
-    .join(" ")
-    .toLowerCase();
+  const contextTokens = new Set(
+    contexts.flatMap((context) =>
+      tokenizeForCoverage(`${context.source.title} ${context.contentText}`)
+    )
+  );
   const coveredTokenCount = questionTokens.filter((token) =>
-    contextText.includes(token)
+    Array.from(contextTokens).some((contextToken) =>
+      matchesContextToken(token, contextToken)
+    )
   ).length;
 
   return coveredTokenCount / questionTokens.length;
@@ -246,15 +349,26 @@ const shouldRejectContextAnswer = (
 
   const topScore = contexts[0]?.score ?? 0;
   const coverage = getContextCoverage(question, contexts);
+  const topRelevance = contexts[0]
+    ? getContextQueryRelevance(question, contexts[0])
+    : 0;
+  const relevantContextCount = contexts.filter(
+    (context) => getContextQueryRelevance(question, context) >= 0.28
+  ).length;
 
-  if (
-    contexts.length >= MIN_CONTEXT_COUNT &&
-    coverage >= MIN_CONTEXT_COVERAGE
-  ) {
+  if (relevantContextCount >= MIN_CONTEXT_COUNT && coverage >= 0.15) {
     return false;
   }
 
   if (topScore >= MIN_CONTEXT_SCORE && coverage >= MIN_CONTEXT_COVERAGE) {
+    return false;
+  }
+
+  if (topScore >= 0.75 && topRelevance >= 0.45) {
+    return false;
+  }
+
+  if (contexts.length === 1 && topScore >= 0.72 && topRelevance >= 0.55) {
     return false;
   }
 
@@ -271,11 +385,13 @@ const getSummaryGroundingContexts = async (
     return [];
   }
 
-  const summaryMatches = await repository.searchAssetSummaries({
-    query: question,
-    limit,
-    aiVisibility: [...CHAT_SUMMARY_ONLY_AI_VISIBILITY],
-  });
+  const summaryMatches = await repository
+    .searchAssetSummaries({
+      query: question,
+      limit,
+      aiVisibility: [...CHAT_SUMMARY_ONLY_AI_VISIBILITY],
+    })
+    .catch(() => []);
 
   return buildSummaryGroundingContexts(question, summaryMatches)
     .map((context) => ({
@@ -301,14 +417,16 @@ const getAssertionGroundingContexts = async (
     return [];
   }
 
-  const assertionMatches = await repository.searchAssetAssertions({
-    query: question,
-    limit,
-    aiVisibility: [
-      ...CHAT_SUMMARY_ONLY_AI_VISIBILITY,
-      ...CHAT_ALLOWED_AI_VISIBILITY,
-    ],
-  });
+  const assertionMatches = await repository
+    .searchAssetAssertions({
+      query: question,
+      limit,
+      aiVisibility: [
+        ...CHAT_SUMMARY_ONLY_AI_VISIBILITY,
+        ...CHAT_ALLOWED_AI_VISIBILITY,
+      ],
+    })
+    .catch(() => []);
 
   return assertionMatches
     .map((match) => ({
@@ -405,11 +523,15 @@ const buildChatPrompt = (
 };
 
 const compareGroundingContexts = (
+  question: string,
   left: GroundingContext,
   right: GroundingContext
 ): number => {
-  if (right.score !== left.score) {
-    return right.score - left.score;
+  const rightSelectionScore = getContextSelectionScore(question, right);
+  const leftSelectionScore = getContextSelectionScore(question, left);
+
+  if (rightSelectionScore !== leftSelectionScore) {
+    return rightSelectionScore - leftSelectionScore;
   }
 
   return (
@@ -537,13 +659,21 @@ const sanitizeAnswerText = (text: string): string => {
 };
 
 const selectGroundingContexts = (
+  question: string,
   contexts: GroundingContext[],
-  topK: number
+  topK: number,
+  options?: {
+    allowLowRelevanceSecondary?: boolean;
+  }
 ): GroundingContext[] => {
-  const sortedContexts = [...contexts].sort(compareGroundingContexts);
+  const sortedContexts = [...contexts].sort((left, right) =>
+    compareGroundingContexts(question, left, right)
+  );
   const selected: GroundingContext[] = [];
   const seenContentKeys = new Set<string>();
-  const topScore = sortedContexts[0]?.score ?? 0;
+  const topSelectionScore = sortedContexts[0]
+    ? getContextSelectionScore(question, sortedContexts[0])
+    : 0;
 
   for (const context of sortedContexts) {
     if (selected.length >= topK) {
@@ -552,8 +682,9 @@ const selectGroundingContexts = (
 
     if (
       selected.length > 0 &&
-      topScore > 0 &&
-      context.score / topScore < MIN_RELATIVE_CONTEXT_SCORE_RATIO
+      topSelectionScore > 0 &&
+      getContextSelectionScore(question, context) / topSelectionScore <
+        MIN_RELATIVE_CONTEXT_SCORE_RATIO
     ) {
       continue;
     }
@@ -572,6 +703,16 @@ const selectGroundingContexts = (
     }
 
     if (existingForAsset.length >= MAX_CONTEXTS_PER_ASSET) {
+      continue;
+    }
+
+    if (
+      selected.length > 0 &&
+      existingForAsset.length === 0 &&
+      !options?.allowLowRelevanceSecondary &&
+      getContextQueryRelevance(question, context) <
+        MIN_SECONDARY_CONTEXT_RELEVANCE
+    ) {
       continue;
     }
 
@@ -672,11 +813,15 @@ export const createChatService = (
 
     if (!queryVector) {
       const lexicalContexts = [...assertionContexts, ...summaryContexts].sort(
-        compareGroundingContexts
+        (left, right) => compareGroundingContexts(question, left, right)
       );
       const selectedLexicalContexts = selectGroundingContexts(
+        question,
         lexicalContexts,
-        topK
+        topK,
+        {
+          allowLowRelevanceSecondary: Boolean(contextPolicy?.allowFallback),
+        }
       );
 
       if (selectedLexicalContexts.length === 0) {
@@ -768,10 +913,14 @@ export const createChatService = (
       ...groundingContexts,
       ...assertionContexts,
       ...summaryContexts,
-    ].sort(compareGroundingContexts);
+    ].sort((left, right) => compareGroundingContexts(question, left, right));
     const selectedGroundingContexts = selectGroundingContexts(
+      question,
       allGroundingContexts,
-      topK
+      topK,
+      {
+        allowLowRelevanceSecondary: Boolean(contextPolicy?.allowFallback),
+      }
     );
     const resultScope = getContextResultScope(
       selectedGroundingContexts.map((context) => context.asset),

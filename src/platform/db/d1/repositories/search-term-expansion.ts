@@ -6,8 +6,10 @@ const SEARCH_ALIASES: Record<string, string[]> = {
   mcp: ["model context protocol"],
 };
 
-export const MAX_SUMMARY_SEARCH_TERMS = 24;
-export const MAX_ASSERTION_SEARCH_TERMS = 48;
+export const MAX_SUMMARY_SEARCH_TERMS = 16;
+export const MAX_ASSERTION_SEARCH_TERMS = 24;
+export const SUMMARY_SEARCH_TERM_BUDGETS = [16, 8, 4] as const;
+export const ASSERTION_SEARCH_TERM_BUDGETS = [24, 12, 6] as const;
 
 export const expandSearchTerms = (
   query: string,
