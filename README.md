@@ -2,34 +2,41 @@
 
 [EN](./README.md) | [ZH-CN](./README.zh-CN.md)
 
-CloudMind is an open source, serverless-first personal knowledge and context infrastructure for the AI era.
+CloudMind is an open source, Cloudflare-native, serverless-first
+private AI memory layer for the AI era.
 
 It is designed as a BYOC (Bring Your Own Cloud) project:
 
 - deploy to your own Cloudflare account
 - keep raw assets, derived content, and indexes under your control
+- stay private by default instead of depending on a hosted SaaS operator
+- benefit from Cloudflare-native deployment, availability, and low ops overhead
 - use Cloudflare-native infrastructure by default
 - preserve abstraction boundaries for future migration
 
 ## Use Cases
 
-CloudMind is not limited to a traditional personal knowledge base. It is intended for scenarios such as:
+CloudMind is not limited to a traditional personal knowledge base.
+It is intended for scenarios such as:
 
 - building a personal AI memory layer that can be searched, cited, and reused
 - turning saved URLs, notes, PDFs, and AI conversations into structured context
 - grounding LLM applications with user-owned knowledge instead of SaaS-locked data
-- exposing a private knowledge and context system through Web UI, REST APIs, and MCP tools
+- exposing a private memory and context system through Web UI, REST APIs,
+  browser extensions, MCP tools, and future interfaces
 - serving as a portable foundation for retrieval, agent memory, and context engineering workflows
 
 ## Overview
 
-CloudMind ingests URLs, notes, PDFs, and AI-originated content into a unified library, then runs a processing pipeline to produce:
+CloudMind ingests URLs, notes, PDFs, browser-captured data, and
+AI-originated content into a unified memory layer, then runs a processing
+pipeline to produce:
 
 - normalized content
 - summaries
 - chunks
 - embeddings
-- searchable and answerable knowledge assets
+- searchable and answerable memory assets
 
 The current implementation is a single HonoX full-stack app with:
 
@@ -125,7 +132,7 @@ This allows:
 | `/assets` | asset list |
 | `/assets/:id` | asset detail |
 | `/search` | semantic retrieval UI |
-| `/ask` | library-grounded Q&A |
+| `/ask` | memory-grounded Q&A |
 
 ## API Surface
 
@@ -171,10 +178,10 @@ Available tools:
 
 Tool semantics:
 
-- `save_asset`: ingest a text note or URL into the library
+- `save_asset`: ingest a text note or URL into the memory layer
 - `search_assets`: run semantic retrieval and return matched chunks or summary hits
 - `get_asset`: fetch asset detail by ID
-- `ask_library`: answer a question with grounded library evidence
+- `ask_library`: answer a question with grounded memory evidence
 
 `GET /mcp` and `DELETE /mcp` are intentionally rejected with `405 Method not allowed`.
 
@@ -205,7 +212,7 @@ curl -X POST http://localhost:5173/api/search \
   }'
 ```
 
-Ask the library:
+Ask the memory layer:
 
 ```bash
 curl -X POST http://localhost:5173/api/chat \
@@ -227,7 +234,7 @@ src/
   env.ts                          Cloudflare binding types
   features/
     assets/                       asset query and management
-    chat/                         grounded Q&A
+    chat/                         memory-grounded Q&A
     ingest/                       ingest entrypoints and orchestration
     mcp/                          remote MCP server
     search/                       semantic retrieval
