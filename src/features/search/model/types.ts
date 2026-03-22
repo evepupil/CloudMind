@@ -1,4 +1,5 @@
 import type {
+  AssetAssertionMatch,
   AssetChunkMatch,
   AssetSummary,
 } from "@/features/assets/model/types";
@@ -18,7 +19,16 @@ export interface SearchSummaryResultItem {
   summary: string;
 }
 
-export type SearchResultItem = SearchChunkResultItem | SearchSummaryResultItem;
+export interface SearchAssertionResultItem {
+  kind: "assertion";
+  score: number;
+  assertion: AssetAssertionMatch;
+}
+
+export type SearchResultItem =
+  | SearchChunkResultItem
+  | SearchSummaryResultItem
+  | SearchAssertionResultItem;
 
 export interface SearchPagination {
   page: number;

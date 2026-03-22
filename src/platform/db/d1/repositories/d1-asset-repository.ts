@@ -17,18 +17,24 @@ import type {
   AssetSearchInput,
   ChunkMatchQuery,
   CompleteAssetProcessingInput,
+  CreateAssetAssertionInput,
   CreateAssetChunkInput,
+  CreateAssetFacetInput,
   CreateFileAssetInput,
   CreateTextAssetInput,
   CreateUrlAssetInput,
+  SearchAssetAssertionInput,
   SearchAssetSummaryInput,
   UpdateAssetIndexingInput,
   UpdateAssetMetadataInput,
 } from "@/core/assets/ports";
 import type {
+  AssetAssertionMatch,
+  AssetAssertionSummary,
   AssetChunkMatch,
   AssetChunkSummary,
   AssetDetail,
+  AssetFacetSummary,
   AssetListQuery,
   AssetListResult,
   AssetSourceKind,
@@ -39,7 +45,9 @@ import type {
 } from "@/features/assets/model/types";
 import { createDb } from "@/platform/db/d1/client";
 import {
+  assetAssertions,
   assetChunks,
+  assetFacets,
   assetSources,
   assets,
   ingestJobs,
@@ -58,6 +66,8 @@ const mapAssetSummary = (record: typeof assets.$inferSelect): AssetSummary => {
     sensitivity: record.sensitivity,
     aiVisibility: record.aiVisibility,
     retrievalPriority: record.retrievalPriority,
+    documentClass: record.documentClass,
+    sourceHost: record.sourceHost,
     collectionKey: record.collectionKey,
     capturedAt: record.capturedAt,
     descriptorJson: record.descriptorJson,
@@ -102,6 +112,44 @@ const mapChunkMatch = (record: {
   };
 };
 
+const mapFacetSummary = (
+  record: typeof assetFacets.$inferSelect
+): AssetFacetSummary => {
+  return {
+    id: record.id,
+    facetKey: record.facetKey,
+    facetValue: record.facetValue,
+    facetLabel: record.facetLabel,
+    sortOrder: record.sortOrder,
+  };
+};
+
+const mapAssertionSummary = (
+  record: typeof assetAssertions.$inferSelect
+): AssetAssertionSummary => {
+  return {
+    id: record.id,
+    assertionIndex: record.assertionIndex,
+    kind: record.kind,
+    text: record.text,
+    sourceChunkIndex: record.sourceChunkIndex,
+    sourceSpanJson: record.sourceSpanJson,
+    confidence: record.confidence,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+};
+
+const mapAssertionMatch = (record: {
+  assertion: typeof assetAssertions.$inferSelect;
+  asset: typeof assets.$inferSelect;
+}): AssetAssertionMatch => {
+  return {
+    ...mapAssertionSummary(record.assertion),
+    asset: mapAssetSummary(record.asset),
+  };
+};
+
 const buildAssetListWhereClause = (query?: AssetListQuery) => {
   const conditions = [isNull(assets.deletedAt)];
 
@@ -114,11 +162,10 @@ const buildAssetListWhereClause = (query?: AssetListQuery) => {
   }
 
   if (query?.query) {
-    const search = `%${query.query}%`;
     const searchCondition = or(
-      like(assets.title, search),
-      like(assets.summary, search),
-      like(assets.sourceUrl, search)
+      buildLikeCondition(assets.title, query.query),
+      buildLikeCondition(assets.summary, query.query),
+      buildLikeCondition(assets.sourceUrl, query.query)
     );
 
     if (searchCondition) {
@@ -137,6 +184,42 @@ const splitIntoBatches = <T>(items: T[], batchSize: number): T[][] => {
   }
 
   return batches;
+};
+
+const SEARCH_ALIASES: Record<string, string[]> = {
+  ts: ["typescript"],
+  js: ["javascript"],
+  cf: ["cloudflare"],
+  rag: ["retrieval augmented generation", "retrieval"],
+  mcp: ["model context protocol"],
+};
+
+const expandSearchTerms = (query: string): string[] => {
+  const normalized = query.trim().toLowerCase();
+
+  if (!normalized) {
+    return [];
+  }
+
+  const tokens = normalized
+    .split(/[^a-z0-9_]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0);
+  const expanded = new Set<string>([normalized]);
+
+  for (const token of tokens) {
+    expanded.add(token);
+
+    for (const alias of SEARCH_ALIASES[token] ?? []) {
+      expanded.add(alias);
+    }
+  }
+
+  return Array.from(expanded);
+};
+
+const buildLikeCondition = (column: typeof assets.title | typeof assets.summary | typeof assets.sourceUrl, term: string) => {
+  return like(column, `%${term}%`);
 };
 
 // 这里实现面向 D1 的资产仓储；后续如切数据库，只替换这一层。
@@ -224,11 +307,13 @@ export class D1AssetRepository implements AssetRepository {
       return [];
     }
 
-    const search = `%${query}%`;
+    const searchTerms = expandSearchTerms(query);
     const searchCondition = or(
-      like(assets.title, search),
-      like(assets.summary, search),
-      like(assets.sourceUrl, search)
+      ...searchTerms.flatMap((term) => [
+        like(assets.title, `%${term}%`),
+        like(assets.summary, `%${term}%`),
+        like(assets.sourceUrl, `%${term}%`),
+      ])
     );
 
     if (!searchCondition) {
@@ -259,6 +344,49 @@ export class D1AssetRepository implements AssetRepository {
         asset: mapAssetSummary(record),
         summary: record.summary,
       }));
+  }
+
+  public async searchAssetAssertions(
+    input: SearchAssetAssertionInput
+  ): Promise<AssetAssertionMatch[]> {
+    const query = input.query.trim();
+
+    if (!query || input.limit <= 0 || input.aiVisibility.length === 0) {
+      return [];
+    }
+
+    const searchTerms = expandSearchTerms(query);
+    const searchCondition = or(
+      ...searchTerms.map((term) => like(assetAssertions.text, `%${term}%`))
+    );
+
+    if (!searchCondition) {
+      return [];
+    }
+
+    const records = await this.db
+      .select({
+        assertion: assetAssertions,
+        asset: assets,
+      })
+      .from(assetAssertions)
+      .innerJoin(assets, eq(assetAssertions.assetId, assets.id))
+      .where(
+        and(
+          isNull(assets.deletedAt),
+          eq(assets.status, "ready"),
+          inArray(assets.aiVisibility, input.aiVisibility),
+          searchCondition
+        )
+      )
+      .orderBy(
+        desc(assetAssertions.confidence),
+        desc(assets.retrievalPriority),
+        desc(assetAssertions.updatedAt)
+      )
+      .limit(input.limit);
+
+    return records.map(mapAssertionMatch);
   }
 
   public async listAssetIdsMissingChunkContent(limit = 50): Promise<string[]> {
@@ -310,6 +438,16 @@ export class D1AssetRepository implements AssetRepository {
       .from(assetChunks)
       .where(eq(assetChunks.assetId, id))
       .orderBy(asc(assetChunks.chunkIndex));
+    const facetRecords = await this.db
+      .select()
+      .from(assetFacets)
+      .where(eq(assetFacets.assetId, id))
+      .orderBy(asc(assetFacets.sortOrder), asc(assetFacets.facetLabel));
+    const assertionRecords = await this.db
+      .select()
+      .from(assetAssertions)
+      .where(eq(assetAssertions.assetId, id))
+      .orderBy(asc(assetAssertions.assertionIndex));
 
     return {
       ...mapAssetSummary(assetRecord),
@@ -331,6 +469,8 @@ export class D1AssetRepository implements AssetRepository {
         : null,
       jobs: jobRecords.map(mapJobSummary),
       chunks: chunkRecords.map(mapChunkSummary),
+      facets: facetRecords.map(mapFacetSummary),
+      assertions: assertionRecords.map(mapAssertionSummary),
     };
   }
 
@@ -356,6 +496,8 @@ export class D1AssetRepository implements AssetRepository {
       sensitivity: "internal",
       aiVisibility: "allow",
       retrievalPriority: 0,
+      documentClass: "general_note",
+      sourceHost: null,
       collectionKey: null,
       capturedAt: now,
       descriptorJson: null,
@@ -423,6 +565,8 @@ export class D1AssetRepository implements AssetRepository {
       sensitivity: "internal",
       aiVisibility: "allow",
       retrievalPriority: 0,
+      documentClass: "reference_doc",
+      sourceHost: null,
       collectionKey: null,
       capturedAt: now,
       descriptorJson: null,
@@ -489,6 +633,8 @@ export class D1AssetRepository implements AssetRepository {
       sensitivity: "internal",
       aiVisibility: "allow",
       retrievalPriority: 0,
+      documentClass: "reference_doc",
+      sourceHost: null,
       collectionKey: null,
       capturedAt: now,
       descriptorJson: null,
@@ -607,6 +753,63 @@ export class D1AssetRepository implements AssetRepository {
     }
   }
 
+  public async replaceAssetFacets(
+    assetId: string,
+    facets: CreateAssetFacetInput[]
+  ): Promise<void> {
+    await this.db.delete(assetFacets).where(eq(assetFacets.assetId, assetId));
+
+    if (facets.length === 0) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const rows = facets.map((facet, index) => ({
+      id: crypto.randomUUID(),
+      assetId,
+      facetKey: facet.facetKey,
+      facetValue: facet.facetValue,
+      facetLabel: facet.facetLabel,
+      sortOrder: facet.sortOrder ?? index,
+      createdAt: now,
+    }));
+
+    for (const batch of splitIntoBatches(rows, 20)) {
+      await this.db.insert(assetFacets).values(batch);
+    }
+  }
+
+  public async replaceAssetAssertions(
+    assetId: string,
+    assertions: CreateAssetAssertionInput[]
+  ): Promise<void> {
+    await this.db
+      .delete(assetAssertions)
+      .where(eq(assetAssertions.assetId, assetId));
+
+    if (assertions.length === 0) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const rows = assertions.map((assertion) => ({
+      id: crypto.randomUUID(),
+      assetId,
+      assertionIndex: assertion.assertionIndex,
+      kind: assertion.kind,
+      text: assertion.text,
+      sourceChunkIndex: assertion.sourceChunkIndex ?? null,
+      sourceSpanJson: assertion.sourceSpanJson ?? null,
+      confidence: assertion.confidence ?? null,
+      createdAt: now,
+      updatedAt: now,
+    }));
+
+    for (const batch of splitIntoBatches(rows, 12)) {
+      await this.db.insert(assetAssertions).values(batch);
+    }
+  }
+
   public async updateAssetIndexing(
     id: string,
     input: UpdateAssetIndexingInput
@@ -633,6 +836,14 @@ export class D1AssetRepository implements AssetRepository {
 
     if (input.retrievalPriority !== undefined) {
       updatePayload.retrievalPriority = input.retrievalPriority;
+    }
+
+    if (input.documentClass !== undefined) {
+      updatePayload.documentClass = input.documentClass;
+    }
+
+    if (input.sourceHost !== undefined) {
+      updatePayload.sourceHost = input.sourceHost;
     }
 
     if (input.collectionKey !== undefined) {

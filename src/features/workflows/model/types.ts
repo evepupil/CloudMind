@@ -34,6 +34,8 @@ export type WorkflowStepType =
   | "classify"
   | "derive_descriptor"
   | "derive_access_policy"
+  | "derive_facets"
+  | "derive_assertions"
   | "chunk"
   | "embed"
   | "index"

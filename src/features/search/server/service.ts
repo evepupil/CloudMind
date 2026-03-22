@@ -16,6 +16,7 @@ import {
   getContextResultScope,
   matchesContextPolicyAsset,
 } from "./context-policy";
+import { scoreAssetAssertionMatch } from "./assertion-scoring";
 import { scoreAssetSummaryMatch } from "./summary-scoring";
 
 const SEARCHABLE_AI_VISIBILITY = ["allow"] as const;
@@ -53,6 +54,27 @@ const getSummaryMatches = async (
     query,
     limit,
     aiVisibility: [...SUMMARY_ONLY_AI_VISIBILITY],
+  });
+};
+
+const getAssertionMatches = async (
+  repository: AssetSearchRepository,
+  query: string,
+  limit: number,
+  contextPolicy?: ContextRetrievalPolicy
+) => {
+  if (!repository.searchAssetAssertions) {
+    return [];
+  }
+
+  if (contextPolicy && !contextPolicy.includeSummaryOnly) {
+    return [];
+  }
+
+  return repository.searchAssetAssertions({
+    query,
+    limit,
+    aiVisibility: [...SUMMARY_ONLY_AI_VISIBILITY, ...SEARCHABLE_AI_VISIBILITY],
   });
 };
 
@@ -117,8 +139,28 @@ export const createSearchService = (
       topK,
       contextPolicy
     );
+    const assertionMatches = await getAssertionMatches(
+      repository,
+      query,
+      topK,
+      contextPolicy
+    );
 
     if (!queryVector) {
+      const orderedAssertionMatches = assertionMatches
+        .map((match) => ({
+          kind: "assertion" as const,
+          score: applyContextPolicyScore(
+            scoreAssetAssertionMatch(query, match),
+            match.asset,
+            contextPolicy
+          ),
+          assertion: match,
+        }))
+        .filter((match) =>
+          matchesContextPolicyAsset(match.assertion.asset, contextPolicy)
+        )
+        .sort((left, right) => right.score - left.score);
       const orderedSummaryMatches = summaryMatches
         .map((match) => ({
           kind: "summary" as const,
@@ -134,9 +176,15 @@ export const createSearchService = (
           matchesContextPolicyAsset(match.asset, contextPolicy)
         )
         .sort((left, right) => right.score - left.score);
-      const pageItems = orderedSummaryMatches.slice(offset, offset + pageSize);
+      const orderedMatches = [
+        ...orderedAssertionMatches,
+        ...orderedSummaryMatches,
+      ].sort((left, right) => right.score - left.score);
+      const pageItems = orderedMatches.slice(offset, offset + pageSize);
       const resultScope = getContextResultScope(
-        pageItems.map((item) => item.asset),
+        pageItems.map((item) =>
+          item.kind === "assertion" ? item.assertion.asset : item.asset
+        ),
         contextPolicy
       );
 
@@ -145,11 +193,11 @@ export const createSearchService = (
         pagination: {
           page,
           pageSize,
-          total: orderedSummaryMatches.length,
+          total: orderedMatches.length,
           totalPages:
-            orderedSummaryMatches.length === 0
+            orderedMatches.length === 0
               ? 0
-              : Math.ceil(orderedSummaryMatches.length / pageSize),
+              : Math.ceil(orderedMatches.length / pageSize),
         },
       }, resultScope);
     }
@@ -205,12 +253,34 @@ export const createSearchService = (
       }))
       .filter((match) => matchesContextPolicyAsset(match.asset, contextPolicy))
       .sort((left, right) => right.score - left.score);
-    const orderedMatches = [...orderedChunkMatches, ...orderedSummaryMatches]
+    const orderedAssertionMatches = assertionMatches
+      .map((match) => ({
+        kind: "assertion" as const,
+        score: applyContextPolicyScore(
+          scoreAssetAssertionMatch(query, match),
+          match.asset,
+          contextPolicy
+        ),
+        assertion: match,
+      }))
+      .filter((match) =>
+        matchesContextPolicyAsset(match.assertion.asset, contextPolicy)
+      )
+      .sort((left, right) => right.score - left.score);
+    const orderedMatches = [
+      ...orderedChunkMatches,
+      ...orderedAssertionMatches,
+      ...orderedSummaryMatches,
+    ]
       .sort((left, right) => right.score - left.score);
     const pageItems = orderedMatches.slice(offset, offset + pageSize);
     const resultScope = getContextResultScope(
       pageItems.map((item) =>
-        item.kind === "chunk" ? item.chunk.asset : item.asset
+        item.kind === "chunk"
+          ? item.chunk.asset
+          : item.kind === "assertion"
+            ? item.assertion.asset
+            : item.asset
       ),
       contextPolicy
     );

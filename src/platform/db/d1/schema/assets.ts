@@ -26,6 +26,17 @@ const assetSensitivityValues = [
   "restricted",
 ] as const;
 const assetAiVisibilityValues = ["allow", "summary_only", "deny"] as const;
+const assetDocumentClassValues = [
+  "reference_doc",
+  "design_doc",
+  "bug_note",
+  "paper",
+  "journal_entry",
+  "meeting_note",
+  "spec",
+  "howto",
+  "general_note",
+] as const;
 
 // 这里定义 D1 的资产主表，并补充目录层与 AI 访问策略字段。
 export const assets = sqliteTable(
@@ -48,6 +59,10 @@ export const assets = sqliteTable(
       .notNull()
       .default("allow"),
     retrievalPriority: integer("retrieval_priority").notNull().default(0),
+    documentClass: text("document_class", {
+      enum: assetDocumentClassValues,
+    }).default("reference_doc"),
+    sourceHost: text("source_host"),
     collectionKey: text("collection_key"),
     capturedAt: text("captured_at"),
     descriptorJson: text("descriptor_json"),
@@ -69,6 +84,8 @@ export const assets = sqliteTable(
     index("assets_source_kind_idx").on(table.sourceKind),
     index("assets_domain_idx").on(table.domain),
     index("assets_sensitivity_idx").on(table.sensitivity),
+    index("assets_document_class_idx").on(table.documentClass),
+    index("assets_source_host_idx").on(table.sourceHost),
     index("assets_collection_key_idx").on(table.collectionKey),
     index("assets_created_at_idx").on(table.createdAt),
     index("assets_captured_at_idx").on(table.capturedAt),

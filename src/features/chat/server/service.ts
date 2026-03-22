@@ -9,6 +9,7 @@ import {
   getContextResultScope,
   matchesContextPolicyAsset,
 } from "@/features/search/server/context-policy";
+import { scoreAssetAssertionMatch } from "@/features/search/server/assertion-scoring";
 import { scoreAssetSummaryMatch } from "@/features/search/server/summary-scoring";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
@@ -186,6 +187,43 @@ const getSummaryGroundingContexts = async (
   ).filter((context) => matchesContextPolicyAsset(context.asset, contextPolicy));
 };
 
+const getAssertionGroundingContexts = async (
+  repository: AssetSearchRepository,
+  question: string,
+  limit: number,
+  contextPolicy?: ContextRetrievalPolicy
+): Promise<GroundingContext[]> => {
+  if (!repository.searchAssetAssertions) {
+    return [];
+  }
+
+  const assertionMatches = await repository.searchAssetAssertions({
+    query: question,
+    limit,
+    aiVisibility: [...CHAT_SUMMARY_ONLY_AI_VISIBILITY, ...CHAT_ALLOWED_AI_VISIBILITY],
+  });
+
+  return assertionMatches
+    .map((match) => ({
+      score: applyContextPolicyScore(
+        scoreAssetAssertionMatch(question, match),
+        match.asset,
+        contextPolicy
+      ),
+      source: {
+        sourceType: "assertion" as const,
+        assetId: match.asset.id,
+        title: match.asset.title,
+        sourceUrl: match.asset.sourceUrl,
+        snippet: match.text,
+      },
+      contentText: match.text,
+      asset: match.asset,
+    }))
+    .filter((context) => matchesContextPolicyAsset(context.asset, contextPolicy))
+    .sort((left, right) => right.score - left.score);
+};
+
 const buildGroundingContexts = (
   vectorMatches: Awaited<ReturnType<VectorStore["search"]>>,
   chunkMatches: Awaited<
@@ -308,25 +346,32 @@ export const createChatService = (
       retrievalLimit,
       contextPolicy
     );
+    const assertionContexts = await getAssertionGroundingContexts(
+      repository,
+      question,
+      retrievalLimit,
+      contextPolicy
+    );
 
     if (!queryVector) {
-      if (summaryContexts.length === 0) {
+      const lexicalContexts = [...assertionContexts, ...summaryContexts]
+        .sort((left, right) => right.score - left.score)
+        .slice(0, topK);
+
+      if (lexicalContexts.length === 0) {
         return withOptionalResultScope({
           answer: createFallbackAnswer(),
           sources: [],
         }, getContextResultScope([], contextPolicy));
       }
 
-      const orderedSummaryContexts = [...summaryContexts]
-        .sort((left, right) => right.score - left.score)
-        .slice(0, topK);
       const resultScope = getContextResultScope(
-        orderedSummaryContexts.map((context) => context.asset),
+        lexicalContexts.map((context) => context.asset),
         contextPolicy
       );
 
       if (
-        shouldRejectContextAnswer(question, orderedSummaryContexts, contextPolicy)
+        shouldRejectContextAnswer(question, lexicalContexts, contextPolicy)
       ) {
         return withOptionalResultScope({
           answer: createFallbackAnswer(),
@@ -337,7 +382,7 @@ export const createChatService = (
       const answer = await aiProvider.generateText({
         systemPrompt:
           "You are a source-aware knowledge base assistant. Keep answers concise and grounded in the provided sources.",
-        prompt: buildChatPrompt(question, orderedSummaryContexts),
+        prompt: buildChatPrompt(question, lexicalContexts),
         temperature: 0.2,
         maxOutputTokens: 700,
       });
@@ -347,7 +392,7 @@ export const createChatService = (
           answer.text.trim().length > 0
             ? answer.text.trim()
             : createFallbackAnswer(),
-        sources: orderedSummaryContexts.map((context) => context.source),
+        sources: lexicalContexts.map((context) => context.source),
       }, resultScope);
     }
 
@@ -374,7 +419,11 @@ export const createChatService = (
     })).filter((context) =>
       matchesContextPolicyAsset(context.asset, contextPolicy)
     );
-    const allGroundingContexts = [...groundingContexts, ...summaryContexts]
+    const allGroundingContexts = [
+      ...groundingContexts,
+      ...assertionContexts,
+      ...summaryContexts,
+    ]
       .sort((left, right) => right.score - left.score)
       .slice(0, topK);
     const resultScope = getContextResultScope(

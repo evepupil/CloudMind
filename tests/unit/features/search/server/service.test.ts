@@ -359,7 +359,9 @@ describe("search service", () => {
       result.items.every((item) =>
         item.kind === "chunk"
           ? item.chunk.asset.aiVisibility === "allow"
-          : item.asset.aiVisibility === "summary_only"
+          : item.kind === "assertion"
+            ? ["allow", "summary_only"].includes(item.assertion.asset.aiVisibility)
+            : item.asset.aiVisibility === "summary_only"
       )
     ).toBe(true);
   });
@@ -495,7 +497,11 @@ describe("search service", () => {
     expect(result.items).toHaveLength(2);
     expect(
       result.items.map((item) =>
-        item.kind === "chunk" ? item.chunk.asset.domain : item.asset.domain
+        item.kind === "chunk"
+          ? item.chunk.asset.domain
+          : item.kind === "assertion"
+            ? item.assertion.asset.domain
+            : item.asset.domain
       )
     ).toEqual(["engineering", "personal"]);
     expect(result.resultScope).toBe("fallback_expanded");

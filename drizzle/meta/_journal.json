@@ -50,6 +50,13 @@
       "when": 1774101721585,
       "tag": "0006_fast_raider",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1774161362617,
+      "tag": "0007_cold_doctor_spectrum",
+      "breakpoints": true
     }
   ]
 }

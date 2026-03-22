@@ -836,6 +836,8 @@ describe("processTextAsset", () => {
       "summarize",
       "derive_descriptor",
       "derive_access_policy",
+      "derive_facets",
+      "derive_assertions",
       "persist_content",
       "chunk",
       "embed",
@@ -867,7 +869,7 @@ describe("processTextAsset", () => {
     expect(getArtifactContent(workflowRepository, "descriptor")).toMatchObject({
       domain: "general",
       collectionKey: "inbox:notes",
-      strategy: "heuristic_v1",
+      strategy: "heuristic_v2",
     });
     expect(
       getArtifactContent(workflowRepository, "access_policy")
@@ -1064,6 +1066,8 @@ describe("processUrlAsset", () => {
       "summarize",
       "derive_descriptor",
       "derive_access_policy",
+      "derive_facets",
+      "derive_assertions",
       "persist_content",
       "chunk",
       "embed",
@@ -1317,6 +1321,8 @@ describe("processPdfAsset", () => {
       "summarize",
       "derive_descriptor",
       "derive_access_policy",
+      "derive_facets",
+      "derive_assertions",
       "persist_content",
       "chunk",
       "embed",
@@ -1348,7 +1354,7 @@ describe("processPdfAsset", () => {
     expect(getArtifactContent(workflowRepository, "descriptor")).toMatchObject({
       domain: "research",
       collectionKey: "library:pdf",
-      strategy: "heuristic_v1",
+      strategy: "heuristic_v2",
     });
     expect(
       getArtifactContent(workflowRepository, "access_policy")

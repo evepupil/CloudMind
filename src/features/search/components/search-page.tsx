@@ -22,7 +22,15 @@ const formatScore = (value: number): string => {
 };
 
 const getMatchLabel = (kind: SearchResult["items"][number]["kind"]): string => {
-  return kind === "chunk" ? "Chunk match" : "Summary match";
+  if (kind === "chunk") {
+    return "Chunk match";
+  }
+
+  if (kind === "assertion") {
+    return "Assertion match";
+  }
+
+  return "Summary match";
 };
 
 const getScoreStyles = (value: number) => {
@@ -372,18 +380,26 @@ export const SearchPage = ({
                 {result.items.map((item, index) => {
                   const scoreStyle = getScoreStyles(item.score);
                   const asset =
-                    item.kind === "chunk" ? item.chunk.asset : item.asset;
+                    item.kind === "chunk"
+                      ? item.chunk.asset
+                      : item.kind === "assertion"
+                        ? item.assertion.asset
+                        : item.asset;
                   const excerpt =
                     item.kind === "chunk"
                       ? item.chunk.textPreview
-                      : item.summary;
+                      : item.kind === "assertion"
+                        ? item.assertion.text
+                        : item.summary;
 
                   return (
                     <article
                       key={
                         item.kind === "chunk"
                           ? item.chunk.id
-                          : `summary:${item.asset.id}`
+                          : item.kind === "assertion"
+                            ? `assertion:${item.assertion.id}`
+                            : `summary:${item.asset.id}`
                       }
                       style={{
                         padding: "18px 18px 20px",
@@ -509,6 +525,8 @@ export const SearchPage = ({
                       >
                         {item.kind === "chunk" ? (
                           <span>Chunk #{item.chunk.chunkIndex}</span>
+                        ) : item.kind === "assertion" ? (
+                          <span>Assertion #{item.assertion.assertionIndex}</span>
                         ) : (
                           <span>Summary-only access</span>
                         )}

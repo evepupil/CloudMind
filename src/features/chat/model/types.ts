@@ -1,7 +1,7 @@
 import type { ContextResultScope } from "@/features/search/model/types";
 
 export interface ChatSource {
-  sourceType: "chunk" | "summary";
+  sourceType: "chunk" | "summary" | "assertion";
   assetId: string;
   chunkId?: string | undefined;
   title: string;

@@ -1,8 +1,12 @@
 import type {
   AssetAiVisibility,
+  AssetAssertionKind,
+  AssetAssertionMatch,
+  AssetDocumentClass,
   AssetChunkMatch,
   AssetDetail,
   AssetDomain,
+  AssetFacetKey,
   AssetListQuery,
   AssetListResult,
   AssetSensitivity,
@@ -47,6 +51,12 @@ export interface SearchAssetSummaryInput {
   aiVisibility: AssetAiVisibility[];
 }
 
+export interface SearchAssetAssertionInput {
+  query: string;
+  limit: number;
+  aiVisibility: AssetAiVisibility[];
+}
+
 export interface CompleteAssetProcessingInput {
   summary: string;
   contentText?: string | null;
@@ -61,6 +71,22 @@ export interface CreateAssetChunkInput {
   vectorId?: string | null;
 }
 
+export interface CreateAssetFacetInput {
+  facetKey: AssetFacetKey;
+  facetValue: string;
+  facetLabel: string;
+  sortOrder?: number | undefined;
+}
+
+export interface CreateAssetAssertionInput {
+  assertionIndex: number;
+  kind: AssetAssertionKind;
+  text: string;
+  sourceChunkIndex?: number | null | undefined;
+  sourceSpanJson?: string | null | undefined;
+  confidence?: number | null | undefined;
+}
+
 export interface UpdateAssetMetadataInput {
   title?: string | undefined;
   summary?: string | null | undefined;
@@ -73,6 +99,8 @@ export interface UpdateAssetIndexingInput {
   sensitivity?: AssetSensitivity | undefined;
   aiVisibility?: AssetAiVisibility | undefined;
   retrievalPriority?: number | undefined;
+  documentClass?: AssetDocumentClass | null | undefined;
+  sourceHost?: string | null | undefined;
   collectionKey?: string | null | undefined;
   capturedAt?: string | null | undefined;
   descriptorJson?: string | null | undefined;
@@ -94,6 +122,9 @@ export interface AssetSearchRepository {
   searchAssetSummaries(
     input: SearchAssetSummaryInput
   ): Promise<AssetSummaryMatch[]>;
+  searchAssetAssertions?(
+    input: SearchAssetAssertionInput
+  ): Promise<AssetAssertionMatch[]>;
 }
 
 // 这里保留采集与处理链路需要的写侧接口。
@@ -111,6 +142,14 @@ export interface AssetIngestRepository {
   replaceAssetChunks(
     assetId: string,
     chunks: CreateAssetChunkInput[]
+  ): Promise<void>;
+  replaceAssetFacets?(
+    assetId: string,
+    facets: CreateAssetFacetInput[]
+  ): Promise<void>;
+  replaceAssetAssertions?(
+    assetId: string,
+    assertions: CreateAssetAssertionInput[]
   ): Promise<void>;
   updateAssetIndexing(
     id: string,

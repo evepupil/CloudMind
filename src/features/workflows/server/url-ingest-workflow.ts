@@ -20,9 +20,12 @@ import {
 } from "@/features/ingest/server/content-processing";
 
 import {
+  type AssetAccessPolicy,
   type AssetDescriptor,
   deriveAccessPolicy,
+  deriveAssertions,
   deriveDescriptor,
+  deriveFacets,
 } from "./indexing-policy";
 import { enqueueWorkflow, type WorkflowDefinition } from "./runtime";
 
@@ -248,6 +251,63 @@ export const createUrlIngestWorkflowDefinition = (): WorkflowDefinition => {
                 }),
               },
             ],
+          };
+        },
+      },
+      {
+        key: "derive_facets",
+        type: "derive_facets",
+        execute: async (context) => {
+          const descriptor = context.state.descriptor;
+          const accessPolicy = context.state.accessPolicy;
+
+          if (!descriptor || typeof descriptor !== "object") {
+            throw new Error("Workflow state is missing descriptor.");
+          }
+
+          if (!accessPolicy || typeof accessPolicy !== "object") {
+            throw new Error("Workflow state is missing access policy.");
+          }
+
+          const facets = deriveFacets(
+            descriptor as AssetDescriptor,
+            accessPolicy as AssetAccessPolicy
+          );
+
+          await context.services.assetRepository.replaceAssetFacets?.(
+            context.asset.id,
+            facets
+          );
+
+          return {
+            output: {
+              facetCount: facets.length,
+            },
+          };
+        },
+      },
+      {
+        key: "derive_assertions",
+        type: "derive_assertions",
+        execute: async (context) => {
+          const normalizedContent = context.state.normalizedContent;
+          const summary = context.state.summary;
+          const assertions = deriveAssertions({
+            asset: context.asset,
+            normalizedContent:
+              typeof normalizedContent === "string" ? normalizedContent : null,
+            summary: typeof summary === "string" ? summary : null,
+          });
+
+          await context.services.assetRepository.replaceAssetAssertions?.(
+            context.asset.id,
+            assertions
+          );
+
+          return {
+            output: {
+              assertionCount: assertions.length,
+            },
           };
         },
       },

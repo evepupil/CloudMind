@@ -1,8 +1,15 @@
-import type { UpdateAssetIndexingInput } from "@/core/assets/ports";
+import type {
+  CreateAssetAssertionInput,
+  CreateAssetFacetInput,
+  UpdateAssetIndexingInput,
+} from "@/core/assets/ports";
 import type {
   AssetAiVisibility,
+  AssetAssertionKind,
   AssetDetail,
+  AssetDocumentClass,
   AssetDomain,
+  AssetFacetKey,
   AssetSensitivity,
 } from "@/features/assets/model/types";
 
@@ -13,11 +20,13 @@ interface DeriveIndexingContext {
 }
 
 export interface AssetDescriptor {
-  version: 1;
-  strategy: "heuristic_v1";
+  version: 2;
+  strategy: "heuristic_v2";
   assetType: AssetDetail["type"];
   sourceKind: AssetDetail["sourceKind"];
   domain: AssetDomain;
+  documentClass: AssetDocumentClass;
+  topics: string[];
   collectionKey: string | null;
   capturedAt: string | null;
   sourceHost: string | null;
@@ -125,7 +134,7 @@ const ARCHIVE_KEYWORDS = [
   "legacy",
   "imported",
   "old version",
-];
+] as const;
 
 const RESTRICTED_KEYWORDS = [
   "password",
@@ -139,7 +148,7 @@ const RESTRICTED_KEYWORDS = [
   "ssn",
   "passport",
   "cvv",
-];
+] as const;
 
 const PRIVATE_KEYWORDS = [
   "salary",
@@ -152,7 +161,7 @@ const PRIVATE_KEYWORDS = [
   "journal",
   "diagnosis",
   "invoice",
-];
+] as const;
 
 const PUBLIC_HOST_HINTS = [
   "developers.cloudflare.com",
@@ -161,7 +170,94 @@ const PUBLIC_HOST_HINTS = [
   "github.com",
   "arxiv.org",
   "wikipedia.org",
+] as const;
+
+const DESIGN_KEYWORDS = [
+  "design",
+  "architecture",
+  "schema",
+  "migration",
+  "workflow",
+  "plan",
+] as const;
+
+const HOWTO_KEYWORDS = [
+  "guide",
+  "tutorial",
+  "how to",
+  "getting started",
+  "step by step",
+  "quickstart",
+] as const;
+
+const MEETING_KEYWORDS = [
+  "meeting",
+  "sync",
+  "retro",
+  "standup",
+  "discussion",
+] as const;
+
+const TOPIC_RULES: Array<{
+  topic: string;
+  keywords: readonly string[];
+}> = [
+  {
+    topic: "typescript",
+    keywords: ["typescript", "ts", "tsconfig"],
+  },
+  {
+    topic: "retrieval",
+    keywords: ["retrieval", "search", "semantic", "rag"],
+  },
+  {
+    topic: "mcp",
+    keywords: ["mcp", "model context protocol"],
+  },
+  {
+    topic: "workflow",
+    keywords: ["workflow", "queue", "consumer", "job"],
+  },
+  {
+    topic: "vector",
+    keywords: ["vector", "embedding", "vectorize"],
+  },
+  {
+    topic: "database",
+    keywords: ["d1", "drizzle", "sql", "migration", "schema"],
+  },
+  {
+    topic: "cloudflare",
+    keywords: ["cloudflare", "workers", "r2", "d1", "vectorize"],
+  },
+  {
+    topic: "debugging",
+    keywords: ["bug", "debug", "incident", "failure"],
+  },
 ];
+
+const ASSERTION_DECISION_KEYWORDS = [
+  "decide",
+  "decided",
+  "adopt",
+  "choose",
+  "chosen",
+  "will use",
+  "采用",
+  "决定",
+] as const;
+
+const ASSERTION_CONSTRAINT_KEYWORDS = [
+  "must",
+  "should",
+  "need to",
+  "cannot",
+  "don't",
+  "do not",
+  "禁止",
+  "不要",
+  "必须",
+] as const;
 
 const normalizeText = (value: string | null | undefined): string => {
   return value?.trim().toLowerCase() ?? "";
@@ -315,6 +411,63 @@ const deriveDomain = (
   };
 };
 
+const deriveDocumentClass = (
+  asset: AssetDetail,
+  domain: AssetDomain,
+  corpus: string,
+  sourceHost: string | null
+): AssetDocumentClass => {
+  if (hasKeyword(corpus, MEETING_KEYWORDS)) {
+    return "meeting_note";
+  }
+
+  if (domain === "research" || hasKeyword(corpus, RESEARCH_KEYWORDS)) {
+    return "paper";
+  }
+
+  if (domain === "product" && hasKeyword(corpus, PRODUCT_KEYWORDS)) {
+    return "spec";
+  }
+
+  if (
+    domain === "engineering" &&
+    hasKeyword(corpus, DESIGN_KEYWORDS)
+  ) {
+    return "design_doc";
+  }
+
+  if (domain === "engineering" && corpus.includes("bug")) {
+    return "bug_note";
+  }
+
+  if (
+    hasKeyword(corpus, HOWTO_KEYWORDS) ||
+    sourceHost?.startsWith("docs.") ||
+    sourceHost?.startsWith("developer.") ||
+    sourceHost?.includes("developers.cloudflare.com")
+  ) {
+    return "howto";
+  }
+
+  if (domain === "personal") {
+    return "journal_entry";
+  }
+
+  if (asset.type === "note" || asset.type === "chat") {
+    return "general_note";
+  }
+
+  return "reference_doc";
+};
+
+const deriveTopics = (corpus: string): string[] => {
+  return TOPIC_RULES.filter((rule) =>
+    rule.keywords.some((keyword) => corpus.includes(keyword))
+  )
+    .map((rule) => rule.topic)
+    .slice(0, 3);
+};
+
 const deriveSensitivity = (
   asset: AssetDetail,
   domain: AssetDomain,
@@ -439,6 +592,54 @@ const deriveRetrievalPriority = (
   return priority;
 };
 
+const pushFacet = (
+  facets: CreateAssetFacetInput[],
+  facetKey: AssetFacetKey,
+  facetValue: string | null | undefined,
+  facetLabel: string | null | undefined,
+  sortOrder: number
+): void => {
+  if (!facetValue?.trim() || !facetLabel?.trim()) {
+    return;
+  }
+
+  facets.push({
+    facetKey,
+    facetValue,
+    facetLabel,
+    sortOrder,
+  });
+};
+
+const splitIntoStatements = (content: string): string[] => {
+  return content
+    .split(/(?<=[.!?。！？；;])\s+/)
+    .map((item) => item.replace(/\s+/g, " ").trim())
+    .filter((item) => item.length >= 24 && item.length <= 220);
+};
+
+const classifyAssertionKind = (text: string): AssetAssertionKind => {
+  const normalized = text.toLowerCase();
+
+  if (
+    ASSERTION_CONSTRAINT_KEYWORDS.some((keyword) =>
+      normalized.includes(keyword)
+    )
+  ) {
+    return "constraint";
+  }
+
+  if (
+    ASSERTION_DECISION_KEYWORDS.some((keyword) =>
+      normalized.includes(keyword)
+    )
+  ) {
+    return "decision";
+  }
+
+  return "fact";
+};
+
 export const deriveDescriptor = (
   context: DeriveIndexingContext
 ): DescriptorResult => {
@@ -446,13 +647,22 @@ export const deriveDescriptor = (
   const sourceKind = getSourceKind(context.asset);
   const corpus = collectCorpus(context);
   const { domain, signals } = deriveDomain(context.asset, corpus, sourceHost);
+  const documentClass = deriveDocumentClass(
+    context.asset,
+    domain,
+    corpus,
+    sourceHost
+  );
+  const topics = deriveTopics(corpus);
   const collectionKey = deriveCollectionKey(context.asset, sourceHost);
   const descriptor: AssetDescriptor = {
-    version: 1,
-    strategy: "heuristic_v1",
+    version: 2,
+    strategy: "heuristic_v2",
     assetType: context.asset.type,
     sourceKind,
     domain,
+    documentClass,
+    topics,
     collectionKey,
     capturedAt: context.asset.capturedAt ?? context.asset.createdAt,
     sourceHost,
@@ -466,6 +676,8 @@ export const deriveDescriptor = (
     indexing: {
       sourceKind,
       domain,
+      documentClass,
+      sourceHost,
       collectionKey,
       capturedAt: descriptor.capturedAt,
       descriptorJson: JSON.stringify(descriptor),
@@ -508,4 +720,124 @@ export const deriveAccessPolicy = (
       retrievalPriority,
     },
   };
+};
+
+// 这里将 descriptor 和 access policy 展开为稳定 facet，供筛选与浏览聚合复用。
+export const deriveFacets = (
+  descriptor: AssetDescriptor,
+  policy: AssetAccessPolicy
+): CreateAssetFacetInput[] => {
+  const facets: CreateAssetFacetInput[] = [];
+  const capturedYear = descriptor.capturedAt?.slice(0, 4) ?? null;
+
+  pushFacet(facets, "domain", descriptor.domain, descriptor.domain, 0);
+  pushFacet(
+    facets,
+    "document_class",
+    descriptor.documentClass,
+    descriptor.documentClass,
+    1
+  );
+  pushFacet(
+    facets,
+    "asset_type",
+    descriptor.assetType,
+    descriptor.assetType,
+    2
+  );
+  pushFacet(
+    facets,
+    "source_kind",
+    descriptor.sourceKind,
+    descriptor.sourceKind,
+    3
+  );
+  pushFacet(
+    facets,
+    "collection",
+    descriptor.collectionKey,
+    descriptor.collectionKey,
+    4
+  );
+  pushFacet(
+    facets,
+    "source_host",
+    descriptor.sourceHost,
+    descriptor.sourceHost,
+    5
+  );
+  pushFacet(facets, "year", capturedYear, capturedYear, 6);
+  pushFacet(
+    facets,
+    "ai_visibility",
+    policy.aiVisibility,
+    policy.aiVisibility,
+    7
+  );
+  pushFacet(
+    facets,
+    "sensitivity",
+    policy.sensitivity,
+    policy.sensitivity,
+    8
+  );
+
+  descriptor.topics.forEach((topic, index) => {
+    pushFacet(facets, "topic", topic, topic, 20 + index);
+  });
+
+  return facets;
+};
+
+// 这里提取少量高价值断言，先服务结构化召回，不追求完整信息抽取。
+export const deriveAssertions = (
+  context: DeriveIndexingContext
+): CreateAssetAssertionInput[] => {
+  const candidates: Array<{
+    kind: AssetAssertionKind;
+    text: string;
+    confidence: number;
+  }> = [];
+  const summary = context.summary?.trim();
+  const content = context.normalizedContent?.trim();
+
+  if (summary) {
+    candidates.push({
+      kind: "summary_point",
+      text: summary,
+      confidence: 0.92,
+    });
+  }
+
+  for (const statement of splitIntoStatements(content ?? "")) {
+    candidates.push({
+      kind: classifyAssertionKind(statement),
+      text: statement,
+      confidence: 0.78,
+    });
+  }
+
+  const deduped = new Set<string>();
+
+  return candidates
+    .filter((candidate) => {
+      const key = candidate.text.toLowerCase();
+
+      if (deduped.has(key)) {
+        return false;
+      }
+
+      deduped.add(key);
+
+      return true;
+    })
+    .slice(0, 5)
+    .map((candidate, index) => ({
+      assertionIndex: index,
+      kind: candidate.kind,
+      text: candidate.text,
+      sourceChunkIndex: null,
+      sourceSpanJson: null,
+      confidence: candidate.confidence,
+    }));
 };
