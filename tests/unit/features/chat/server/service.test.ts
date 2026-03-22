@@ -352,7 +352,9 @@ class ContextRankingSearchRepository implements AssetSearchRepository {
       return matches;
     }
 
-    return matches.filter((match) => allowed.includes(match.asset.aiVisibility));
+    return matches.filter((match) =>
+      allowed.includes(match.asset.aiVisibility)
+    );
   }
 
   public async searchAssetSummaries(_input: {
@@ -416,7 +418,9 @@ class WeakContextSearchRepository implements AssetSearchRepository {
       return matches;
     }
 
-    return matches.filter((match) => allowed.includes(match.asset.aiVisibility));
+    return matches.filter((match) =>
+      allowed.includes(match.asset.aiVisibility)
+    );
   }
 
   public async searchAssetSummaries(_input: {
@@ -425,6 +429,116 @@ class WeakContextSearchRepository implements AssetSearchRepository {
     aiVisibility: AssetAiVisibility[];
   }): Promise<AssetSummaryMatch[]> {
     return [];
+  }
+}
+
+class NoisySourceSearchRepository implements AssetSearchRepository {
+  public async searchAssets(): Promise<AssetListResult> {
+    return {
+      items: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      },
+    };
+  }
+
+  public async getChunkMatchesByVectorIds(
+    _vectorIds: string[],
+    query?: {
+      aiVisibility?: AssetAiVisibility[] | undefined;
+    }
+  ): Promise<AssetChunkMatch[]> {
+    const matches: AssetChunkMatch[] = [
+      {
+        id: "primary-chunk-1",
+        chunkIndex: 0,
+        textPreview: "Retry worker runbook preview",
+        contentText:
+          "Retry worker runbook explains how to recover failed jobs.",
+        vectorId: "primary-1:0",
+        asset: {
+          id: "asset-primary-1",
+          type: "note",
+          title: "Retry Worker Runbook",
+          summary: "Retry worker runbook for failed ingestion jobs.",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "engineering",
+          sensitivity: "internal",
+          aiVisibility: "allow",
+          retrievalPriority: 16,
+          collectionKey: "ops:runbooks",
+          capturedAt: "2026-03-19T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+      },
+    ];
+    const allowed = query?.aiVisibility;
+
+    if (!allowed?.length) {
+      return matches;
+    }
+
+    return matches.filter((match) =>
+      allowed.includes(match.asset.aiVisibility)
+    );
+  }
+
+  public async searchAssetSummaries(_input: {
+    query: string;
+    limit: number;
+    aiVisibility: AssetAiVisibility[];
+  }): Promise<AssetSummaryMatch[]> {
+    return [
+      {
+        asset: {
+          id: "asset-primary-1",
+          type: "note",
+          title: "Retry Worker Runbook",
+          summary: "Retry worker runbook for failed ingestion jobs.",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "engineering",
+          sensitivity: "internal",
+          aiVisibility: "summary_only",
+          retrievalPriority: 16,
+          collectionKey: "ops:runbooks",
+          capturedAt: "2026-03-19T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+        summary: "Retry worker runbook for failed ingestion jobs.",
+      },
+      {
+        asset: {
+          id: "asset-noise-1",
+          type: "note",
+          title: "Weekend Packing List",
+          summary: "A checklist for weekend travel.",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "personal",
+          sensitivity: "private",
+          aiVisibility: "summary_only",
+          retrievalPriority: -20,
+          collectionKey: "personal:notes",
+          capturedAt: "2026-03-19T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+        summary: "A checklist for weekend travel.",
+      },
+    ];
   }
 }
 
@@ -676,6 +790,108 @@ describe("chat service", () => {
       sources: [],
     });
     expect(aiProvider.generateText).not.toHaveBeenCalled();
+  });
+
+  it("askLibrary strips echoed source blocks and repeated sentences from model output", async () => {
+    const repository = new InMemorySearchRepository();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        id: "asset-1:0",
+        score: 0.97,
+      },
+    ]);
+    const aiProvider: AIProvider = {
+      createEmbeddings: vi.fn(async () => ({
+        embeddings: [[0.11, 0.22, 0.33]],
+      })),
+      generateText: vi.fn(async () => ({
+        text: [
+          "CloudMind emphasizes source-aware answers [S1].",
+          "CloudMind emphasizes source-aware answers [S1].",
+          "",
+          "Sources:",
+          "[S1] Asset 1",
+          "Asset ID: asset-1",
+          "Source Type: chunk",
+          "Snippet: Full chunk body 1",
+        ].join("\n"),
+      })),
+    };
+    const service = createChatService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAiProvider: getAiProviderMock.mockResolvedValue(aiProvider),
+    });
+
+    const result = await service.askLibrary(
+      { APP_NAME: "cloudmind-test" },
+      {
+        question: "What does CloudMind emphasize?",
+        topK: 1,
+      }
+    );
+
+    expect(result.answer).toBe(
+      "CloudMind emphasizes source-aware answers [S1]."
+    );
+    expect(result.answer).not.toContain("Sources:");
+    expect(result.answer).not.toContain("Asset ID:");
+    expect(aiProvider.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining("Do not repeat the source list."),
+      })
+    );
+  });
+
+  it("askLibrary drops noisy fallback sources from the final source list", async () => {
+    const repository = new NoisySourceSearchRepository();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        id: "primary-1:0",
+        score: 0.96,
+      },
+    ]);
+    const aiProvider: AIProvider = {
+      createEmbeddings: vi.fn(async () => ({
+        embeddings: [[0.11, 0.22, 0.33]],
+      })),
+      generateText: vi.fn(async () => ({
+        text: "Use the retry worker runbook [S1].",
+      })),
+    };
+    const service = createChatService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAiProvider: getAiProviderMock.mockResolvedValue(aiProvider),
+    });
+
+    const result = await service.askLibrary(
+      { APP_NAME: "cloudmind-test" },
+      {
+        question: "How do I retry failed ingestion jobs?",
+        topK: 3,
+      }
+    );
+
+    expect(result.sources).toEqual([
+      {
+        sourceType: "chunk",
+        assetId: "asset-primary-1",
+        chunkId: "primary-chunk-1",
+        title: "Retry Worker Runbook",
+        sourceUrl: null,
+        snippet: "Retry worker runbook preview",
+      },
+    ]);
+    expect(result.indexingSummary).toEqual({
+      matchedLayers: ["chunk"],
+      domains: ["engineering"],
+      documentClasses: [],
+      sourceKinds: ["manual"],
+      sourceHosts: [],
+      collections: ["ops:runbooks"],
+      topics: [],
+    });
   });
 
   it("askLibraryForContext keeps answers inside preferred domains when fallback is disabled", async () => {

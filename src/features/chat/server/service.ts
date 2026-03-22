@@ -4,19 +4,19 @@ import type { VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
 import type { AssetSummary } from "@/features/assets/model/types";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
+import { scoreAssetAssertionMatch } from "@/features/search/server/assertion-scoring";
 import {
   applyContextPolicyScore,
   getContextResultScope,
   matchesContextPolicyAsset,
 } from "@/features/search/server/context-policy";
-import { scoreAssetAssertionMatch } from "@/features/search/server/assertion-scoring";
 import { scoreAssetSummaryMatch } from "@/features/search/server/summary-scoring";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 import type {
-  AskLibraryInput,
   AskLibraryIndexingSummary,
+  AskLibraryInput,
   AskLibraryResult,
   ChatSource,
 } from "../model/types";
@@ -48,6 +48,14 @@ const createFallbackAnswer = (): string => {
 
 const CHAT_ALLOWED_AI_VISIBILITY = ["allow"] as const;
 const CHAT_SUMMARY_ONLY_AI_VISIBILITY = ["summary_only"] as const;
+const SOURCE_TYPE_PRIORITY: Record<ChatSource["sourceType"], number> = {
+  chunk: 3,
+  assertion: 2,
+  summary: 1,
+};
+const MIN_RELATIVE_CONTEXT_SCORE_RATIO = 0.35;
+const MIN_SECONDARY_ASSET_SCORE_RATIO = 0.65;
+const MAX_CONTEXTS_PER_ASSET = 2;
 
 const buildPrompt = (question: string, sources: ChatSource[]): string => {
   const sourceBlocks = sources
@@ -239,7 +247,10 @@ const shouldRejectContextAnswer = (
   const topScore = contexts[0]?.score ?? 0;
   const coverage = getContextCoverage(question, contexts);
 
-  if (contexts.length >= MIN_CONTEXT_COUNT && coverage >= MIN_CONTEXT_COVERAGE) {
+  if (
+    contexts.length >= MIN_CONTEXT_COUNT &&
+    coverage >= MIN_CONTEXT_COVERAGE
+  ) {
     return false;
   }
 
@@ -266,12 +277,18 @@ const getSummaryGroundingContexts = async (
     aiVisibility: [...CHAT_SUMMARY_ONLY_AI_VISIBILITY],
   });
 
-  return buildSummaryGroundingContexts(question, summaryMatches).map(
-    (context) => ({
+  return buildSummaryGroundingContexts(question, summaryMatches)
+    .map((context) => ({
       ...context,
-      score: applyContextPolicyScore(context.score, context.asset, contextPolicy),
-    })
-  ).filter((context) => matchesContextPolicyAsset(context.asset, contextPolicy));
+      score: applyContextPolicyScore(
+        context.score,
+        context.asset,
+        contextPolicy
+      ),
+    }))
+    .filter((context) =>
+      matchesContextPolicyAsset(context.asset, contextPolicy)
+    );
 };
 
 const getAssertionGroundingContexts = async (
@@ -287,7 +304,10 @@ const getAssertionGroundingContexts = async (
   const assertionMatches = await repository.searchAssetAssertions({
     query: question,
     limit,
-    aiVisibility: [...CHAT_SUMMARY_ONLY_AI_VISIBILITY, ...CHAT_ALLOWED_AI_VISIBILITY],
+    aiVisibility: [
+      ...CHAT_SUMMARY_ONLY_AI_VISIBILITY,
+      ...CHAT_ALLOWED_AI_VISIBILITY,
+    ],
   });
 
   return assertionMatches
@@ -307,7 +327,9 @@ const getAssertionGroundingContexts = async (
       contentText: match.text,
       asset: match.asset,
     }))
-    .filter((context) => matchesContextPolicyAsset(context.asset, contextPolicy))
+    .filter((context) =>
+      matchesContextPolicyAsset(context.asset, contextPolicy)
+    )
     .sort((left, right) => right.score - left.score);
 };
 
@@ -382,6 +404,214 @@ const buildChatPrompt = (
   return buildPrompt(question, promptSources);
 };
 
+const compareGroundingContexts = (
+  left: GroundingContext,
+  right: GroundingContext
+): number => {
+  if (right.score !== left.score) {
+    return right.score - left.score;
+  }
+
+  return (
+    SOURCE_TYPE_PRIORITY[right.source.sourceType] -
+    SOURCE_TYPE_PRIORITY[left.source.sourceType]
+  );
+};
+
+const normalizeComparableText = (value: string): string => {
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
+};
+
+const stripEchoedSourceBlocks = (text: string): string => {
+  const lines = text.split("\n");
+  const keptLines: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmedLine = lines[index]?.trim() ?? "";
+    const nextLine = lines[index + 1]?.trim() ?? "";
+    const isSourceLabelLine = /^\[S\d+\]\s+/.test(trimmedLine);
+    const isSourceMetadataLine =
+      /^Asset ID:/i.test(trimmedLine) ||
+      /^Source Type:/i.test(trimmedLine) ||
+      /^Source URL:/i.test(trimmedLine) ||
+      /^Snippet:/i.test(trimmedLine);
+
+    if (/^Sources:\s*$/i.test(trimmedLine)) {
+      while (index + 1 < lines.length) {
+        const lookahead = lines[index + 1]?.trim() ?? "";
+
+        if (
+          lookahead.length === 0 ||
+          /^\[S\d+\]\s+/.test(lookahead) ||
+          /^Asset ID:/i.test(lookahead) ||
+          /^Source Type:/i.test(lookahead) ||
+          /^Source URL:/i.test(lookahead) ||
+          /^Snippet:/i.test(lookahead)
+        ) {
+          index += 1;
+          continue;
+        }
+
+        break;
+      }
+
+      continue;
+    }
+
+    if (isSourceLabelLine && /^Asset ID:/i.test(nextLine)) {
+      while (index + 1 < lines.length) {
+        const lookahead = lines[index + 1]?.trim() ?? "";
+
+        if (
+          lookahead.length === 0 ||
+          /^\[S\d+\]\s+/.test(lookahead) ||
+          /^Asset ID:/i.test(lookahead) ||
+          /^Source Type:/i.test(lookahead) ||
+          /^Source URL:/i.test(lookahead) ||
+          /^Snippet:/i.test(lookahead)
+        ) {
+          index += 1;
+          continue;
+        }
+
+        break;
+      }
+
+      continue;
+    }
+
+    if (isSourceMetadataLine) {
+      continue;
+    }
+
+    keptLines.push(lines[index] as string);
+  }
+
+  return keptLines.join("\n");
+};
+
+const dedupeRepeatedSentences = (text: string): string => {
+  const paragraphs = text
+    .split(/\n\s*\n/g)
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph.length > 0);
+  const seenParagraphs = new Set<string>();
+  const dedupedParagraphs = paragraphs.reduce<string[]>((result, paragraph) => {
+    const sentences = paragraph
+      .split(/(?<=[.!?。！？])\s+/g)
+      .map((sentence) => sentence.trim())
+      .filter((sentence) => sentence.length > 0);
+    const seenSentences = new Set<string>();
+    const dedupedSentences = sentences.filter((sentence) => {
+      const normalizedSentence = normalizeComparableText(sentence);
+
+      if (!normalizedSentence || seenSentences.has(normalizedSentence)) {
+        return false;
+      }
+
+      seenSentences.add(normalizedSentence);
+
+      return true;
+    });
+    const normalizedParagraph = normalizeComparableText(
+      dedupedSentences.join(" ")
+    );
+
+    if (!normalizedParagraph || seenParagraphs.has(normalizedParagraph)) {
+      return result;
+    }
+
+    seenParagraphs.add(normalizedParagraph);
+    result.push(dedupedSentences.join(" "));
+
+    return result;
+  }, []);
+
+  return dedupedParagraphs.join("\n\n");
+};
+
+const sanitizeAnswerText = (text: string): string => {
+  return dedupeRepeatedSentences(stripEchoedSourceBlocks(text))
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+};
+
+const selectGroundingContexts = (
+  contexts: GroundingContext[],
+  topK: number
+): GroundingContext[] => {
+  const sortedContexts = [...contexts].sort(compareGroundingContexts);
+  const selected: GroundingContext[] = [];
+  const seenContentKeys = new Set<string>();
+  const topScore = sortedContexts[0]?.score ?? 0;
+
+  for (const context of sortedContexts) {
+    if (selected.length >= topK) {
+      break;
+    }
+
+    if (
+      selected.length > 0 &&
+      topScore > 0 &&
+      context.score / topScore < MIN_RELATIVE_CONTEXT_SCORE_RATIO
+    ) {
+      continue;
+    }
+
+    const existingForAsset = selected.filter(
+      (selectedContext) => selectedContext.asset.id === context.asset.id
+    );
+    const strongestAssetScore = existingForAsset[0]?.score ?? 0;
+
+    if (
+      existingForAsset.length > 0 &&
+      strongestAssetScore > 0 &&
+      context.score / strongestAssetScore < MIN_SECONDARY_ASSET_SCORE_RATIO
+    ) {
+      continue;
+    }
+
+    if (existingForAsset.length >= MAX_CONTEXTS_PER_ASSET) {
+      continue;
+    }
+
+    if (
+      existingForAsset.some(
+        (selectedContext) =>
+          selectedContext.source.sourceType === "chunk" &&
+          context.source.sourceType !== "chunk"
+      )
+    ) {
+      continue;
+    }
+
+    if (
+      existingForAsset.some(
+        (selectedContext) =>
+          selectedContext.source.sourceType === "assertion" &&
+          context.source.sourceType === "summary"
+      )
+    ) {
+      continue;
+    }
+
+    const contentKey = [
+      context.asset.id,
+      context.source.sourceType,
+      normalizeComparableText(context.contentText).slice(0, 240),
+    ].join(":");
+
+    if (seenContentKeys.has(contentKey)) {
+      continue;
+    }
+
+    seenContentKeys.add(contentKey);
+    selected.push(context);
+  }
+
+  return selected;
+};
+
 const withOptionalResultScope = <T extends AskLibraryResult>(
   result: T,
   scope: AskLibraryResult["resultScope"]
@@ -441,47 +671,68 @@ export const createChatService = (
     );
 
     if (!queryVector) {
-      const lexicalContexts = [...assertionContexts, ...summaryContexts]
-        .sort((left, right) => right.score - left.score)
-        .slice(0, topK);
+      const lexicalContexts = [...assertionContexts, ...summaryContexts].sort(
+        compareGroundingContexts
+      );
+      const selectedLexicalContexts = selectGroundingContexts(
+        lexicalContexts,
+        topK
+      );
 
-      if (lexicalContexts.length === 0) {
-        return withOptionalResultScope({
-          answer: createFallbackAnswer(),
-          sources: [],
-        }, getContextResultScope([], contextPolicy));
+      if (selectedLexicalContexts.length === 0) {
+        return withOptionalResultScope(
+          {
+            answer: createFallbackAnswer(),
+            sources: [],
+          },
+          getContextResultScope([], contextPolicy)
+        );
       }
 
       const resultScope = getContextResultScope(
-        lexicalContexts.map((context) => context.asset),
+        selectedLexicalContexts.map((context) => context.asset),
         contextPolicy
       );
 
       if (
-        shouldRejectContextAnswer(question, lexicalContexts, contextPolicy)
+        shouldRejectContextAnswer(
+          question,
+          selectedLexicalContexts,
+          contextPolicy
+        )
       ) {
-        return withOptionalResultScope({
-          answer: createFallbackAnswer(),
-          sources: [],
-        }, resultScope);
+        return withOptionalResultScope(
+          {
+            answer: createFallbackAnswer(),
+            sources: [],
+          },
+          resultScope
+        );
       }
 
       const answer = await aiProvider.generateText({
         systemPrompt:
-          "You are a source-aware knowledge base assistant. Keep answers concise and grounded in the provided sources.",
-        prompt: buildChatPrompt(question, lexicalContexts),
+          "You are a source-aware knowledge base assistant. " +
+          "Keep answers concise and grounded in the provided sources. " +
+          "Do not repeat the source list. Do not output labels such as " +
+          "'Asset ID', 'Source Type', 'Source URL', or 'Snippet'.",
+        prompt: buildChatPrompt(question, selectedLexicalContexts),
         temperature: 0.2,
         maxOutputTokens: 700,
       });
+      const sanitizedAnswer = sanitizeAnswerText(answer.text);
 
-      return withOptionalResultScope({
-        answer:
-          answer.text.trim().length > 0
-            ? answer.text.trim()
-            : createFallbackAnswer(),
-        sources: lexicalContexts.map((context) => context.source),
-        indexingSummary: buildIndexingSummary(lexicalContexts),
-      }, resultScope);
+      return withOptionalResultScope(
+        {
+          answer:
+            sanitizedAnswer.length > 0
+              ? sanitizedAnswer
+              : createFallbackAnswer(),
+          sources: selectedLexicalContexts.map((context) => context.source),
+          indexingSummary: buildIndexingSummary(selectedLexicalContexts),
+        },
+        resultScope
+      );
     }
 
     const vectorMatches = await vectorStore.search({
@@ -501,56 +752,79 @@ export const createChatService = (
     const groundingContexts = buildGroundingContexts(
       vectorMatches,
       chunkMatches
-    ).map((context) => ({
-      ...context,
-      score: applyContextPolicyScore(context.score, context.asset, contextPolicy),
-    })).filter((context) =>
-      matchesContextPolicyAsset(context.asset, contextPolicy)
-    );
+    )
+      .map((context) => ({
+        ...context,
+        score: applyContextPolicyScore(
+          context.score,
+          context.asset,
+          contextPolicy
+        ),
+      }))
+      .filter((context) =>
+        matchesContextPolicyAsset(context.asset, contextPolicy)
+      );
     const allGroundingContexts = [
       ...groundingContexts,
       ...assertionContexts,
       ...summaryContexts,
-    ]
-      .sort((left, right) => right.score - left.score)
-      .slice(0, topK);
+    ].sort(compareGroundingContexts);
+    const selectedGroundingContexts = selectGroundingContexts(
+      allGroundingContexts,
+      topK
+    );
     const resultScope = getContextResultScope(
-      allGroundingContexts.map((context) => context.asset),
+      selectedGroundingContexts.map((context) => context.asset),
       contextPolicy
     );
 
-    if (allGroundingContexts.length === 0) {
-      return withOptionalResultScope({
-        answer: createFallbackAnswer(),
-        sources: [],
-      }, resultScope);
+    if (selectedGroundingContexts.length === 0) {
+      return withOptionalResultScope(
+        {
+          answer: createFallbackAnswer(),
+          sources: [],
+        },
+        resultScope
+      );
     }
 
     if (
-      shouldRejectContextAnswer(question, allGroundingContexts, contextPolicy)
+      shouldRejectContextAnswer(
+        question,
+        selectedGroundingContexts,
+        contextPolicy
+      )
     ) {
-      return withOptionalResultScope({
-        answer: createFallbackAnswer(),
-        sources: [],
-      }, resultScope);
+      return withOptionalResultScope(
+        {
+          answer: createFallbackAnswer(),
+          sources: [],
+        },
+        resultScope
+      );
     }
 
     const answer = await aiProvider.generateText({
       systemPrompt:
-        "You are a source-aware knowledge base assistant. Keep answers concise and grounded in the provided sources.",
-      prompt: buildChatPrompt(question, allGroundingContexts),
+        "You are a source-aware knowledge base assistant. " +
+        "Keep answers concise and grounded in the provided sources. " +
+        "Do not repeat the source list. Do not output labels such as " +
+        "'Asset ID', 'Source Type', 'Source URL', or 'Snippet'.",
+      prompt: buildChatPrompt(question, selectedGroundingContexts),
       temperature: 0.2,
       maxOutputTokens: 700,
     });
+    const sanitizedAnswer = sanitizeAnswerText(answer.text);
 
-    return withOptionalResultScope({
-      answer:
-        answer.text.trim().length > 0
-          ? answer.text.trim()
-          : createFallbackAnswer(),
-      sources: allGroundingContexts.map((context) => context.source),
-      indexingSummary: buildIndexingSummary(allGroundingContexts),
-    }, resultScope);
+    return withOptionalResultScope(
+      {
+        answer:
+          sanitizedAnswer.length > 0 ? sanitizedAnswer : createFallbackAnswer(),
+        sources: selectedGroundingContexts.map((context) => context.source),
+        indexingSummary: buildIndexingSummary(selectedGroundingContexts),
+      },
+      resultScope
+    );
   };
 
   return {

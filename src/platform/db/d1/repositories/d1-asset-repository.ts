@@ -52,6 +52,11 @@ import {
   assets,
   ingestJobs,
 } from "@/platform/db/d1/schema";
+import {
+  expandSearchTerms,
+  MAX_ASSERTION_SEARCH_TERMS,
+  MAX_SUMMARY_SEARCH_TERMS,
+} from "./search-term-expansion";
 
 const mapAssetSummary = (record: typeof assets.$inferSelect): AssetSummary => {
   return {
@@ -206,38 +211,6 @@ const splitIntoBatches = <T>(items: T[], batchSize: number): T[][] => {
   return batches;
 };
 
-const SEARCH_ALIASES: Record<string, string[]> = {
-  ts: ["typescript"],
-  js: ["javascript"],
-  cf: ["cloudflare"],
-  rag: ["retrieval augmented generation", "retrieval"],
-  mcp: ["model context protocol"],
-};
-
-const expandSearchTerms = (query: string): string[] => {
-  const normalized = query.trim().toLowerCase();
-
-  if (!normalized) {
-    return [];
-  }
-
-  const tokens = normalized
-    .split(/[^a-z0-9_]+/)
-    .map((token) => token.trim())
-    .filter((token) => token.length > 0);
-  const expanded = new Set<string>([normalized]);
-
-  for (const token of tokens) {
-    expanded.add(token);
-
-    for (const alias of SEARCH_ALIASES[token] ?? []) {
-      expanded.add(alias);
-    }
-  }
-
-  return Array.from(expanded);
-};
-
 const buildLikeCondition = (
   column:
     | typeof assets.title
@@ -334,7 +307,7 @@ export class D1AssetRepository implements AssetRepository {
       return [];
     }
 
-    const searchTerms = expandSearchTerms(query);
+    const searchTerms = expandSearchTerms(query, MAX_SUMMARY_SEARCH_TERMS);
     const searchCondition = or(
       ...searchTerms.flatMap((term) => [
         like(assets.title, `%${term}%`),
@@ -382,7 +355,7 @@ export class D1AssetRepository implements AssetRepository {
       return [];
     }
 
-    const searchTerms = expandSearchTerms(query);
+    const searchTerms = expandSearchTerms(query, MAX_ASSERTION_SEARCH_TERMS);
     const searchCondition = or(
       ...searchTerms.map((term) => like(assetAssertions.text, `%${term}%`))
     );
