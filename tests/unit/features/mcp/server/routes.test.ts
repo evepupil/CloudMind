@@ -163,6 +163,15 @@ const createAskLibraryResult = (): AskLibraryResult => {
         snippet: "CloudMind MCP search hit",
       },
     ],
+    indexingSummary: {
+      matchedLayers: ["chunk"],
+      domains: ["engineering"],
+      documentClasses: ["design_doc"],
+      sourceKinds: ["manual"],
+      sourceHosts: ["developers.cloudflare.com"],
+      collections: ["site:developers.cloudflare.com"],
+      topics: ["mcp", "cloudflare"],
+    },
   };
 };
 
@@ -546,6 +555,11 @@ describe("mcp routes", () => {
       name: "list_assets",
       arguments: {
         status: "ready",
+        domain: "engineering",
+        documentClass: "design_doc",
+        sourceKind: "manual",
+        aiVisibility: "allow",
+        sourceHost: "developers.cloudflare.com",
         page: 1,
         pageSize: 10,
       },
@@ -616,6 +630,11 @@ describe("mcp routes", () => {
     });
     expect(assetService.listAssets).toHaveBeenCalledWith(env, {
       status: "ready",
+      domain: "engineering",
+      documentClass: "design_doc",
+      sourceKind: "manual",
+      aiVisibility: "allow",
+      sourceHost: "developers.cloudflare.com",
       page: 1,
       pageSize: 10,
     });

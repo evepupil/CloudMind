@@ -519,6 +519,15 @@ describe("chat service", () => {
           snippet: "Summary-only note about deployment tradeoffs.",
         },
       ],
+      indexingSummary: {
+        matchedLayers: ["chunk", "summary"],
+        domains: ["engineering", "product"],
+        documentClasses: [],
+        sourceKinds: ["manual"],
+        sourceHosts: [],
+        collections: ["inbox:notes"],
+        topics: [],
+      },
     });
   });
 
@@ -618,6 +627,15 @@ describe("chat service", () => {
           snippet: "Summary-only note about a previous deployment incident.",
         },
       ],
+      indexingSummary: {
+        matchedLayers: ["summary"],
+        domains: ["engineering"],
+        documentClasses: [],
+        sourceKinds: ["manual"],
+        sourceHosts: [],
+        collections: ["inbox:notes"],
+        topics: [],
+      },
     });
   });
 
@@ -720,6 +738,15 @@ describe("chat service", () => {
           snippet: "Engineering debugging guide",
         },
       ],
+      indexingSummary: {
+        matchedLayers: ["chunk"],
+        domains: ["engineering"],
+        documentClasses: [],
+        sourceKinds: ["manual"],
+        sourceHosts: [],
+        collections: ["inbox:notes"],
+        topics: [],
+      },
       resultScope: "preferred_only",
     });
   });
@@ -772,6 +799,15 @@ describe("chat service", () => {
       "asset-engineering-1",
       "asset-personal-1",
     ]);
+    expect(result.indexingSummary).toEqual({
+      matchedLayers: ["chunk"],
+      domains: ["engineering", "personal"],
+      documentClasses: [],
+      sourceKinds: ["manual"],
+      sourceHosts: [],
+      collections: ["inbox:notes"],
+      topics: [],
+    });
     expect(result.resultScope).toBe("fallback_expanded");
   });
 

@@ -77,6 +77,36 @@ const getAssetInputSchema = z.object({
 const listAssetsInputSchema = z.object({
   status: z.enum(["pending", "processing", "ready", "failed"]).optional(),
   type: z.enum(["url", "pdf", "note", "image", "chat"]).optional(),
+  domain: z
+    .enum([
+      "engineering",
+      "product",
+      "research",
+      "personal",
+      "finance",
+      "health",
+      "archive",
+      "general",
+    ])
+    .optional(),
+  documentClass: z
+    .enum([
+      "reference_doc",
+      "design_doc",
+      "bug_note",
+      "paper",
+      "journal_entry",
+      "meeting_note",
+      "spec",
+      "howto",
+      "general_note",
+    ])
+    .optional(),
+  sourceKind: z
+    .enum(["manual", "browser_extension", "upload", "mcp", "import"])
+    .optional(),
+  aiVisibility: z.enum(["allow", "summary_only", "deny"]).optional(),
+  sourceHost: z.string().trim().min(1).max(200).optional(),
   query: z.string().trim().min(1).optional(),
   page: z.number().int().positive().optional(),
   pageSize: z.number().int().positive().max(50).optional(),
@@ -252,7 +282,7 @@ export const createMcpServer = (
     {
       title: "List Assets",
       description:
-        "List assets in the CloudMind library with optional filters and pagination.",
+        "List assets in the CloudMind library with optional filters and pagination, including domain, document class, source kind, AI visibility, and source host.",
       inputSchema: listAssetsInputSchema,
     },
     async (input) => {

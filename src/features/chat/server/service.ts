@@ -16,6 +16,7 @@ import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositor
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 import type {
   AskLibraryInput,
+  AskLibraryIndexingSummary,
   AskLibraryResult,
   ChatSource,
 } from "../model/types";
@@ -75,11 +76,97 @@ const buildPrompt = (question: string, sources: ChatSource[]): string => {
   ].join("\n");
 };
 
+const parseDescriptorTopics = (descriptorJson: string | null): string[] => {
+  if (!descriptorJson) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(descriptorJson) as DescriptorTopicsView | null;
+
+    if (!parsed || !Array.isArray(parsed.topics)) {
+      return [];
+    }
+
+    return parsed.topics.filter(
+      (topic: unknown): topic is string => typeof topic === "string"
+    );
+  } catch {
+    return [];
+  }
+};
+
+const collectUniqueLimited = (
+  values: Array<string | null | undefined>,
+  limit: number
+): string[] => {
+  const result: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of values) {
+    const normalized = value?.trim();
+
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    result.push(normalized);
+
+    if (result.length >= limit) {
+      break;
+    }
+  }
+
+  return result;
+};
+
+const buildIndexingSummary = (
+  contexts: GroundingContext[]
+): AskLibraryIndexingSummary => {
+  return {
+    matchedLayers: collectUniqueLimited(
+      contexts.map((context) => context.source.sourceType),
+      3
+    ) as Array<ChatSource["sourceType"]>,
+    domains: collectUniqueLimited(
+      contexts.map((context) => context.asset.domain),
+      4
+    ),
+    documentClasses: collectUniqueLimited(
+      contexts.map((context) => context.asset.documentClass ?? null),
+      4
+    ),
+    sourceKinds: collectUniqueLimited(
+      contexts.map((context) => context.asset.sourceKind ?? null),
+      4
+    ),
+    sourceHosts: collectUniqueLimited(
+      contexts.map((context) => context.asset.sourceHost ?? null),
+      4
+    ),
+    collections: collectUniqueLimited(
+      contexts.map((context) => context.asset.collectionKey),
+      4
+    ),
+    topics: collectUniqueLimited(
+      contexts.flatMap((context) =>
+        parseDescriptorTopics(context.asset.descriptorJson)
+      ),
+      6
+    ),
+  };
+};
+
 interface GroundingContext {
   score: number;
   source: ChatSource;
   contentText: string;
   asset: AssetSummary;
+}
+
+interface DescriptorTopicsView {
+  topics?: string[] | undefined;
 }
 
 const MIN_CONTEXT_TOKEN_LENGTH = 4;
@@ -393,6 +480,7 @@ export const createChatService = (
             ? answer.text.trim()
             : createFallbackAnswer(),
         sources: lexicalContexts.map((context) => context.source),
+        indexingSummary: buildIndexingSummary(lexicalContexts),
       }, resultScope);
     }
 
@@ -461,6 +549,7 @@ export const createChatService = (
           ? answer.text.trim()
           : createFallbackAnswer(),
       sources: allGroundingContexts.map((context) => context.source),
+      indexingSummary: buildIndexingSummary(allGroundingContexts),
     }, resultScope);
   };
 
