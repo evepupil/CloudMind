@@ -83,6 +83,11 @@ export type IngestJobType =
 export interface AssetListQuery {
   status?: AssetStatus | undefined;
   type?: AssetType | undefined;
+  domain?: AssetDomain | undefined;
+  documentClass?: AssetDocumentClass | undefined;
+  sourceKind?: AssetSourceKind | undefined;
+  aiVisibility?: AssetAiVisibility | undefined;
+  sourceHost?: string | undefined;
   query?: string | undefined;
   page?: number | undefined;
   pageSize?: number | undefined;

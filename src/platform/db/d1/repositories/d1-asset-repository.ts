@@ -161,6 +161,26 @@ const buildAssetListWhereClause = (query?: AssetListQuery) => {
     conditions.push(eq(assets.type, query.type));
   }
 
+  if (query?.domain) {
+    conditions.push(eq(assets.domain, query.domain));
+  }
+
+  if (query?.documentClass) {
+    conditions.push(eq(assets.documentClass, query.documentClass));
+  }
+
+  if (query?.sourceKind) {
+    conditions.push(eq(assets.sourceKind, query.sourceKind));
+  }
+
+  if (query?.aiVisibility) {
+    conditions.push(eq(assets.aiVisibility, query.aiVisibility));
+  }
+
+  if (query?.sourceHost) {
+    conditions.push(buildLikeCondition(assets.sourceHost, query.sourceHost));
+  }
+
   if (query?.query) {
     const searchCondition = or(
       buildLikeCondition(assets.title, query.query),
@@ -218,7 +238,14 @@ const expandSearchTerms = (query: string): string[] => {
   return Array.from(expanded);
 };
 
-const buildLikeCondition = (column: typeof assets.title | typeof assets.summary | typeof assets.sourceUrl, term: string) => {
+const buildLikeCondition = (
+  column:
+    | typeof assets.title
+    | typeof assets.summary
+    | typeof assets.sourceUrl
+    | typeof assets.sourceHost,
+  term: string
+) => {
   return like(column, `%${term}%`);
 };
 

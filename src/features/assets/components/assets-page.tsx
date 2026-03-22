@@ -1,8 +1,12 @@
 import type {
+  AssetAiVisibility,
+  AssetDocumentClass,
+  AssetDomain,
   AssetListQuery,
   AssetListResult,
   AssetStatus,
   AssetSummary,
+  AssetSourceKind,
   AssetType,
 } from "@/features/assets/model/types";
 import { PageShell } from "@/features/layout/components/page-shell";
@@ -26,10 +30,115 @@ const assetTypeOptions: Array<{ label: string; value: AssetType | "" }> = [
   { label: "Chat", value: "chat" },
 ];
 
+const assetDomainOptions: Array<{ label: string; value: AssetDomain | "" }> = [
+  { label: "All domains", value: "" },
+  { label: "Engineering", value: "engineering" },
+  { label: "Product", value: "product" },
+  { label: "Research", value: "research" },
+  { label: "Personal", value: "personal" },
+  { label: "Finance", value: "finance" },
+  { label: "Health", value: "health" },
+  { label: "Archive", value: "archive" },
+  { label: "General", value: "general" },
+];
+
+const assetDocumentClassOptions: Array<{
+  label: string;
+  value: AssetDocumentClass | "";
+}> = [
+  { label: "All document classes", value: "" },
+  { label: "Reference Doc", value: "reference_doc" },
+  { label: "Design Doc", value: "design_doc" },
+  { label: "Bug Note", value: "bug_note" },
+  { label: "Paper", value: "paper" },
+  { label: "Journal Entry", value: "journal_entry" },
+  { label: "Meeting Note", value: "meeting_note" },
+  { label: "Spec", value: "spec" },
+  { label: "How-to", value: "howto" },
+  { label: "General Note", value: "general_note" },
+];
+
+const assetSourceKindOptions: Array<{
+  label: string;
+  value: AssetSourceKind | "";
+}> = [
+  { label: "All source kinds", value: "" },
+  { label: "Manual", value: "manual" },
+  { label: "Browser Extension", value: "browser_extension" },
+  { label: "Upload", value: "upload" },
+  { label: "MCP", value: "mcp" },
+  { label: "Import", value: "import" },
+];
+
+const assetAiVisibilityOptions: Array<{
+  label: string;
+  value: AssetAiVisibility | "";
+}> = [
+  { label: "All visibility", value: "" },
+  { label: "Allow", value: "allow" },
+  { label: "Summary Only", value: "summary_only" },
+  { label: "Deny", value: "deny" },
+];
+
+interface AssetDescriptorView {
+  topics?: string[] | undefined;
+}
+
 const formatDate = (value: string): string => {
   return new Date(value).toLocaleString("zh-CN", {
     hour12: false,
   });
+};
+
+const formatLabel = (value: string): string => {
+  return value
+    .split("_")
+    .map((segment) =>
+      segment.length > 0
+        ? `${segment[0]?.toUpperCase() ?? ""}${segment.slice(1)}`
+        : segment
+    )
+    .join(" ");
+};
+
+const parseDescriptorJson = (
+  descriptorJson: string | null
+): AssetDescriptorView | null => {
+  if (!descriptorJson) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(descriptorJson);
+
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    return {
+      topics: Array.isArray(parsed.topics)
+        ? parsed.topics.filter(
+            (topic: unknown): topic is string => typeof topic === "string"
+          )
+        : [],
+    };
+  } catch {
+    return null;
+  }
+};
+
+const buildAssetTags = (asset: AssetSummary): string[] => {
+  const descriptor = parseDescriptorJson(asset.descriptorJson);
+  const tags = [
+    asset.domain,
+    asset.documentClass ?? null,
+    asset.aiVisibility,
+    asset.sourceKind,
+    asset.sourceHost,
+    ...(descriptor?.topics ?? []),
+  ].filter((value): value is string => Boolean(value?.trim()));
+
+  return Array.from(new Set(tags));
 };
 
 const buildFilterSummary = (filters: AssetListQuery): string => {
@@ -41,6 +150,26 @@ const buildFilterSummary = (filters: AssetListQuery): string => {
 
   if (filters.type) {
     segments.push(`type: ${filters.type}`);
+  }
+
+  if (filters.domain) {
+    segments.push(`domain: ${filters.domain}`);
+  }
+
+  if (filters.documentClass) {
+    segments.push(`document: ${filters.documentClass}`);
+  }
+
+  if (filters.sourceKind) {
+    segments.push(`source: ${filters.sourceKind}`);
+  }
+
+  if (filters.aiVisibility) {
+    segments.push(`visibility: ${filters.aiVisibility}`);
+  }
+
+  if (filters.sourceHost) {
+    segments.push(`host: ${filters.sourceHost}`);
   }
 
   if (filters.query) {
@@ -75,6 +204,26 @@ export const AssetsPage = ({
 
   if (filters.type) {
     currentParams.set("type", filters.type);
+  }
+
+  if (filters.domain) {
+    currentParams.set("domain", filters.domain);
+  }
+
+  if (filters.documentClass) {
+    currentParams.set("documentClass", filters.documentClass);
+  }
+
+  if (filters.sourceKind) {
+    currentParams.set("sourceKind", filters.sourceKind);
+  }
+
+  if (filters.aiVisibility) {
+    currentParams.set("aiVisibility", filters.aiVisibility);
+  }
+
+  if (filters.sourceHost) {
+    currentParams.set("sourceHost", filters.sourceHost);
   }
 
   if (filters.query) {
@@ -220,7 +369,7 @@ export const AssetsPage = ({
             }}
           >
             <li>Scan recent knowledge at a glance</li>
-            <li>Filter by type, status, or query</li>
+            <li>Filter by type, domain, visibility, and source</li>
             <li>Jump to detail or keep capturing new material</li>
           </ul>
         </article>
@@ -284,6 +433,103 @@ export const AssetsPage = ({
                 </option>
               ))}
             </select>
+          </label>
+          <label style={{ display: "grid", gap: "8px" }}>
+            <span style={{ fontWeight: 700 }}>Domain</span>
+            <select
+              name="domain"
+              defaultValue={filters.domain ?? ""}
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: "14px",
+                border: "1px solid rgba(15, 23, 42, 0.12)",
+                fontSize: "15px",
+              }}
+            >
+              {assetDomainOptions.map((option) => (
+                <option key={option.label} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: "8px" }}>
+            <span style={{ fontWeight: 700 }}>Document Class</span>
+            <select
+              name="documentClass"
+              defaultValue={filters.documentClass ?? ""}
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: "14px",
+                border: "1px solid rgba(15, 23, 42, 0.12)",
+                fontSize: "15px",
+              }}
+            >
+              {assetDocumentClassOptions.map((option) => (
+                <option key={option.label} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: "8px" }}>
+            <span style={{ fontWeight: 700 }}>Source Kind</span>
+            <select
+              name="sourceKind"
+              defaultValue={filters.sourceKind ?? ""}
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: "14px",
+                border: "1px solid rgba(15, 23, 42, 0.12)",
+                fontSize: "15px",
+              }}
+            >
+              {assetSourceKindOptions.map((option) => (
+                <option key={option.label} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: "8px" }}>
+            <span style={{ fontWeight: 700 }}>AI Visibility</span>
+            <select
+              name="aiVisibility"
+              defaultValue={filters.aiVisibility ?? ""}
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: "14px",
+                border: "1px solid rgba(15, 23, 42, 0.12)",
+                fontSize: "15px",
+              }}
+            >
+              {assetAiVisibilityOptions.map((option) => (
+                <option key={option.label} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: "8px" }}>
+            <span style={{ fontWeight: 700 }}>Source Host</span>
+            <input
+              name="sourceHost"
+              type="search"
+              defaultValue={filters.sourceHost ?? ""}
+              placeholder="developers.cloudflare.com"
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: "14px",
+                border: "1px solid rgba(15, 23, 42, 0.12)",
+                fontSize: "15px",
+                boxSizing: "border-box",
+              }}
+            />
           </label>
           <label style={{ display: "grid", gap: "8px" }}>
             <span style={{ fontWeight: 700 }}>Search</span>
@@ -411,6 +657,32 @@ export const AssetsPage = ({
                 boxShadow: "0 14px 32px rgba(15, 23, 42, 0.06)",
               }}
             >
+              {buildAssetTags(asset).length > 0 ? (
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "8px",
+                    flexWrap: "wrap",
+                    marginBottom: "12px",
+                  }}
+                >
+                  {buildAssetTags(asset).map((tag) => (
+                    <span
+                      key={`${asset.id}:${tag}`}
+                      style={{
+                        padding: "5px 8px",
+                        borderRadius: "999px",
+                        backgroundColor: "#f4f7fb",
+                        color: "#4b5a6b",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {formatLabel(tag)}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               <div
                 style={{
                   display: "flex",
@@ -460,7 +732,9 @@ export const AssetsPage = ({
                 }}
               >
                 <div style={{ color: "#5f6e7d", fontSize: "14px" }}>
-                  {asset.sourceUrl ?? `Asset ID: ${asset.id}`}
+                  {asset.sourceHost ??
+                    asset.sourceUrl ??
+                    `Asset ID: ${asset.id}`}
                 </div>
                 <div style={{ display: "flex", gap: "14px" }}>
                   <a

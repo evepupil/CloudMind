@@ -15,6 +15,76 @@ const formatDate = (value: string | null): string => {
   });
 };
 
+interface AssetDescriptorView {
+  assetType?: string | null | undefined;
+  sourceKind?: string | null | undefined;
+  domain?: string | null | undefined;
+  documentClass?: string | null | undefined;
+  topics?: string[] | undefined;
+  collectionKey?: string | null | undefined;
+  capturedAt?: string | null | undefined;
+  sourceHost?: string | null | undefined;
+  language?: string | null | undefined;
+  mimeType?: string | null | undefined;
+  signals?: string[] | undefined;
+}
+
+const parseDescriptorJson = (
+  descriptorJson: string | null
+): AssetDescriptorView | null => {
+  if (!descriptorJson) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(descriptorJson);
+
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    return {
+      assetType: typeof parsed.assetType === "string" ? parsed.assetType : null,
+      sourceKind:
+        typeof parsed.sourceKind === "string" ? parsed.sourceKind : null,
+      domain: typeof parsed.domain === "string" ? parsed.domain : null,
+      documentClass:
+        typeof parsed.documentClass === "string" ? parsed.documentClass : null,
+      topics: Array.isArray(parsed.topics)
+        ? parsed.topics.filter(
+            (topic: unknown): topic is string => typeof topic === "string"
+          )
+        : [],
+      collectionKey:
+        typeof parsed.collectionKey === "string" ? parsed.collectionKey : null,
+      capturedAt:
+        typeof parsed.capturedAt === "string" ? parsed.capturedAt : null,
+      sourceHost:
+        typeof parsed.sourceHost === "string" ? parsed.sourceHost : null,
+      language: typeof parsed.language === "string" ? parsed.language : null,
+      mimeType: typeof parsed.mimeType === "string" ? parsed.mimeType : null,
+      signals: Array.isArray(parsed.signals)
+        ? parsed.signals.filter(
+            (signal: unknown): signal is string => typeof signal === "string"
+          )
+        : [],
+    };
+  } catch {
+    return null;
+  }
+};
+
+const formatLabel = (value: string): string => {
+  return value
+    .split("_")
+    .map((segment) =>
+      segment.length > 0
+        ? `${segment[0]?.toUpperCase() ?? ""}${segment.slice(1)}`
+        : segment
+    )
+    .join(" ");
+};
+
 const canReprocessAsset = (type: AssetType): boolean => {
   return reprocessableAssetTypes.includes(type);
 };
@@ -78,6 +148,7 @@ export const AssetDetailPage = ({
   }
 
   const isReprocessable = canReprocessAsset(item.type);
+  const descriptor = parseDescriptorJson(item.descriptorJson);
 
   return (
     <PageShell
@@ -159,6 +230,190 @@ export const AssetDetailPage = ({
             <p style={{ marginBottom: 0, color: "#445160", lineHeight: 1.85 }}>
               {item.summary ?? "Summary has not been generated yet."}
             </p>
+            <div
+              style={{
+                display: "flex",
+                gap: "8px",
+                flexWrap: "wrap",
+                marginTop: "16px",
+              }}
+            >
+              {[
+                item.domain,
+                item.documentClass ?? null,
+                item.aiVisibility,
+                item.sourceKind,
+                item.sourceHost,
+              ]
+                .filter((value): value is string => Boolean(value?.trim()))
+                .map((value) => (
+                  <span
+                    key={value}
+                    style={{
+                      padding: "6px 9px",
+                      borderRadius: "999px",
+                      backgroundColor: "#f4f7fb",
+                      color: "#445160",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {formatLabel(value)}
+                  </span>
+                ))}
+            </div>
+          </article>
+
+          <article
+            style={{
+              padding: "24px",
+              borderRadius: "24px",
+              border: "1px solid rgba(15, 23, 42, 0.08)",
+              backgroundColor: "#ffffff",
+              boxShadow: "0 18px 48px rgba(15, 23, 42, 0.08)",
+            }}
+          >
+            <h2 style={{ marginTop: 0, fontSize: "22px" }}>Layered Index</h2>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: "12px",
+                marginBottom: "18px",
+              }}
+            >
+              {[
+                {
+                  label: "Domain",
+                  value: item.domain,
+                },
+                {
+                  label: "Document Class",
+                  value: item.documentClass ?? descriptor?.documentClass ?? "N/A",
+                },
+                {
+                  label: "Source Host",
+                  value: item.sourceHost ?? descriptor?.sourceHost ?? "N/A",
+                },
+                {
+                  label: "Collection",
+                  value: item.collectionKey ?? descriptor?.collectionKey ?? "N/A",
+                },
+                {
+                  label: "AI Visibility",
+                  value: item.aiVisibility,
+                },
+                {
+                  label: "Sensitivity",
+                  value: item.sensitivity,
+                },
+              ].map((entry) => (
+                <div
+                  key={entry.label}
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: "18px",
+                    backgroundColor: "#f8fbfc",
+                    border: "1px solid rgba(15, 23, 42, 0.06)",
+                  }}
+                >
+                  <div
+                    style={{
+                      color: "#5f6e7d",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                    }}
+                  >
+                    {entry.label}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: "8px",
+                      color: "#102033",
+                      fontWeight: 700,
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {entry.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "grid", gap: "14px" }}>
+              <div>
+                <h3 style={{ margin: "0 0 10px", fontSize: "16px" }}>Topics</h3>
+                {descriptor?.topics?.length ? (
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    {descriptor.topics.map((topic) => (
+                      <span
+                        key={topic}
+                        style={{
+                          padding: "6px 9px",
+                          borderRadius: "999px",
+                          backgroundColor: "#eef6ff",
+                          color: "#0b5cab",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {formatLabel(topic)}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ margin: 0, color: "#5f6e7d" }}>
+                    No topic signals yet.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <h3 style={{ margin: "0 0 10px", fontSize: "16px" }}>Facets</h3>
+                {item.facets?.length ? (
+                  <div style={{ display: "grid", gap: "10px" }}>
+                    {item.facets.map((facet) => (
+                      <div
+                        key={facet.id}
+                        style={{
+                          padding: "14px 16px",
+                          borderRadius: "16px",
+                          backgroundColor: "#faf8f4",
+                          border: "1px solid rgba(15, 23, 42, 0.06)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            color: "#8b6c35",
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.08em",
+                          }}
+                        >
+                          {formatLabel(facet.facetKey)}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: "6px",
+                            color: "#102033",
+                            fontWeight: 700,
+                          }}
+                        >
+                          {facet.facetLabel}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ margin: 0, color: "#5f6e7d" }}>
+                    No facet records yet.
+                  </p>
+                )}
+              </div>
+            </div>
           </article>
 
           <article
@@ -231,6 +486,68 @@ export const AssetDetailPage = ({
                   </article>
                 ))}
               </div>
+            )}
+          </article>
+
+          <article
+            style={{
+              padding: "24px",
+              borderRadius: "24px",
+              border: "1px solid rgba(15, 23, 42, 0.08)",
+              backgroundColor: "#ffffff",
+              boxShadow: "0 18px 48px rgba(15, 23, 42, 0.08)",
+            }}
+          >
+            <h2 style={{ marginTop: 0, fontSize: "22px" }}>Assertions</h2>
+            {item.assertions?.length ? (
+              <div style={{ display: "grid", gap: "12px" }}>
+                {item.assertions.map((assertion) => (
+                  <article
+                    key={assertion.id}
+                    style={{
+                      padding: "16px",
+                      borderRadius: "18px",
+                      backgroundColor: "#fffdf7",
+                      border: "1px solid rgba(15, 23, 42, 0.06)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: "12px",
+                        flexWrap: "wrap",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: "#8b6c35",
+                          fontSize: "12px",
+                          fontWeight: 800,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.08em",
+                        }}
+                      >
+                        {formatLabel(assertion.kind)}
+                      </span>
+                      <span style={{ color: "#5f6e7d", fontSize: "13px" }}>
+                        Confidence:{" "}
+                        {typeof assertion.confidence === "number"
+                          ? assertion.confidence.toFixed(2)
+                          : "N/A"}
+                      </span>
+                    </div>
+                    <p style={{ margin: 0, color: "#445160", lineHeight: 1.8 }}>
+                      {assertion.text}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p style={{ marginBottom: 0, color: "#5f6e7d" }}>
+                No assertion records yet.
+              </p>
             )}
           </article>
         </div>
