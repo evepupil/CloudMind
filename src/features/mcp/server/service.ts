@@ -220,6 +220,13 @@ const contextProfileDescriptions = getContextProfileDescriptions()
   .map((profile) => `${profile.name}: ${profile.description}`)
   .join(" ");
 
+const cloudMindInvocationGuidance =
+  "Use CloudMind when user-specific history could significantly improve " +
+  "the answer, such as past notes, recent status, project context, " +
+  "preferences, prior discussions, or earlier decisions. Do not use it " +
+  "for purely general knowledge. If unsure, do a lightweight retrieval " +
+  "first.";
+
 const contextFallbackGuidance =
   "Prefer allowFallback=false first. If results are insufficient, rerun with allowFallback=true only when broader retrieval still matches the user's intent.";
 
@@ -301,7 +308,8 @@ export const createMcpServer = (
     {
       title: "Search Assets",
       description:
-        "Search the library with semantic retrieval and return matched chunks.",
+        "Search the library with semantic retrieval and return matched chunks. " +
+        cloudMindInvocationGuidance,
       inputSchema: searchAssetsInputSchema,
     },
     async (input) => {
@@ -321,6 +329,7 @@ export const createMcpServer = (
       title: "Search Assets For Context",
       description:
         "Search the library with context-aware retrieval weighting for AI clients. " +
+        `${cloudMindInvocationGuidance} ` +
         `${contextFallbackGuidance} Available profiles: ${contextProfileDescriptions}`,
       inputSchema: searchAssetsForContextInputSchema,
     },
@@ -492,7 +501,8 @@ export const createMcpServer = (
     {
       title: "Ask Library",
       description:
-        "Answer a question using grounded evidence from the CloudMind library.",
+        "Answer a question using grounded evidence from the CloudMind library. " +
+        cloudMindInvocationGuidance,
       inputSchema: askLibraryInputSchema,
     },
     async (input) => {
@@ -512,6 +522,7 @@ export const createMcpServer = (
       title: "Ask Library For Context",
       description:
         "Answer a question using context-aware retrieval weighting for AI clients. " +
+        `${cloudMindInvocationGuidance} ` +
         `${contextFallbackGuidance} Available profiles: ${contextProfileDescriptions}`,
       inputSchema: askLibraryForContextInputSchema,
     },
