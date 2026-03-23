@@ -6,6 +6,7 @@ import type { VectorStore } from "@/core/vector/ports";
 import type { WebPageFetcher } from "@/core/web/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
+import type { TextAssetEnrichmentInput } from "@/features/ingest/model/enrichment";
 import { runNoteIngestWorkflow } from "@/features/workflows/server/note-ingest-workflow";
 import { runPdfIngestWorkflow } from "@/features/workflows/server/pdf-ingest-workflow";
 import { runUrlIngestWorkflow } from "@/features/workflows/server/url-ingest-workflow";
@@ -21,6 +22,7 @@ export const processTextAsset = async (
   assetId: string,
   options?: {
     force?: boolean;
+    enrichment?: TextAssetEnrichmentInput;
   }
 ): Promise<AssetDetail> => {
   return runNoteIngestWorkflow(

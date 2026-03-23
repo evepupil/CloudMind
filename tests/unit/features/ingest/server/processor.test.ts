@@ -20,7 +20,7 @@ import type {
   VectorSearchMatch,
   VectorStore,
 } from "@/core/vector/ports";
-import type { WebPageFetchResult, WebPageFetcher } from "@/core/web/ports";
+import type { WebPageFetcher, WebPageFetchResult } from "@/core/web/ports";
 import type {
   CreateAssetArtifactInput,
   CreateWorkflowRunInput,
@@ -271,6 +271,8 @@ class InMemoryAssetRepository implements AssetRepository {
       sensitivity?: AssetDetail["sensitivity"] | undefined;
       aiVisibility?: AssetDetail["aiVisibility"] | undefined;
       retrievalPriority?: number | undefined;
+      documentClass?: AssetDetail["documentClass"] | null | undefined;
+      sourceHost?: AssetDetail["sourceHost"] | null | undefined;
       collectionKey?: string | null | undefined;
       capturedAt?: string | null | undefined;
       descriptorJson?: string | null | undefined;
@@ -289,6 +291,14 @@ class InMemoryAssetRepository implements AssetRepository {
       aiVisibility: input.aiVisibility ?? this.asset.aiVisibility,
       retrievalPriority:
         input.retrievalPriority ?? this.asset.retrievalPriority,
+      documentClass:
+        input.documentClass !== undefined
+          ? input.documentClass
+          : this.asset.documentClass,
+      sourceHost:
+        input.sourceHost !== undefined
+          ? input.sourceHost
+          : this.asset.sourceHost,
       collectionKey:
         input.collectionKey !== undefined
           ? input.collectionKey
@@ -302,6 +312,54 @@ class InMemoryAssetRepository implements AssetRepository {
           ? input.descriptorJson
           : this.asset.descriptorJson,
     };
+  }
+
+  public async replaceAssetFacets(
+    id: string,
+    facets: Array<{
+      facetKey: string;
+      facetValue: string;
+      facetLabel: string;
+      sortOrder?: number | undefined;
+    }>
+  ): Promise<void> {
+    this.assertId(id);
+    this.asset.facets = facets.map((facet, index) => ({
+      id: `facet-${index + 1}`,
+      facetKey: facet.facetKey as NonNullable<
+        AssetDetail["facets"]
+      >[number]["facetKey"],
+      facetValue: facet.facetValue,
+      facetLabel: facet.facetLabel,
+      sortOrder: facet.sortOrder ?? index,
+    }));
+  }
+
+  public async replaceAssetAssertions(
+    id: string,
+    assertions: Array<{
+      assertionIndex: number;
+      kind: string;
+      text: string;
+      sourceChunkIndex?: number | null | undefined;
+      sourceSpanJson?: string | null | undefined;
+      confidence?: number | null | undefined;
+    }>
+  ): Promise<void> {
+    this.assertId(id);
+    this.asset.assertions = assertions.map((assertion, index) => ({
+      id: `assertion-${index + 1}`,
+      assertionIndex: assertion.assertionIndex,
+      kind: assertion.kind as NonNullable<
+        AssetDetail["assertions"]
+      >[number]["kind"],
+      text: assertion.text,
+      sourceChunkIndex: assertion.sourceChunkIndex ?? null,
+      sourceSpanJson: assertion.sourceSpanJson ?? null,
+      confidence: assertion.confidence ?? null,
+      createdAt: "2026-03-19T00:01:00.000Z",
+      updatedAt: "2026-03-19T00:01:00.000Z",
+    }));
   }
 
   public async failAssetProcessing(id: string, message: string): Promise<void> {
@@ -878,6 +936,96 @@ describe("processTextAsset", () => {
       aiVisibility: "allow",
       retrievalPriority: 10,
       strategy: "heuristic_v1",
+    });
+  });
+
+  it("accepts validated enrichment for summary, descriptor, and facets", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        contentText:
+          "CloudMind workflow notes about queues, search, and MCP context.",
+      })
+    );
+    const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new InMemoryAIProvider();
+    const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
+
+    const enqueued = await processTextAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      "asset-1",
+      {
+        enrichment: {
+          summary: "Client-authored summary for CloudMind workflow design.",
+          domain: "engineering",
+          documentClass: "design_doc",
+          descriptor: {
+            topics: ["workflow", "mcp", "search"],
+            collectionKey: "project/cloudmind",
+            signals: ["seeded_by_client", "manual_reviewed"],
+          },
+          facets: [
+            {
+              facetKey: "topic",
+              facetValue: "workflow",
+              facetLabel: "workflow",
+              sortOrder: 10,
+            },
+            {
+              facetKey: "collection",
+              facetValue: "project/cloudmind",
+              facetLabel: "project/cloudmind",
+              sortOrder: 11,
+            },
+          ],
+        },
+      }
+    );
+
+    expect(enqueued.status).toBe("processing");
+
+    await drainWorkflowQueue(
+      jobQueue,
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider
+    );
+
+    const result = await repository.getAssetById("asset-1");
+    const descriptor = getArtifactContent(workflowRepository, "descriptor");
+
+    expect(result.summary).toBe(
+      "Client-authored summary for CloudMind workflow design."
+    );
+    expect(result.domain).toBe("engineering");
+    expect(result.documentClass).toBe("design_doc");
+    expect(result.collectionKey).toBe("project/cloudmind");
+    expect(result.facets).toEqual([
+      expect.objectContaining({
+        facetKey: "topic",
+        facetValue: "workflow",
+        sortOrder: 10,
+      }),
+      expect.objectContaining({
+        facetKey: "collection",
+        facetValue: "project/cloudmind",
+        sortOrder: 11,
+      }),
+    ]);
+    expect(descriptor).toMatchObject({
+      domain: "engineering",
+      documentClass: "design_doc",
+      collectionKey: "project/cloudmind",
+      topics: ["workflow", "mcp", "search"],
+      signals: ["seeded_by_client", "manual_reviewed"],
     });
   });
 

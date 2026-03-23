@@ -304,6 +304,67 @@ describe("mcp routes", () => {
     });
   });
 
+  it("save_asset forwards optional text enrichment with enum-backed fields", async () => {
+    const app = createApp();
+    const item = createAssetDetail();
+
+    vi.mocked(ingestService.ingestTextAsset).mockResolvedValue(item);
+    const connected = await createConnectedClient(app);
+
+    client = connected.client;
+    transport = connected.transport;
+
+    const result = await client.callTool({
+      name: "save_asset",
+      arguments: {
+        type: "text",
+        title: "MCP enriched note",
+        content: "Saved from MCP with enrichment",
+        enrichment: {
+          summary: "Client summary",
+          domain: "engineering",
+          documentClass: "design_doc",
+          descriptor: {
+            topics: ["mcp", "workflow"],
+            collectionKey: "project/cloudmind",
+            signals: ["seeded_by_client"],
+          },
+          facets: [
+            {
+              facetKey: "topic",
+              facetValue: "mcp",
+              facetLabel: "mcp",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(getStructuredContent(result)).toEqual({ item });
+    expect(ingestService.ingestTextAsset).toHaveBeenCalledWith(env, {
+      title: "MCP enriched note",
+      content: "Saved from MCP with enrichment",
+      sourceKind: "mcp",
+      enrichment: {
+        summary: "Client summary",
+        domain: "engineering",
+        documentClass: "design_doc",
+        descriptor: {
+          topics: ["mcp", "workflow"],
+          collectionKey: "project/cloudmind",
+          signals: ["seeded_by_client"],
+        },
+        facets: [
+          {
+            facetKey: "topic",
+            facetValue: "mcp",
+            facetLabel: "mcp",
+          },
+        ],
+      },
+    });
+  });
+
   it("save_asset ingests urls through the existing ingest service", async () => {
     const app = createApp();
     const item = createAssetDetail({
@@ -638,17 +699,27 @@ describe("mcp routes", () => {
       page: 1,
       pageSize: 10,
     });
-    expect(assetService.updateAsset).toHaveBeenCalledWith(env, "asset-manage-1", {
-      title: "Updated Managed Asset",
-      summary: "Updated summary",
-      sourceUrl: undefined,
-    });
-    expect(assetService.deleteAsset).toHaveBeenCalledWith(env, "asset-manage-1");
+    expect(assetService.updateAsset).toHaveBeenCalledWith(
+      env,
+      "asset-manage-1",
+      {
+        title: "Updated Managed Asset",
+        summary: "Updated summary",
+        sourceUrl: undefined,
+      }
+    );
+    expect(assetService.deleteAsset).toHaveBeenCalledWith(
+      env,
+      "asset-manage-1"
+    );
     expect(ingestService.reprocessAsset).toHaveBeenCalledWith(
       env,
       "asset-manage-1"
     );
-    expect(assetService.getAssetById).toHaveBeenCalledWith(env, "asset-manage-1");
+    expect(assetService.getAssetById).toHaveBeenCalledWith(
+      env,
+      "asset-manage-1"
+    );
     expect(workflowService.listWorkflowRunsByAssetId).toHaveBeenCalledWith(
       env,
       "asset-manage-1"

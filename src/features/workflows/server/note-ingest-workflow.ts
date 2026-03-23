@@ -9,6 +9,10 @@ import type { VectorStore } from "@/core/vector/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
 import {
+  type TextAssetEnrichmentInput,
+  textAssetEnrichmentSchema,
+} from "@/features/ingest/model/enrichment";
+import {
   createChunkEmbeddings,
   createTextSummary,
   indexPreparedChunks,
@@ -37,6 +41,44 @@ const getNormalizedContent = (asset: AssetDetail): string => {
   return normalizeContent(content);
 };
 
+const getTextAssetEnrichment = (
+  state: Record<string, unknown>
+): TextAssetEnrichmentInput | null => {
+  const parsed = textAssetEnrichmentSchema.safeParse(state.enrichment);
+
+  return parsed.success ? parsed.data : null;
+};
+
+const normalizeUniqueStrings = (values: string[] | undefined): string[] => {
+  if (!values?.length) {
+    return [];
+  }
+
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+};
+
+const mergeDescriptorWithEnrichment = (
+  descriptor: AssetDescriptor,
+  enrichment: TextAssetEnrichmentInput | null
+): AssetDescriptor => {
+  if (!enrichment) {
+    return descriptor;
+  }
+
+  const topics = normalizeUniqueStrings(enrichment.descriptor?.topics);
+  const signals = normalizeUniqueStrings(enrichment.descriptor?.signals);
+
+  return {
+    ...descriptor,
+    domain: enrichment.domain ?? descriptor.domain,
+    documentClass: enrichment.documentClass ?? descriptor.documentClass,
+    topics: topics.length > 0 ? topics : descriptor.topics,
+    collectionKey:
+      enrichment.descriptor?.collectionKey ?? descriptor.collectionKey,
+    signals: signals.length > 0 ? signals : descriptor.signals,
+  };
+};
+
 export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => {
   return {
     type: "note_ingest_v1",
@@ -62,12 +104,14 @@ export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => {
         type: "summarize",
         execute: (context) => {
           const normalizedContent = context.state.normalizedContent;
+          const enrichment = getTextAssetEnrichment(context.state);
 
           if (typeof normalizedContent !== "string") {
             throw new Error("Workflow state is missing normalized content.");
           }
 
-          const summary = createTextSummary(normalizedContent);
+          const summary =
+            enrichment?.summary ?? createTextSummary(normalizedContent);
 
           return {
             output: {
@@ -95,6 +139,7 @@ export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => {
         execute: async (context) => {
           const summary = context.state.summary;
           const normalizedContent = context.state.normalizedContent;
+          const enrichment = getTextAssetEnrichment(context.state);
 
           const derived = deriveDescriptor({
             asset: context.asset,
@@ -102,27 +147,39 @@ export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => {
               typeof normalizedContent === "string" ? normalizedContent : null,
             summary: typeof summary === "string" ? summary : null,
           });
+          const descriptor = mergeDescriptorWithEnrichment(
+            derived.descriptor,
+            enrichment
+          );
 
           await context.services.assetRepository.updateAssetIndexing(
             context.asset.id,
-            derived.indexing
+            {
+              sourceKind: descriptor.sourceKind,
+              domain: descriptor.domain,
+              documentClass: descriptor.documentClass,
+              sourceHost: descriptor.sourceHost,
+              collectionKey: descriptor.collectionKey,
+              capturedAt: descriptor.capturedAt,
+              descriptorJson: JSON.stringify(descriptor),
+            }
           );
 
           return {
             output: {
-              domain: derived.descriptor.domain,
-              collectionKey: derived.descriptor.collectionKey,
+              domain: descriptor.domain,
+              collectionKey: descriptor.collectionKey,
             },
             state: {
-              descriptor: derived.descriptor,
+              descriptor,
             },
             artifacts: [
               {
                 artifactType: "descriptor",
                 storageKind: "inline",
-                contentText: JSON.stringify(derived.descriptor),
+                contentText: JSON.stringify(descriptor),
                 metadataJson: JSON.stringify({
-                  strategy: derived.descriptor.strategy,
+                  strategy: descriptor.strategy,
                 }),
               },
             ],
@@ -186,6 +243,7 @@ export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => {
         execute: async (context) => {
           const descriptor = context.state.descriptor;
           const accessPolicy = context.state.accessPolicy;
+          const enrichment = getTextAssetEnrichment(context.state);
 
           if (!descriptor || typeof descriptor !== "object") {
             throw new Error("Workflow state is missing descriptor.");
@@ -195,10 +253,18 @@ export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => {
             throw new Error("Workflow state is missing access policy.");
           }
 
-          const facets = deriveFacets(
-            descriptor as AssetDescriptor,
-            accessPolicy as AssetAccessPolicy
-          );
+          const facets =
+            enrichment?.facets && enrichment.facets.length > 0
+              ? enrichment.facets.map((facet, index) => ({
+                  facetKey: facet.facetKey,
+                  facetValue: facet.facetValue,
+                  facetLabel: facet.facetLabel,
+                  sortOrder: facet.sortOrder ?? index,
+                }))
+              : deriveFacets(
+                  descriptor as AssetDescriptor,
+                  accessPolicy as AssetAccessPolicy
+                );
 
           await context.services.assetRepository.replaceAssetFacets?.(
             context.asset.id,
@@ -429,6 +495,7 @@ export const runNoteIngestWorkflow = async (
   triggerType: "ingest" | "reprocess",
   options?: {
     force?: boolean;
+    enrichment?: TextAssetEnrichmentInput;
   }
 ): Promise<AssetDetail> => {
   return enqueueWorkflow(
@@ -443,6 +510,11 @@ export const runNoteIngestWorkflow = async (
       aiProvider,
       jobQueue,
     },
-    options
+    options,
+    options?.enrichment
+      ? {
+          enrichment: options.enrichment,
+        }
+      : undefined
   );
 };

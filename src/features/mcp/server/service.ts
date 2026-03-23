@@ -15,15 +15,21 @@ import {
   askLibraryForContext,
 } from "@/features/chat/server/service";
 import {
+  assetDocumentClassValues,
+  assetDomainValues,
+  assetFacetKeyValues,
+  textAssetEnrichmentSchema,
+} from "@/features/ingest/model/enrichment";
+import {
   ingestTextAsset,
-  reprocessAsset,
   ingestUrlAsset,
+  reprocessAsset,
 } from "@/features/ingest/server/service";
 import {
+  contextProfileValues,
   getContextProfileDescriptions,
   getContextProfileSummary,
   resolveContextRetrievalPolicy,
-  contextProfileValues,
 } from "@/features/mcp/server/context-profiles";
 import {
   searchAssets,
@@ -40,6 +46,14 @@ const saveAssetInputSchema = z
     title: z.string().trim().min(1).max(300).optional(),
     content: z.string().trim().min(1).optional(),
     url: z.string().url().optional(),
+    enrichment: textAssetEnrichmentSchema
+      .optional()
+      .describe(
+        "Optional indexing enrichment for text assets. " +
+          `Allowed domain: ${assetDomainValues.join(", ")}. ` +
+          `Allowed documentClass: ${assetDocumentClassValues.join(", ")}. ` +
+          `Allowed facets[].facetKey: ${assetFacetKeyValues.join(", ")}.`
+      ),
   })
   .superRefine((value, context) => {
     if (value.type === "text" && !value.content) {
@@ -55,6 +69,15 @@ const saveAssetInputSchema = z
         code: z.ZodIssueCode.custom,
         message: 'Field "url" is required when type is "url".',
         path: ["url"],
+      });
+    }
+
+    if (value.type === "url" && value.enrichment !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'Field "enrichment" is currently supported only for type "text".',
+        path: ["enrichment"],
       });
     }
   });
@@ -244,7 +267,8 @@ export const createMcpServer = (
     {
       title: "Save Asset",
       description:
-        "Save a text note or URL into the CloudMind library and trigger processing.",
+        "Save a text note or URL into the CloudMind library and trigger processing. " +
+        "For type=text, you may pass optional enrichment to suggest summary, domain, documentClass, descriptor, and facets using CloudMind enum values.",
       inputSchema: saveAssetInputSchema,
     },
     async (input) => {
@@ -260,6 +284,7 @@ export const createMcpServer = (
             title: normalizeOptionalString(input.title),
             content,
             sourceKind: "mcp",
+            enrichment: input.enrichment,
           });
 
           return createToolResult({ item });
@@ -377,7 +402,8 @@ export const createMcpServer = (
     "update_asset",
     {
       title: "Update Asset",
-      description: "Update editable asset fields such as title, summary, or source URL.",
+      description:
+        "Update editable asset fields such as title, summary, or source URL.",
       inputSchema: updateAssetInputSchema,
     },
     async (input) => {
@@ -430,7 +456,8 @@ export const createMcpServer = (
     "reprocess_asset",
     {
       title: "Reprocess Asset",
-      description: "Trigger reprocessing for an existing asset and return the updated asset state.",
+      description:
+        "Trigger reprocessing for an existing asset and return the updated asset state.",
       inputSchema: reprocessAssetInputSchema,
     },
     async (input) => {
@@ -477,7 +504,8 @@ export const createMcpServer = (
     "get_workflow_run",
     {
       title: "Get Workflow Run",
-      description: "Fetch the detail of one workflow run including steps and artifacts.",
+      description:
+        "Fetch the detail of one workflow run including steps and artifacts.",
       inputSchema: getWorkflowRunInputSchema,
     },
     async (input) => {

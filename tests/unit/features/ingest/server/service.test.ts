@@ -472,6 +472,74 @@ describe("ingest service", () => {
     });
   });
 
+  it("ingestTextAsset forwards enrichment to the text processor", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-text-enrichment-1",
+      })
+    );
+    const processedAsset = createAsset({
+      id: "asset-text-enrichment-1",
+      status: "ready",
+      summary: "Accepted summary",
+    });
+    const service = createIngestService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
+      processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
+      processUrlAsset: processUrlAssetMock,
+      processPdfAsset: processPdfAssetMock,
+      getProcessTextAssetForced: processTextAssetForcedMock,
+      getProcessUrlAssetForced: processUrlAssetForcedMock,
+      getProcessPdfAssetForced: processPdfAssetForcedMock,
+    });
+
+    await service.ingestTextAsset(env, {
+      title: "Enriched note",
+      content: "User supplied indexing hints.",
+      enrichment: {
+        summary: "Accepted summary",
+        domain: "engineering",
+        documentClass: "design_doc",
+        descriptor: {
+          topics: ["workflow"],
+          collectionKey: "project/cloudmind",
+          signals: ["seeded_by_client"],
+        },
+      },
+    });
+
+    expect(processTextAssetMock).toHaveBeenCalledWith(
+      repository,
+      workflowRepositoryMock,
+      blobStoreMock,
+      vectorStoreMock,
+      aiProviderMock,
+      jobQueueMock,
+      "asset-text-enrichment-1",
+      {
+        enrichment: {
+          summary: "Accepted summary",
+          domain: "engineering",
+          documentClass: "design_doc",
+          descriptor: {
+            topics: ["workflow"],
+            collectionKey: "project/cloudmind",
+            signals: ["seeded_by_client"],
+          },
+        },
+      }
+    );
+  });
+
   it("ingestUrlAsset keeps an explicit source kind for non-web entrypoints", async () => {
     const repository = new InMemoryAssetRepository(
       createAsset({

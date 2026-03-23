@@ -120,6 +120,68 @@ describe("ingest routes", () => {
     });
   });
 
+  it("POST /api/ingest/text forwards optional enrichment to the ingest service", async () => {
+    const app = createApp();
+    const item = createAssetDetail();
+
+    vi.mocked(ingestService.ingestTextAsset).mockResolvedValue(item);
+
+    const response = await app.request(
+      "/api/ingest/text",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: "Structured note",
+          content: "CloudMind should keep this text.",
+          enrichment: {
+            summary: "User provided summary",
+            domain: "engineering",
+            documentClass: "design_doc",
+            descriptor: {
+              topics: ["workflow", "mcp"],
+              collectionKey: "project/cloudmind",
+              signals: ["manual_seed"],
+            },
+            facets: [
+              {
+                facetKey: "topic",
+                facetValue: "workflow",
+                facetLabel: "workflow",
+              },
+            ],
+          },
+        }),
+      },
+      env
+    );
+
+    expect(response.status).toBe(201);
+    expect(ingestService.ingestTextAsset).toHaveBeenCalledWith(env, {
+      title: "Structured note",
+      content: "CloudMind should keep this text.",
+      enrichment: {
+        summary: "User provided summary",
+        domain: "engineering",
+        documentClass: "design_doc",
+        descriptor: {
+          topics: ["workflow", "mcp"],
+          collectionKey: "project/cloudmind",
+          signals: ["manual_seed"],
+        },
+        facets: [
+          {
+            facetKey: "topic",
+            facetValue: "workflow",
+            facetLabel: "workflow",
+          },
+        ],
+      },
+    });
+  });
+
   it("POST /api/ingest/url returns 201 with the created asset payload", async () => {
     const app = createApp();
     const item = createAssetDetail({

@@ -12,6 +12,7 @@ import type { WebPageFetcher } from "@/core/web/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AppBindings } from "@/env";
 import type { AssetDetail } from "@/features/assets/model/types";
+import type { TextAssetEnrichmentInput } from "@/features/ingest/model/enrichment";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getBlobStoreFromBindings } from "@/platform/blob/r2/get-blob-store";
 import { getAssetIngestRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
@@ -73,6 +74,7 @@ interface IngestServiceDependencies {
     assetId: string,
     options?: {
       force?: boolean;
+      enrichment?: TextAssetEnrichmentInput;
     }
   ) => Promise<AssetDetail>;
   processUrlAsset: (
@@ -104,6 +106,7 @@ interface IngestServiceDependencies {
     assetId: string,
     options?: {
       force?: boolean;
+      enrichment?: TextAssetEnrichmentInput;
     }
   ) => Promise<AssetDetail>;
   getProcessUrlAssetForced: (
@@ -296,6 +299,21 @@ export const createIngestService = (
       const jobQueue = await dependencies.getJobQueue(bindings);
       const aiProvider = await dependencies.getAIProvider(bindings);
       const createdAsset = await repository.createTextAsset(input);
+
+      if (input.enrichment) {
+        return dependencies.processTextAsset(
+          repository,
+          workflowRepository,
+          blobStore,
+          vectorStore,
+          aiProvider,
+          jobQueue,
+          createdAsset.id,
+          {
+            enrichment: input.enrichment,
+          }
+        );
+      }
 
       return dependencies.processTextAsset(
         repository,

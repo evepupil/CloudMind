@@ -13,11 +13,13 @@ import type {
   AssetSourceKind,
   AssetSummaryMatch,
 } from "@/features/assets/model/types";
+import type { TextAssetEnrichmentInput } from "@/features/ingest/model/enrichment";
 
 export interface CreateTextAssetInput {
   title?: string | undefined;
   content: string;
   sourceKind?: AssetSourceKind | undefined;
+  enrichment?: TextAssetEnrichmentInput | undefined;
 }
 
 export interface CreateUrlAssetInput {
