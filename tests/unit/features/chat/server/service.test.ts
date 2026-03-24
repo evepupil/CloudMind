@@ -773,6 +773,17 @@ describe("chat service", () => {
           snippet: "Source snippet 1",
         },
       ],
+      evidence: {
+        items: [
+          expect.objectContaining({
+            id: "chunk:chunk-1",
+            layer: "chunk",
+            asset: expect.objectContaining({
+              id: "asset-1",
+            }),
+          }),
+        ],
+      },
       indexingSummary: {
         matchedLayers: ["chunk"],
         domains: ["engineering"],
@@ -827,6 +838,9 @@ describe("chat service", () => {
       answer:
         "I could not find enough relevant context in your library to answer that yet.",
       sources: [],
+      evidence: {
+        items: [],
+      },
     });
     expect(aiProvider.generateText).not.toHaveBeenCalled();
   });
@@ -881,6 +895,17 @@ describe("chat service", () => {
           snippet: "Summary-only note about a previous deployment incident.",
         },
       ],
+      evidence: {
+        items: [
+          expect.objectContaining({
+            id: "summary:asset-summary-only-1",
+            layer: "summary",
+            asset: expect.objectContaining({
+              id: "asset-summary-only-1",
+            }),
+          }),
+        ],
+      },
       indexingSummary: {
         matchedLayers: ["summary"],
         domains: ["engineering"],
@@ -928,6 +953,9 @@ describe("chat service", () => {
       answer:
         "I could not find enough relevant context in your library to answer that yet.",
       sources: [],
+      evidence: {
+        items: [],
+      },
     });
     expect(aiProvider.generateText).not.toHaveBeenCalled();
   });
@@ -1364,6 +1392,17 @@ describe("chat service", () => {
           snippet: "Engineering debugging guide",
         },
       ],
+      evidence: {
+        items: [
+          expect.objectContaining({
+            id: "chunk:engineering-chunk-1",
+            layer: "chunk",
+            asset: expect.objectContaining({
+              id: "asset-engineering-1",
+            }),
+          }),
+        ],
+      },
       indexingSummary: {
         matchedLayers: ["chunk"],
         domains: ["engineering"],
@@ -1480,6 +1519,9 @@ describe("chat service", () => {
       answer:
         "I could not find enough relevant context in your library to answer that yet.",
       sources: [],
+      evidence: {
+        items: [],
+      },
       resultScope: "preferred_only",
     });
     expect(aiProvider.generateText).not.toHaveBeenCalled();

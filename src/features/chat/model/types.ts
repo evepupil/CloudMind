@@ -1,4 +1,5 @@
 import type { EvidenceLayer } from "@/features/search/model/evidence";
+import type { EvidencePacket } from "@/features/search/model/evidence";
 import type { ContextResultScope } from "@/features/search/model/types";
 
 export interface ChatSource {
@@ -28,6 +29,7 @@ export interface AskLibraryInput {
 export interface AskLibraryResult {
   answer: string;
   sources: ChatSource[];
+  evidence: EvidencePacket;
   indexingSummary?: AskLibraryIndexingSummary | undefined;
   resultScope?: ContextResultScope | undefined;
 }

@@ -136,6 +136,12 @@ const buildChatSource = (context: EvidenceItem): ChatSource => {
   };
 };
 
+const buildEvidencePacket = (contexts: GroundingContext[]) => {
+  return {
+    items: contexts,
+  };
+};
+
 const buildIndexingSummary = (
   contexts: GroundingContext[]
 ): AskLibraryIndexingSummary => {
@@ -992,6 +998,9 @@ export const createChatService = (
           {
             answer: createFallbackAnswer(),
             sources: [],
+            evidence: {
+              items: [],
+            },
           },
           getContextResultScope([], contextPolicy)
         );
@@ -1013,6 +1022,9 @@ export const createChatService = (
           {
             answer: createFallbackAnswer(),
             sources: [],
+            evidence: {
+              items: [],
+            },
           },
           resultScope
         );
@@ -1031,6 +1043,7 @@ export const createChatService = (
               ? sanitizedAnswer
               : createFallbackAnswer(),
           sources: selectedLexicalContexts.map(buildChatSource),
+          evidence: buildEvidencePacket(selectedLexicalContexts),
           indexingSummary: buildIndexingSummary(selectedLexicalContexts),
         },
         resultScope
@@ -1089,6 +1102,9 @@ export const createChatService = (
         {
           answer: createFallbackAnswer(),
           sources: [],
+          evidence: {
+            items: [],
+          },
         },
         resultScope
       );
@@ -1105,6 +1121,9 @@ export const createChatService = (
         {
           answer: createFallbackAnswer(),
           sources: [],
+          evidence: {
+            items: [],
+          },
         },
         resultScope
       );
@@ -1121,6 +1140,7 @@ export const createChatService = (
         answer:
           sanitizedAnswer.length > 0 ? sanitizedAnswer : createFallbackAnswer(),
         sources: selectedGroundingContexts.map(buildChatSource),
+        evidence: buildEvidencePacket(selectedGroundingContexts),
         indexingSummary: buildIndexingSummary(selectedGroundingContexts),
       },
       resultScope
