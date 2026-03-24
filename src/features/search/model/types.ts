@@ -1,23 +1,13 @@
 import type {
-  AssetAssertionKind,
   AssetAssertionMatch,
   AssetChunkMatch,
   AssetSummary,
 } from "@/features/assets/model/types";
+import type { EvidenceIndexingView } from "@/features/search/model/evidence";
 
 export type ContextResultScope = "preferred_only" | "fallback_expanded";
 
-export interface SearchResultIndexingView {
-  matchedLayer: "chunk" | "assertion" | "summary";
-  domain: AssetSummary["domain"];
-  documentClass: AssetSummary["documentClass"] | null;
-  sourceHost: string | null;
-  collectionKey: string | null;
-  aiVisibility: AssetSummary["aiVisibility"];
-  sourceKind: AssetSummary["sourceKind"] | null;
-  topics: string[];
-  assertionKind?: AssetAssertionKind | null | undefined;
-}
+export type SearchResultIndexingView = EvidenceIndexingView;
 
 export interface SearchChunkResultItem {
   kind: "chunk";

@@ -5,15 +5,9 @@ import type {
 } from "@/core/assets/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
-import type {
-  AssetAssertionKind,
-  AssetSummary,
-} from "@/features/assets/model/types";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
-import type {
-  SearchResult,
-  SearchResultIndexingView,
-} from "@/features/search/model/types";
+import type { EvidenceItem } from "@/features/search/model/evidence";
+import type { SearchResult } from "@/features/search/model/types";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
@@ -23,14 +17,16 @@ import {
   getContextResultScope,
   matchesContextPolicyAsset,
 } from "./context-policy";
+import {
+  buildAssertionEvidenceItem,
+  buildChunkEvidenceItem,
+  buildSummaryEvidenceItem,
+  toSearchResultItem,
+} from "./evidence";
 import { scoreAssetSummaryMatch } from "./summary-scoring";
 
 const SEARCHABLE_AI_VISIBILITY = ["allow"] as const;
 const SUMMARY_ONLY_AI_VISIBILITY = ["summary_only"] as const;
-
-interface DescriptorTopicsView {
-  topics?: string[] | undefined;
-}
 
 interface SearchServiceDependencies {
   getAssetRepository: (
@@ -96,7 +92,7 @@ const getAssertionMatches = async (
       ],
     });
   } catch {
-    // 这里对 lexical assertion 检索做兜底，避免长 query 时直接报错。
+    // 这里对 lexical assertion 检索做兜底，避免长 query 时报错。
     return [];
   }
 };
@@ -115,42 +111,84 @@ const withOptionalResultScope = <T extends SearchResult>(
   };
 };
 
-const parseDescriptorTopics = (descriptorJson: string | null): string[] => {
-  if (!descriptorJson) {
-    return [];
-  }
+const buildLexicalEvidence = (
+  query: string,
+  repositoryMatches: Awaited<ReturnType<typeof getSummaryMatches>>,
+  assertionMatches: Awaited<ReturnType<typeof getAssertionMatches>>,
+  contextPolicy?: ContextRetrievalPolicy
+): EvidenceItem[] => {
+  const orderedAssertionEvidence = assertionMatches
+    .map((match) =>
+      buildAssertionEvidenceItem(
+        match,
+        applyContextPolicyScore(
+          scoreAssetAssertionMatch(query, match),
+          match.asset,
+          contextPolicy
+        )
+      )
+    )
+    .filter((item) => matchesContextPolicyAsset(item.asset, contextPolicy))
+    .sort((left, right) => right.score - left.score);
+  const orderedSummaryEvidence = repositoryMatches
+    .map((match) =>
+      buildSummaryEvidenceItem(
+        match,
+        applyContextPolicyScore(
+          scoreAssetSummaryMatch(query, match),
+          match.asset,
+          contextPolicy
+        )
+      )
+    )
+    .filter((item) => matchesContextPolicyAsset(item.asset, contextPolicy))
+    .sort((left, right) => right.score - left.score);
 
-  try {
-    const parsed = JSON.parse(descriptorJson) as DescriptorTopicsView | null;
-
-    if (!parsed || !Array.isArray(parsed.topics)) {
-      return [];
-    }
-
-    return parsed.topics.filter(
-      (topic: unknown): topic is string => typeof topic === "string"
-    );
-  } catch {
-    return [];
-  }
+  return [...orderedAssertionEvidence, ...orderedSummaryEvidence].sort(
+    (left, right) => right.score - left.score
+  );
 };
 
-const buildSearchResultIndexing = (
-  asset: AssetSummary,
-  matchedLayer: SearchResultIndexingView["matchedLayer"],
-  assertionKind?: AssetAssertionKind
-): SearchResultIndexingView => {
-  return {
-    matchedLayer,
-    domain: asset.domain,
-    documentClass: asset.documentClass ?? null,
-    sourceHost: asset.sourceHost ?? null,
-    collectionKey: asset.collectionKey,
-    aiVisibility: asset.aiVisibility,
-    sourceKind: asset.sourceKind ?? null,
-    topics: parseDescriptorTopics(asset.descriptorJson),
-    assertionKind: assertionKind ?? null,
-  };
+const buildSemanticEvidence = (
+  query: string,
+  vectorMatches: Awaited<ReturnType<VectorStore["search"]>>,
+  chunkMatches: Awaited<
+    ReturnType<AssetSearchRepository["getChunkMatchesByVectorIds"]>
+  >,
+  summaryMatches: Awaited<ReturnType<typeof getSummaryMatches>>,
+  assertionMatches: Awaited<ReturnType<typeof getAssertionMatches>>,
+  contextPolicy?: ContextRetrievalPolicy
+): EvidenceItem[] => {
+  const chunkMatchMap = new Map(
+    chunkMatches.map((chunkMatch) => [chunkMatch.vectorId, chunkMatch])
+  );
+  const orderedChunkEvidence = vectorMatches
+    .map((match) => {
+      const chunk = chunkMatchMap.get(match.id);
+
+      if (!chunk || !chunk.vectorId) {
+        return null;
+      }
+
+      return buildChunkEvidenceItem(
+        chunk,
+        applyContextPolicyScore(match.score, chunk.asset, contextPolicy)
+      );
+    })
+    .filter((item) =>
+      item ? matchesContextPolicyAsset(item.asset, contextPolicy) : false
+    )
+    .filter((item): item is EvidenceItem => item !== null);
+
+  return [
+    ...orderedChunkEvidence,
+    ...buildLexicalEvidence(
+      query,
+      summaryMatches,
+      assertionMatches,
+      contextPolicy
+    ),
+  ].sort((left, right) => right.score - left.score);
 };
 
 // 这里集中资产语义搜索用例，便于后续扩展为混合检索或重排。
@@ -207,173 +245,56 @@ export const createSearchService = (
       contextPolicy
     );
 
+    let orderedEvidence: EvidenceItem[];
+
     if (!queryVector) {
-      const orderedAssertionMatches = assertionMatches
-        .map((match) => ({
-          kind: "assertion" as const,
-          score: applyContextPolicyScore(
-            scoreAssetAssertionMatch(query, match),
-            match.asset,
-            contextPolicy
-          ),
-          assertion: match,
-          indexing: buildSearchResultIndexing(
-            match.asset,
-            "assertion",
-            match.kind
-          ),
-        }))
-        .filter((match) =>
-          matchesContextPolicyAsset(match.assertion.asset, contextPolicy)
-        )
-        .sort((left, right) => right.score - left.score);
-      const orderedSummaryMatches = summaryMatches
-        .map((match) => ({
-          kind: "summary" as const,
-          score: applyContextPolicyScore(
-            scoreAssetSummaryMatch(query, match),
-            match.asset,
-            contextPolicy
-          ),
-          asset: match.asset,
-          summary: match.summary,
-          indexing: buildSearchResultIndexing(match.asset, "summary"),
-        }))
-        .filter((match) =>
-          matchesContextPolicyAsset(match.asset, contextPolicy)
-        )
-        .sort((left, right) => right.score - left.score);
-      const orderedMatches = [
-        ...orderedAssertionMatches,
-        ...orderedSummaryMatches,
-      ].sort((left, right) => right.score - left.score);
-      const pageItems = orderedMatches.slice(offset, offset + pageSize);
-      const resultScope = getContextResultScope(
-        pageItems.map((item) =>
-          item.kind === "assertion" ? item.assertion.asset : item.asset
-        ),
+      orderedEvidence = buildLexicalEvidence(
+        query,
+        summaryMatches,
+        assertionMatches,
         contextPolicy
       );
+    } else {
+      const vectorMatches = await vectorStore.search({
+        values: queryVector,
+        topK,
+      });
+      const chunkMatches =
+        vectorMatches.length > 0
+          ? await repository.getChunkMatchesByVectorIds(
+              vectorMatches.map((match) => match.id),
+              {
+                aiVisibility: [...SEARCHABLE_AI_VISIBILITY],
+              }
+            )
+          : [];
 
-      return withOptionalResultScope(
-        {
-          items: pageItems,
-          pagination: {
-            page,
-            pageSize,
-            total: orderedMatches.length,
-            totalPages:
-              orderedMatches.length === 0
-                ? 0
-                : Math.ceil(orderedMatches.length / pageSize),
-          },
-        },
-        resultScope
+      orderedEvidence = buildSemanticEvidence(
+        query,
+        vectorMatches,
+        chunkMatches,
+        summaryMatches,
+        assertionMatches,
+        contextPolicy
       );
     }
-
-    const vectorMatches = await vectorStore.search({
-      values: queryVector,
-      topK,
-    });
-    const chunkMatches =
-      vectorMatches.length > 0
-        ? await repository.getChunkMatchesByVectorIds(
-            vectorMatches.map((match) => match.id),
-            {
-              aiVisibility: [...SEARCHABLE_AI_VISIBILITY],
-            }
-          )
-        : [];
-    const chunkMatchMap = new Map(
-      chunkMatches.map((chunkMatch) => [chunkMatch.vectorId, chunkMatch])
-    );
-    const orderedChunkMatches = vectorMatches
-      .map((match) => {
-        const chunk = chunkMatchMap.get(match.id);
-
-        if (!chunk || !chunk.vectorId) {
-          return null;
-        }
-
-        return {
-          kind: "chunk" as const,
-          score: applyContextPolicyScore(
-            match.score,
-            chunk.asset,
-            contextPolicy
-          ),
-          chunk,
-          indexing: buildSearchResultIndexing(chunk.asset, "chunk"),
-        };
-      })
-      .filter((item) =>
-        item
-          ? matchesContextPolicyAsset(item.chunk.asset, contextPolicy)
-          : false
-      )
-      .filter((item): item is NonNullable<typeof item> => item !== null);
-    const orderedSummaryMatches = summaryMatches
-      .map((match) => ({
-        kind: "summary" as const,
-        score: applyContextPolicyScore(
-          scoreAssetSummaryMatch(query, match),
-          match.asset,
-          contextPolicy
-        ),
-        asset: match.asset,
-        summary: match.summary,
-        indexing: buildSearchResultIndexing(match.asset, "summary"),
-      }))
-      .filter((match) => matchesContextPolicyAsset(match.asset, contextPolicy))
-      .sort((left, right) => right.score - left.score);
-    const orderedAssertionMatches = assertionMatches
-      .map((match) => ({
-        kind: "assertion" as const,
-        score: applyContextPolicyScore(
-          scoreAssetAssertionMatch(query, match),
-          match.asset,
-          contextPolicy
-        ),
-        assertion: match,
-        indexing: buildSearchResultIndexing(
-          match.asset,
-          "assertion",
-          match.kind
-        ),
-      }))
-      .filter((match) =>
-        matchesContextPolicyAsset(match.assertion.asset, contextPolicy)
-      )
-      .sort((left, right) => right.score - left.score);
-    const orderedMatches = [
-      ...orderedChunkMatches,
-      ...orderedAssertionMatches,
-      ...orderedSummaryMatches,
-    ].sort((left, right) => right.score - left.score);
-    const pageItems = orderedMatches.slice(offset, offset + pageSize);
+    const pageItems = orderedEvidence.slice(offset, offset + pageSize);
     const resultScope = getContextResultScope(
-      pageItems.map((item) =>
-        item.kind === "chunk"
-          ? item.chunk.asset
-          : item.kind === "assertion"
-            ? item.assertion.asset
-            : item.asset
-      ),
+      pageItems.map((item) => item.asset),
       contextPolicy
     );
 
     return withOptionalResultScope(
       {
-        items: pageItems,
+        items: pageItems.map(toSearchResultItem),
         pagination: {
           page,
           pageSize,
-          total: orderedMatches.length,
+          total: orderedEvidence.length,
           totalPages:
-            orderedMatches.length === 0
+            orderedEvidence.length === 0
               ? 0
-              : Math.ceil(orderedMatches.length / pageSize),
+              : Math.ceil(orderedEvidence.length / pageSize),
         },
       },
       resultScope

@@ -2,14 +2,19 @@ import type { AIProvider } from "@/core/ai/ports";
 import type { AssetSearchRepository } from "@/core/assets/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
-import type { AssetSummary } from "@/features/assets/model/types";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
+import type { EvidenceItem } from "@/features/search/model/evidence";
 import { scoreAssetAssertionMatch } from "@/features/search/server/assertion-scoring";
 import {
   applyContextPolicyScore,
   getContextResultScope,
   matchesContextPolicyAsset,
 } from "@/features/search/server/context-policy";
+import {
+  buildAssertionEvidenceItem,
+  buildChunkEvidenceItem,
+  buildSummaryEvidenceItem,
+} from "@/features/search/server/evidence";
 import { scoreAssetSummaryMatch } from "@/features/search/server/summary-scoring";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
@@ -95,26 +100,6 @@ const buildPrompt = (question: string, sources: ChatSource[]): string => {
   ].join("\n");
 };
 
-const parseDescriptorTopics = (descriptorJson: string | null): string[] => {
-  if (!descriptorJson) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(descriptorJson) as DescriptorTopicsView | null;
-
-    if (!parsed || !Array.isArray(parsed.topics)) {
-      return [];
-    }
-
-    return parsed.topics.filter(
-      (topic: unknown): topic is string => typeof topic === "string"
-    );
-  } catch {
-    return [];
-  }
-};
-
 const collectUniqueLimited = (
   values: Array<string | null | undefined>,
   limit: number
@@ -140,12 +125,23 @@ const collectUniqueLimited = (
   return result;
 };
 
+const buildChatSource = (context: EvidenceItem): ChatSource => {
+  return {
+    sourceType: context.layer,
+    assetId: context.asset.id,
+    chunkId: context.chunkId,
+    title: context.asset.title,
+    sourceUrl: context.source.sourceUrl,
+    snippet: context.snippet,
+  };
+};
+
 const buildIndexingSummary = (
   contexts: GroundingContext[]
 ): AskLibraryIndexingSummary => {
   return {
     matchedLayers: collectUniqueLimited(
-      contexts.map((context) => context.source.sourceType),
+      contexts.map((context) => context.layer),
       3
     ) as Array<ChatSource["sourceType"]>,
     domains: collectUniqueLimited(
@@ -169,24 +165,13 @@ const buildIndexingSummary = (
       4
     ),
     topics: collectUniqueLimited(
-      contexts.flatMap((context) =>
-        parseDescriptorTopics(context.asset.descriptorJson)
-      ),
+      contexts.flatMap((context) => context.indexing.topics),
       6
     ),
   };
 };
 
-interface GroundingContext {
-  score: number;
-  source: ChatSource;
-  contentText: string;
-  asset: AssetSummary;
-}
-
-interface DescriptorTopicsView {
-  topics?: string[] | undefined;
-}
+type GroundingContext = EvidenceItem;
 
 const MIN_CONTEXT_TOKEN_LENGTH = 2;
 const MIN_CONTEXT_COVERAGE = 0.18;
@@ -284,8 +269,8 @@ const getContextQueryRelevance = (
     return 0.5;
   }
 
-  const title = context.source.title.toLowerCase();
-  const content = context.contentText.toLowerCase();
+  const title = context.asset.title.toLowerCase();
+  const content = context.text.toLowerCase();
   const combined = `${title}\n${content}`;
   const matchedTokens = getMatchedTokenCount(
     questionTokens,
@@ -316,7 +301,7 @@ const getContextSelectionScore = (
   return (
     context.score +
     getContextQueryRelevance(question, context) * 0.45 +
-    SOURCE_TYPE_PRIORITY[context.source.sourceType] * 0.01
+    SOURCE_TYPE_PRIORITY[context.layer] * 0.01
   );
 };
 
@@ -332,7 +317,7 @@ const getContextCoverage = (
 
   const contextTokens = new Set(
     contexts.flatMap((context) =>
-      tokenizeForCoverage(`${context.source.title} ${context.contentText}`)
+      tokenizeForCoverage(`${context.asset.title} ${context.text}`)
     )
   );
   const coveredTokenCount = questionTokens.filter((token) =>
@@ -439,22 +424,16 @@ const getAssertionGroundingContexts = async (
     .catch(() => []);
 
   return assertionMatches
-    .map((match) => ({
-      score: applyContextPolicyScore(
-        scoreAssetAssertionMatch(question, match),
-        match.asset,
-        contextPolicy
-      ),
-      source: {
-        sourceType: "assertion" as const,
-        assetId: match.asset.id,
-        title: match.asset.title,
-        sourceUrl: match.asset.sourceUrl,
-        snippet: match.text,
-      },
-      contentText: match.text,
-      asset: match.asset,
-    }))
+    .map((match) =>
+      buildAssertionEvidenceItem(
+        match,
+        applyContextPolicyScore(
+          scoreAssetAssertionMatch(question, match),
+          match.asset,
+          contextPolicy
+        )
+      )
+    )
     .filter((context) =>
       matchesContextPolicyAsset(context.asset, contextPolicy)
     )
@@ -480,19 +459,7 @@ const buildGroundingContexts = (
       return contexts;
     }
 
-    contexts.push({
-      source: {
-        sourceType: "chunk",
-        assetId: chunkMatch.asset.id,
-        chunkId: chunkMatch.id,
-        title: chunkMatch.asset.title,
-        sourceUrl: chunkMatch.asset.sourceUrl,
-        snippet: chunkMatch.textPreview,
-      },
-      score: match.score,
-      contentText: chunkMatch.contentText?.trim() || chunkMatch.textPreview,
-      asset: chunkMatch.asset,
-    });
+    contexts.push(buildChunkEvidenceItem(chunkMatch, match.score));
 
     return contexts;
   }, []);
@@ -505,18 +472,9 @@ const buildSummaryGroundingContexts = (
   >
 ): GroundingContext[] => {
   return summaryMatches
-    .map((match) => ({
-      score: scoreAssetSummaryMatch(question, match),
-      source: {
-        sourceType: "summary" as const,
-        assetId: match.asset.id,
-        title: match.asset.title,
-        sourceUrl: match.asset.sourceUrl,
-        snippet: match.summary,
-      },
-      contentText: match.summary,
-      asset: match.asset,
-    }))
+    .map((match) =>
+      buildSummaryEvidenceItem(match, scoreAssetSummaryMatch(question, match))
+    )
     .sort((left, right) => right.score - left.score);
 };
 
@@ -525,8 +483,8 @@ const buildChatPrompt = (
   contexts: GroundingContext[]
 ): string => {
   const promptSources = contexts.map((context) => ({
-    ...context.source,
-    snippet: context.contentText,
+    ...buildChatSource(context),
+    snippet: context.text,
   }));
 
   return buildPrompt(question, promptSources);
@@ -544,10 +502,7 @@ const compareGroundingContexts = (
     return rightSelectionScore - leftSelectionScore;
   }
 
-  return (
-    SOURCE_TYPE_PRIORITY[right.source.sourceType] -
-    SOURCE_TYPE_PRIORITY[left.source.sourceType]
-  );
+  return SOURCE_TYPE_PRIORITY[right.layer] - SOURCE_TYPE_PRIORITY[left.layer];
 };
 
 const normalizeComparableText = (value: string): string => {
@@ -800,7 +755,7 @@ const buildExtractiveFallbackAnswer = (
     return createFallbackAnswer();
   }
 
-  const excerpt = primaryContext.contentText
+  const excerpt = primaryContext.text
     .replace(/\s+/g, " ")
     .replace(/\[(S\d+)\]/g, "$1")
     .trim()
@@ -879,8 +834,7 @@ const selectGroundingContexts = (
     if (
       existingForAsset.some(
         (selectedContext) =>
-          selectedContext.source.sourceType === "chunk" &&
-          context.source.sourceType !== "chunk"
+          selectedContext.layer === "chunk" && context.layer !== "chunk"
       )
     ) {
       continue;
@@ -889,8 +843,7 @@ const selectGroundingContexts = (
     if (
       existingForAsset.some(
         (selectedContext) =>
-          selectedContext.source.sourceType === "assertion" &&
-          context.source.sourceType === "summary"
+          selectedContext.layer === "assertion" && context.layer === "summary"
       )
     ) {
       continue;
@@ -898,8 +851,8 @@ const selectGroundingContexts = (
 
     const contentKey = [
       context.asset.id,
-      context.source.sourceType,
-      normalizeComparableText(context.contentText).slice(0, 240),
+      context.layer,
+      normalizeComparableText(context.text).slice(0, 240),
     ].join(":");
 
     if (seenContentKeys.has(contentKey)) {
@@ -1077,7 +1030,7 @@ export const createChatService = (
             sanitizedAnswer.length > 0
               ? sanitizedAnswer
               : createFallbackAnswer(),
-          sources: selectedLexicalContexts.map((context) => context.source),
+          sources: selectedLexicalContexts.map(buildChatSource),
           indexingSummary: buildIndexingSummary(selectedLexicalContexts),
         },
         resultScope
@@ -1167,7 +1120,7 @@ export const createChatService = (
       {
         answer:
           sanitizedAnswer.length > 0 ? sanitizedAnswer : createFallbackAnswer(),
-        sources: selectedGroundingContexts.map((context) => context.source),
+        sources: selectedGroundingContexts.map(buildChatSource),
         indexingSummary: buildIndexingSummary(selectedGroundingContexts),
       },
       resultScope

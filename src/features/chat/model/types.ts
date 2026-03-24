@@ -1,7 +1,8 @@
+import type { EvidenceLayer } from "@/features/search/model/evidence";
 import type { ContextResultScope } from "@/features/search/model/types";
 
 export interface ChatSource {
-  sourceType: "chunk" | "summary" | "assertion";
+  sourceType: EvidenceLayer;
   assetId: string;
   chunkId?: string | undefined;
   title: string;
