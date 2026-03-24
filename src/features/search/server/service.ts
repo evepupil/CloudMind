@@ -20,6 +20,8 @@ import {
 import {
   buildAssertionEvidenceItem,
   buildChunkEvidenceItem,
+  buildEvidencePacket,
+  buildGroupedEvidence,
   buildSummaryEvidenceItem,
   toSearchResultItem,
 } from "./evidence";
@@ -205,9 +207,8 @@ export const createSearchService = (
     if (!query) {
       return {
         items: [],
-        evidence: {
-          items: [],
-        },
+        evidence: buildEvidencePacket([]),
+        groupedEvidence: [],
         pagination: {
           page: 1,
           pageSize: input.pageSize ?? 20,
@@ -290,9 +291,8 @@ export const createSearchService = (
     return withOptionalResultScope(
       {
         items: pageItems.map(toSearchResultItem),
-        evidence: {
-          items: pageItems,
-        },
+        evidence: buildEvidencePacket(pageItems),
+        groupedEvidence: buildGroupedEvidence(pageItems),
         pagination: {
           page,
           pageSize,

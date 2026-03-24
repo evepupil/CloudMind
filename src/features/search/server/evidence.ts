@@ -130,6 +130,96 @@ export const buildAssertionEvidenceItem = (
   };
 };
 
+const EVIDENCE_LAYER_PRIORITY: Record<EvidenceLayer, number> = {
+  chunk: 3,
+  assertion: 2,
+  summary: 1,
+};
+
+const normalizeEvidenceText = (value: string): string => {
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
+};
+
+const compareEvidenceItems = (
+  left: EvidenceItem,
+  right: EvidenceItem
+): number => {
+  if (right.score !== left.score) {
+    return right.score - left.score;
+  }
+
+  return (
+    EVIDENCE_LAYER_PRIORITY[right.layer] - EVIDENCE_LAYER_PRIORITY[left.layer]
+  );
+};
+
+export const buildGroupedEvidence = (items: EvidenceItem[]) => {
+  const grouped = new Map<
+    string,
+    {
+      asset: EvidenceItem["asset"];
+      matchedLayers: Set<EvidenceLayer>;
+      items: EvidenceItem[];
+      topScore: number;
+      seenKeys: Set<string>;
+    }
+  >();
+
+  for (const item of items) {
+    const existingGroup = grouped.get(item.asset.id);
+    const dedupeKey = [
+      item.asset.id,
+      item.layer,
+      normalizeEvidenceText(item.text).slice(0, 240),
+    ].join(":");
+
+    if (!existingGroup) {
+      grouped.set(item.asset.id, {
+        asset: item.asset,
+        matchedLayers: new Set([item.layer]),
+        items: [item],
+        topScore: item.score,
+        seenKeys: new Set([dedupeKey]),
+      });
+      continue;
+    }
+
+    existingGroup.matchedLayers.add(item.layer);
+    existingGroup.topScore = Math.max(existingGroup.topScore, item.score);
+
+    if (existingGroup.seenKeys.has(dedupeKey)) {
+      continue;
+    }
+
+    existingGroup.seenKeys.add(dedupeKey);
+    existingGroup.items.push(item);
+  }
+
+  return Array.from(grouped.values())
+    .map((group) => ({
+      asset: group.asset,
+      topScore: group.topScore,
+      matchedLayers: Array.from(group.matchedLayers).sort(
+        (left, right) =>
+          EVIDENCE_LAYER_PRIORITY[right] - EVIDENCE_LAYER_PRIORITY[left]
+      ),
+      items: [...group.items].sort(compareEvidenceItems),
+    }))
+    .sort((left, right) => {
+      if (right.topScore !== left.topScore) {
+        return right.topScore - left.topScore;
+      }
+
+      return right.items.length - left.items.length;
+    });
+};
+
+export const buildEvidencePacket = (items: EvidenceItem[]) => {
+  return {
+    items,
+  };
+};
+
 export const toSearchResultItem = (
   evidence: EvidenceItem
 ): SearchResultItem => {

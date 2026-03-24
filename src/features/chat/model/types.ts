@@ -1,5 +1,8 @@
-import type { EvidenceLayer } from "@/features/search/model/evidence";
-import type { EvidencePacket } from "@/features/search/model/evidence";
+import type {
+  EvidenceLayer,
+  EvidencePacket,
+  GroupedEvidenceGroup,
+} from "@/features/search/model/evidence";
 import type { ContextResultScope } from "@/features/search/model/types";
 
 export interface ChatSource {
@@ -30,6 +33,7 @@ export interface AskLibraryResult {
   answer: string;
   sources: ChatSource[];
   evidence: EvidencePacket;
+  groupedEvidence: GroupedEvidenceGroup[];
   indexingSummary?: AskLibraryIndexingSummary | undefined;
   resultScope?: ContextResultScope | undefined;
 }

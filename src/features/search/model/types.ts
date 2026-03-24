@@ -6,6 +6,7 @@ import type {
 import type {
   EvidenceIndexingView,
   EvidencePacket,
+  GroupedEvidenceGroup,
 } from "@/features/search/model/evidence";
 
 export type ContextResultScope = "preferred_only" | "fallback_expanded";
@@ -49,6 +50,7 @@ export interface SearchPagination {
 export interface SearchResult {
   items: SearchResultItem[];
   evidence: EvidencePacket;
+  groupedEvidence: GroupedEvidenceGroup[];
   pagination: SearchPagination;
   resultScope?: ContextResultScope | undefined;
 }

@@ -95,6 +95,85 @@ describe("chat routes", () => {
           },
         ],
       },
+      groupedEvidence: [
+        {
+          asset: {
+            id: "asset-1",
+            type: "note",
+            title: "Asset 1",
+            summary: "Summary 1",
+            sourceUrl: "https://example.com/cloudmind",
+            sourceKind: "manual",
+            status: "ready",
+            domain: "engineering",
+            sensitivity: "internal",
+            aiVisibility: "allow",
+            retrievalPriority: 10,
+            documentClass: "design_doc",
+            sourceHost: "example.com",
+            collectionKey: "inbox:notes",
+            capturedAt: "2026-03-20T00:00:00.000Z",
+            descriptorJson: null,
+            createdAt: "2026-03-20T00:00:00.000Z",
+            updatedAt: "2026-03-20T00:00:00.000Z",
+          },
+          topScore: 0.96,
+          matchedLayers: ["chunk"],
+          items: [
+            {
+              id: "chunk:chunk-1",
+              layer: "chunk",
+              score: 0.96,
+              text: "Source snippet 1 full body",
+              snippet: "Source snippet 1",
+              chunkId: "chunk-1",
+              chunkIndex: 0,
+              vectorId: "asset-1:0",
+              source: {
+                sourceUrl: "https://example.com/cloudmind",
+                sourceKind: "manual",
+                sourceHost: "example.com",
+                capturedAt: "2026-03-20T00:00:00.000Z",
+              },
+              indexing: {
+                matchedLayer: "chunk",
+                domain: "engineering",
+                documentClass: "design_doc",
+                sourceHost: "example.com",
+                collectionKey: "inbox:notes",
+                aiVisibility: "allow",
+                sourceKind: "manual",
+                topics: ["cloudmind"],
+                assertionKind: null,
+              },
+              visibility: {
+                aiVisibility: "allow",
+                sensitivity: "internal",
+              },
+              asset: {
+                id: "asset-1",
+                type: "note",
+                title: "Asset 1",
+                summary: "Summary 1",
+                sourceUrl: "https://example.com/cloudmind",
+                sourceKind: "manual",
+                status: "ready",
+                domain: "engineering",
+                sensitivity: "internal",
+                aiVisibility: "allow",
+                retrievalPriority: 10,
+                documentClass: "design_doc",
+                sourceHost: "example.com",
+                collectionKey: "inbox:notes",
+                capturedAt: "2026-03-20T00:00:00.000Z",
+                descriptorJson: null,
+                createdAt: "2026-03-20T00:00:00.000Z",
+                updatedAt: "2026-03-20T00:00:00.000Z",
+              },
+            },
+          ],
+        },
+      ],
     });
 
     const response = await app.request(
@@ -136,6 +215,21 @@ describe("chat routes", () => {
           }),
         ],
       },
+      groupedEvidence: [
+        {
+          asset: expect.objectContaining({
+            id: "asset-1",
+          }),
+          topScore: 0.96,
+          matchedLayers: ["chunk"],
+          items: [
+            expect.objectContaining({
+              id: "chunk:chunk-1",
+              layer: "chunk",
+            }),
+          ],
+        },
+      ],
     });
     expect(chatService.askLibrary).toHaveBeenCalledWith(env, {
       question: "What does CloudMind emphasize?",

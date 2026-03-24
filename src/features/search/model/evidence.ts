@@ -49,6 +49,13 @@ export interface EvidenceItem {
   sourceChunkIndex?: number | null | undefined;
 }
 
+export interface GroupedEvidenceGroup {
+  asset: AssetSummary;
+  topScore: number;
+  matchedLayers: EvidenceLayer[];
+  items: EvidenceItem[];
+}
+
 export interface EvidencePacket {
   items: EvidenceItem[];
 }

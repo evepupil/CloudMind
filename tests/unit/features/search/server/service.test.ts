@@ -416,6 +416,35 @@ describe("search service", () => {
           }),
         ],
       },
+      groupedEvidence: [
+        {
+          asset: expect.objectContaining({
+            id: "asset-1",
+            title: "CloudMind Asset 1",
+          }),
+          topScore: 0.95,
+          matchedLayers: ["chunk"],
+          items: [
+            expect.objectContaining({
+              id: "chunk:chunk-1",
+              layer: "chunk",
+            }),
+          ],
+        },
+        {
+          asset: expect.objectContaining({
+            id: "asset-summary-1",
+          }),
+          topScore: expect.any(Number),
+          matchedLayers: ["summary"],
+          items: [
+            expect.objectContaining({
+              id: "summary:asset-summary-1",
+              layer: "summary",
+            }),
+          ],
+        },
+      ],
       pagination: {
         page: 1,
         pageSize: 2,
@@ -516,6 +545,21 @@ describe("search service", () => {
           }),
         ],
       },
+      groupedEvidence: [
+        {
+          asset: expect.objectContaining({
+            id: "asset-summary-1",
+          }),
+          topScore: expect.any(Number),
+          matchedLayers: ["summary"],
+          items: [
+            expect.objectContaining({
+              id: "summary:asset-summary-1",
+              layer: "summary",
+            }),
+          ],
+        },
+      ],
       pagination: {
         page: 1,
         pageSize: 20,

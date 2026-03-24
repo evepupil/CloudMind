@@ -13,6 +13,8 @@ import {
 import {
   buildAssertionEvidenceItem,
   buildChunkEvidenceItem,
+  buildEvidencePacket,
+  buildGroupedEvidence,
   buildSummaryEvidenceItem,
 } from "@/features/search/server/evidence";
 import { scoreAssetSummaryMatch } from "@/features/search/server/summary-scoring";
@@ -133,12 +135,6 @@ const buildChatSource = (context: EvidenceItem): ChatSource => {
     title: context.asset.title,
     sourceUrl: context.source.sourceUrl,
     snippet: context.snippet,
-  };
-};
-
-const buildEvidencePacket = (contexts: GroundingContext[]) => {
-  return {
-    items: contexts,
   };
 };
 
@@ -998,9 +994,8 @@ export const createChatService = (
           {
             answer: createFallbackAnswer(),
             sources: [],
-            evidence: {
-              items: [],
-            },
+            evidence: buildEvidencePacket([]),
+            groupedEvidence: [],
           },
           getContextResultScope([], contextPolicy)
         );
@@ -1022,9 +1017,8 @@ export const createChatService = (
           {
             answer: createFallbackAnswer(),
             sources: [],
-            evidence: {
-              items: [],
-            },
+            evidence: buildEvidencePacket([]),
+            groupedEvidence: [],
           },
           resultScope
         );
@@ -1044,6 +1038,7 @@ export const createChatService = (
               : createFallbackAnswer(),
           sources: selectedLexicalContexts.map(buildChatSource),
           evidence: buildEvidencePacket(selectedLexicalContexts),
+          groupedEvidence: buildGroupedEvidence(selectedLexicalContexts),
           indexingSummary: buildIndexingSummary(selectedLexicalContexts),
         },
         resultScope
@@ -1102,9 +1097,8 @@ export const createChatService = (
         {
           answer: createFallbackAnswer(),
           sources: [],
-          evidence: {
-            items: [],
-          },
+          evidence: buildEvidencePacket([]),
+          groupedEvidence: [],
         },
         resultScope
       );
@@ -1121,9 +1115,8 @@ export const createChatService = (
         {
           answer: createFallbackAnswer(),
           sources: [],
-          evidence: {
-            items: [],
-          },
+          evidence: buildEvidencePacket([]),
+          groupedEvidence: [],
         },
         resultScope
       );
@@ -1141,6 +1134,7 @@ export const createChatService = (
           sanitizedAnswer.length > 0 ? sanitizedAnswer : createFallbackAnswer(),
         sources: selectedGroundingContexts.map(buildChatSource),
         evidence: buildEvidencePacket(selectedGroundingContexts),
+        groupedEvidence: buildGroupedEvidence(selectedGroundingContexts),
         indexingSummary: buildIndexingSummary(selectedGroundingContexts),
       },
       resultScope

@@ -784,6 +784,21 @@ describe("chat service", () => {
           }),
         ],
       },
+      groupedEvidence: [
+        {
+          asset: expect.objectContaining({
+            id: "asset-1",
+          }),
+          topScore: 0.97,
+          matchedLayers: ["chunk"],
+          items: [
+            expect.objectContaining({
+              id: "chunk:chunk-1",
+              layer: "chunk",
+            }),
+          ],
+        },
+      ],
       indexingSummary: {
         matchedLayers: ["chunk"],
         domains: ["engineering"],
@@ -841,6 +856,7 @@ describe("chat service", () => {
       evidence: {
         items: [],
       },
+      groupedEvidence: [],
     });
     expect(aiProvider.generateText).not.toHaveBeenCalled();
   });
@@ -906,6 +922,21 @@ describe("chat service", () => {
           }),
         ],
       },
+      groupedEvidence: [
+        {
+          asset: expect.objectContaining({
+            id: "asset-summary-only-1",
+          }),
+          topScore: expect.any(Number),
+          matchedLayers: ["summary"],
+          items: [
+            expect.objectContaining({
+              id: "summary:asset-summary-only-1",
+              layer: "summary",
+            }),
+          ],
+        },
+      ],
       indexingSummary: {
         matchedLayers: ["summary"],
         domains: ["engineering"],
@@ -956,6 +987,7 @@ describe("chat service", () => {
       evidence: {
         items: [],
       },
+      groupedEvidence: [],
     });
     expect(aiProvider.generateText).not.toHaveBeenCalled();
   });
@@ -1403,6 +1435,21 @@ describe("chat service", () => {
           }),
         ],
       },
+      groupedEvidence: [
+        {
+          asset: expect.objectContaining({
+            id: "asset-engineering-1",
+          }),
+          topScore: expect.any(Number),
+          matchedLayers: ["chunk"],
+          items: [
+            expect.objectContaining({
+              id: "chunk:engineering-chunk-1",
+              layer: "chunk",
+            }),
+          ],
+        },
+      ],
       indexingSummary: {
         matchedLayers: ["chunk"],
         domains: ["engineering"],
@@ -1522,6 +1569,7 @@ describe("chat service", () => {
       evidence: {
         items: [],
       },
+      groupedEvidence: [],
       resultScope: "preferred_only",
     });
     expect(aiProvider.generateText).not.toHaveBeenCalled();
