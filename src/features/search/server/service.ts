@@ -205,6 +205,9 @@ export const createSearchService = (
     if (!query) {
       return {
         items: [],
+        evidence: {
+          items: [],
+        },
         pagination: {
           page: 1,
           pageSize: input.pageSize ?? 20,
@@ -287,6 +290,9 @@ export const createSearchService = (
     return withOptionalResultScope(
       {
         items: pageItems.map(toSearchResultItem),
+        evidence: {
+          items: pageItems,
+        },
         pagination: {
           page,
           pageSize,

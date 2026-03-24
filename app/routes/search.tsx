@@ -18,6 +18,9 @@ export default createRoute(async (context) => {
         })
       : {
           items: [],
+          evidence: {
+            items: [],
+          },
           pagination: {
             page: 1,
             pageSize: 20,

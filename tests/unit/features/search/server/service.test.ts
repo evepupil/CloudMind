@@ -393,6 +393,29 @@ describe("search service", () => {
           summary: "Summary-only retrieval result",
         },
       ],
+      evidence: {
+        items: [
+          expect.objectContaining({
+            id: "chunk:chunk-1",
+            layer: "chunk",
+            score: 0.95,
+            text: "Semantic preview 1",
+            snippet: "Semantic preview 1",
+            asset: expect.objectContaining({
+              id: "asset-1",
+              title: "CloudMind Asset 1",
+            }),
+          }),
+          expect.objectContaining({
+            id: "summary:asset-summary-1",
+            layer: "summary",
+            text: "Summary-only retrieval result",
+            asset: expect.objectContaining({
+              id: "asset-summary-1",
+            }),
+          }),
+        ],
+      },
       pagination: {
         page: 1,
         pageSize: 2,
@@ -481,6 +504,18 @@ describe("search service", () => {
           summary: "Summary-only retrieval result",
         },
       ],
+      evidence: {
+        items: [
+          expect.objectContaining({
+            id: "summary:asset-summary-1",
+            layer: "summary",
+            text: "Summary-only retrieval result",
+            asset: expect.objectContaining({
+              id: "asset-summary-1",
+            }),
+          }),
+        ],
+      },
       pagination: {
         page: 1,
         pageSize: 20,

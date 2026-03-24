@@ -3,7 +3,10 @@ import type {
   AssetChunkMatch,
   AssetSummary,
 } from "@/features/assets/model/types";
-import type { EvidenceIndexingView } from "@/features/search/model/evidence";
+import type {
+  EvidenceIndexingView,
+  EvidencePacket,
+} from "@/features/search/model/evidence";
 
 export type ContextResultScope = "preferred_only" | "fallback_expanded";
 
@@ -45,6 +48,7 @@ export interface SearchPagination {
 
 export interface SearchResult {
   items: SearchResultItem[];
+  evidence: EvidencePacket;
   pagination: SearchPagination;
   resultScope?: ContextResultScope | undefined;
 }
