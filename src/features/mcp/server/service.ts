@@ -253,6 +253,21 @@ const cloudMindInvocationGuidance =
 const contextFallbackGuidance =
   "Prefer allowFallback=false first. If results are insufficient, rerun with allowFallback=true only when broader retrieval still matches the user's intent.";
 
+const retrievalFirstGuidance =
+  "Prefer retrieval-first usage: call search_assets or " +
+  "search_assets_for_context first, treat groupedEvidence as the primary " +
+  "view, and use get_asset only when you need to inspect one asset in " +
+  "detail.";
+
+const groupedEvidenceGuidance =
+  "Primary retrieval view: groupedEvidence ranks asset groups and explains " +
+  "why each asset matched. Use items and evidence.items only for drill-down.";
+
+const askLibraryDeprioritizedGuidance =
+  "This is a convenience summary tool. Prefer search_assets* plus get_asset " +
+  "when you need final answer control, citation control, or multi-step tool " +
+  "planning.";
+
 // 这里集中注册 MCP tools，避免在 route 层重复拼装业务调用与错误处理。
 export const createMcpServer = (
   bindings: AppBindings | undefined
@@ -333,7 +348,10 @@ export const createMcpServer = (
     {
       title: "Search Assets",
       description:
-        "Search the library with semantic retrieval and return matched chunks. " +
+        "Search the library with semantic retrieval and return evidence-rich " +
+        "results for retrieval-first workflows. " +
+        `${groupedEvidenceGuidance} ` +
+        `${retrievalFirstGuidance} ` +
         cloudMindInvocationGuidance,
       inputSchema: searchAssetsInputSchema,
     },
@@ -353,7 +371,10 @@ export const createMcpServer = (
     {
       title: "Search Assets For Context",
       description:
-        "Search the library with context-aware retrieval weighting for AI clients. " +
+        "Search the library with context-aware retrieval weighting for AI " +
+        "clients in retrieval-first workflows. " +
+        `${groupedEvidenceGuidance} ` +
+        `${retrievalFirstGuidance} ` +
         `${cloudMindInvocationGuidance} ` +
         `${contextFallbackGuidance} Available profiles: ${contextProfileDescriptions}`,
       inputSchema: searchAssetsForContextInputSchema,
@@ -379,7 +400,9 @@ export const createMcpServer = (
     "get_asset",
     {
       title: "Get Asset",
-      description: "Fetch one asset detail by ID.",
+      description:
+        "Fetch one asset detail by ID. Use this after search_assets* when " +
+        "you need to inspect a selected asset in detail.",
       inputSchema: getAssetInputSchema,
     },
     async (input) => {
@@ -529,7 +552,9 @@ export const createMcpServer = (
     {
       title: "Ask Library",
       description:
-        "Answer a question using grounded evidence from the CloudMind library. " +
+        "Generate a quick grounded summary from the CloudMind library. " +
+        `${askLibraryDeprioritizedGuidance} ` +
+        `${retrievalFirstGuidance} ` +
         cloudMindInvocationGuidance,
       inputSchema: askLibraryInputSchema,
     },
@@ -549,7 +574,10 @@ export const createMcpServer = (
     {
       title: "Ask Library For Context",
       description:
-        "Answer a question using context-aware retrieval weighting for AI clients. " +
+        "Generate a quick grounded summary using context-aware retrieval " +
+        "weighting for AI clients. " +
+        `${askLibraryDeprioritizedGuidance} ` +
+        `${retrievalFirstGuidance} ` +
         `${cloudMindInvocationGuidance} ` +
         `${contextFallbackGuidance} Available profiles: ${contextProfileDescriptions}`,
       inputSchema: askLibraryForContextInputSchema,

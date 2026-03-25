@@ -689,6 +689,26 @@ describe("mcp routes", () => {
       "ask_library",
       "ask_library_for_context",
     ]);
+
+    const toolsByName = Object.fromEntries(
+      result.tools.map((tool) => [tool.name, tool])
+    );
+
+    expect(toolsByName.search_assets?.description).toContain(
+      "groupedEvidence as the primary view"
+    );
+    expect(toolsByName.search_assets_for_context?.description).toContain(
+      "retrieval-first workflows"
+    );
+    expect(toolsByName.get_asset?.description).toContain(
+      "after search_assets*"
+    );
+    expect(toolsByName.ask_library?.description).toContain(
+      "convenience summary tool"
+    );
+    expect(toolsByName.ask_library_for_context?.description).toContain(
+      "Prefer search_assets* plus get_asset"
+    );
   });
 
   it("save_asset ingests text content through the existing ingest service", async () => {
