@@ -778,6 +778,11 @@ describe("chat service", () => {
           expect.objectContaining({
             id: "chunk:chunk-1",
             layer: "chunk",
+            matchReasons: expect.arrayContaining([
+              expect.objectContaining({
+                code: "semantic_match",
+              }),
+            ]),
             asset: expect.objectContaining({
               id: "asset-1",
             }),
@@ -792,6 +797,10 @@ describe("chat service", () => {
           assetScore: expect.any(Number),
           topScore: 0.97,
           matchedLayers: ["chunk"],
+          groupSummary: expect.objectContaining({
+            headline: expect.any(String),
+            bullets: expect.any(Array),
+          }),
           primaryEvidence: expect.objectContaining({
             id: "chunk:chunk-1",
             layer: "chunk",
@@ -921,6 +930,11 @@ describe("chat service", () => {
           expect.objectContaining({
             id: "summary:asset-summary-only-1",
             layer: "summary",
+            matchReasons: expect.arrayContaining([
+              expect.objectContaining({
+                code: "summary_match",
+              }),
+            ]),
             asset: expect.objectContaining({
               id: "asset-summary-only-1",
             }),
@@ -935,6 +949,10 @@ describe("chat service", () => {
           assetScore: expect.any(Number),
           topScore: expect.any(Number),
           matchedLayers: ["summary"],
+          groupSummary: expect.objectContaining({
+            headline: expect.any(String),
+            bullets: expect.any(Array),
+          }),
           primaryEvidence: expect.objectContaining({
             id: "summary:asset-summary-only-1",
             layer: "summary",
@@ -1439,6 +1457,11 @@ describe("chat service", () => {
           expect.objectContaining({
             id: "chunk:engineering-chunk-1",
             layer: "chunk",
+            matchReasons: expect.arrayContaining([
+              expect.objectContaining({
+                code: "semantic_match",
+              }),
+            ]),
             asset: expect.objectContaining({
               id: "asset-engineering-1",
             }),
@@ -1453,6 +1476,10 @@ describe("chat service", () => {
           assetScore: expect.any(Number),
           topScore: expect.any(Number),
           matchedLayers: ["chunk"],
+          groupSummary: expect.objectContaining({
+            headline: expect.any(String),
+            bullets: expect.any(Array),
+          }),
           primaryEvidence: expect.objectContaining({
             id: "chunk:engineering-chunk-1",
             layer: "chunk",

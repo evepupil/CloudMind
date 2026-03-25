@@ -93,6 +93,13 @@ describe("search routes", () => {
               aiVisibility: "allow",
               sensitivity: "internal",
             },
+            matchReasons: [
+              {
+                code: "semantic_match",
+                label: "Semantic match",
+                detail: "Matched the query against embedded chunk content.",
+              },
+            ],
             indexing: {
               matchedLayer: "chunk",
               domain: "engineering",
@@ -152,6 +159,10 @@ describe("search routes", () => {
           assetScore: 0.96,
           topScore: 0.96,
           matchedLayers: ["chunk"],
+          groupSummary: {
+            headline: "Semantic match led this asset",
+            bullets: ["Primary signal: Semantic match."],
+          },
           primaryEvidence: {
             id: "chunk:chunk-1",
             layer: "chunk",
@@ -171,6 +182,13 @@ describe("search routes", () => {
               aiVisibility: "allow",
               sensitivity: "internal",
             },
+            matchReasons: [
+              {
+                code: "semantic_match",
+                label: "Semantic match",
+                detail: "Matched the query against embedded chunk content.",
+              },
+            ],
             indexing: {
               matchedLayer: "chunk",
               domain: "engineering",
@@ -223,6 +241,13 @@ describe("search routes", () => {
                 aiVisibility: "allow",
                 sensitivity: "internal",
               },
+              matchReasons: [
+                {
+                  code: "semantic_match",
+                  label: "Semantic match",
+                  detail: "Matched the query against embedded chunk content.",
+                },
+              ],
               indexing: {
                 matchedLayer: "chunk",
                 domain: "engineering",
@@ -307,6 +332,11 @@ describe("search routes", () => {
             id: "chunk:chunk-1",
             layer: "chunk",
             score: 0.96,
+            matchReasons: expect.arrayContaining([
+              expect.objectContaining({
+                code: "semantic_match",
+              }),
+            ]),
             asset: expect.objectContaining({
               id: "asset-search-1",
             }),
@@ -321,6 +351,10 @@ describe("search routes", () => {
           assetScore: 0.96,
           topScore: 0.96,
           matchedLayers: ["chunk"],
+          groupSummary: expect.objectContaining({
+            headline: expect.any(String),
+            bullets: expect.any(Array),
+          }),
           primaryEvidence: expect.objectContaining({
             id: "chunk:chunk-1",
             layer: "chunk",

@@ -11,6 +11,7 @@ import {
   matchesContextPolicyAsset,
 } from "@/features/search/server/context-policy";
 import {
+  annotateEvidenceMatchReasons,
   buildAssertionEvidenceItem,
   buildChunkEvidenceItem,
   buildEvidencePacket,
@@ -75,6 +76,13 @@ const MIN_RELATIVE_CONTEXT_SCORE_RATIO = 0.42;
 const MIN_SECONDARY_ASSET_SCORE_RATIO = 0.65;
 const MAX_CONTEXTS_PER_ASSET = 2;
 const MIN_SECONDARY_CONTEXT_RELEVANCE = 0.22;
+
+const isProfileBoosted = (
+  context: GroundingContext,
+  contextPolicy: ContextRetrievalPolicy | undefined
+): boolean => {
+  return Boolean(contextPolicy?.boostedDomains.includes(context.asset.domain));
+};
 
 const buildPrompt = (question: string, sources: ChatSource[]): string => {
   const sourceBlocks = sources
@@ -400,6 +408,11 @@ const getSummaryGroundingContexts = async (
         contextPolicy
       ),
     }))
+    .map((context) =>
+      annotateEvidenceMatchReasons(context, {
+        profileBoosted: isProfileBoosted(context, contextPolicy),
+      })
+    )
     .filter((context) =>
       matchesContextPolicyAsset(context.asset, contextPolicy)
     );
@@ -436,6 +449,11 @@ const getAssertionGroundingContexts = async (
           contextPolicy
         )
       )
+    )
+    .map((context) =>
+      annotateEvidenceMatchReasons(context, {
+        profileBoosted: isProfileBoosted(context, contextPolicy),
+      })
     )
     .filter((context) =>
       matchesContextPolicyAsset(context.asset, contextPolicy)
@@ -1094,6 +1112,11 @@ export const createChatService = (
           contextPolicy
         ),
       }))
+      .map((context) =>
+        annotateEvidenceMatchReasons(context, {
+          profileBoosted: isProfileBoosted(context, contextPolicy),
+        })
+      )
       .filter((context) =>
         matchesContextPolicyAsset(context.asset, contextPolicy)
       );

@@ -173,6 +173,13 @@ const createSearchResult = (): SearchResult => {
             aiVisibility: "allow",
             sensitivity: "internal",
           },
+          matchReasons: [
+            {
+              code: "semantic_match",
+              label: "Semantic match",
+              detail: "Matched the query against embedded chunk content.",
+            },
+          ],
           asset: {
             id: "asset-1",
             type: "note",
@@ -217,6 +224,10 @@ const createSearchResult = (): SearchResult => {
         assetScore: 0.91,
         topScore: 0.91,
         matchedLayers: ["chunk"],
+        groupSummary: {
+          headline: "Semantic match led this asset",
+          bullets: ["Primary signal: Semantic match."],
+        },
         primaryEvidence: {
           id: "chunk:chunk-1",
           layer: "chunk",
@@ -247,6 +258,13 @@ const createSearchResult = (): SearchResult => {
             aiVisibility: "allow",
             sensitivity: "internal",
           },
+          matchReasons: [
+            {
+              code: "semantic_match",
+              label: "Semantic match",
+              detail: "Matched the query against embedded chunk content.",
+            },
+          ],
           asset: {
             id: "asset-1",
             type: "note",
@@ -297,6 +315,13 @@ const createSearchResult = (): SearchResult => {
               aiVisibility: "allow",
               sensitivity: "internal",
             },
+            matchReasons: [
+              {
+                code: "semantic_match",
+                label: "Semantic match",
+                detail: "Matched the query against embedded chunk content.",
+              },
+            ],
             asset: {
               id: "asset-1",
               type: "note",
@@ -373,6 +398,13 @@ const createAskLibraryResult = (): AskLibraryResult => {
             aiVisibility: "allow",
             sensitivity: "internal",
           },
+          matchReasons: [
+            {
+              code: "semantic_match",
+              label: "Semantic match",
+              detail: "Matched the query against embedded chunk content.",
+            },
+          ],
           asset: {
             id: "asset-1",
             type: "note",
@@ -421,6 +453,10 @@ const createAskLibraryResult = (): AskLibraryResult => {
         assetScore: 0.91,
         topScore: 0.91,
         matchedLayers: ["chunk"],
+        groupSummary: {
+          headline: "Semantic match led this asset",
+          bullets: ["Primary signal: Semantic match."],
+        },
         primaryEvidence: {
           id: "chunk:chunk-1",
           layer: "chunk",
@@ -451,6 +487,13 @@ const createAskLibraryResult = (): AskLibraryResult => {
             aiVisibility: "allow",
             sensitivity: "internal",
           },
+          matchReasons: [
+            {
+              code: "semantic_match",
+              label: "Semantic match",
+              detail: "Matched the query against embedded chunk content.",
+            },
+          ],
           asset: {
             id: "asset-1",
             type: "note",
@@ -503,6 +546,13 @@ const createAskLibraryResult = (): AskLibraryResult => {
               aiVisibility: "allow",
               sensitivity: "internal",
             },
+            matchReasons: [
+              {
+                code: "semantic_match",
+                label: "Semantic match",
+                detail: "Matched the query against embedded chunk content.",
+              },
+            ],
             asset: {
               id: "asset-1",
               type: "note",

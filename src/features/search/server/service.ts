@@ -18,6 +18,7 @@ import {
   matchesContextPolicyAsset,
 } from "./context-policy";
 import {
+  annotateEvidenceMatchReasons,
   buildAssertionEvidenceItem,
   buildChunkEvidenceItem,
   buildEvidencePacket,
@@ -131,6 +132,13 @@ const buildLexicalEvidence = (
         )
       )
     )
+    .map((item) =>
+      annotateEvidenceMatchReasons(item, {
+        profileBoosted: Boolean(
+          contextPolicy?.boostedDomains.includes(item.asset.domain)
+        ),
+      })
+    )
     .filter((item) => matchesContextPolicyAsset(item.asset, contextPolicy))
     .sort((left, right) => right.score - left.score);
   const orderedSummaryEvidence = repositoryMatches
@@ -143,6 +151,13 @@ const buildLexicalEvidence = (
           contextPolicy
         )
       )
+    )
+    .map((item) =>
+      annotateEvidenceMatchReasons(item, {
+        profileBoosted: Boolean(
+          contextPolicy?.boostedDomains.includes(item.asset.domain)
+        ),
+      })
     )
     .filter((item) => matchesContextPolicyAsset(item.asset, contextPolicy))
     .sort((left, right) => right.score - left.score);
@@ -178,6 +193,15 @@ const buildSemanticEvidence = (
         applyContextPolicyScore(match.score, chunk.asset, contextPolicy)
       );
     })
+    .map((item) =>
+      item
+        ? annotateEvidenceMatchReasons(item, {
+            profileBoosted: Boolean(
+              contextPolicy?.boostedDomains.includes(item.asset.domain)
+            ),
+          })
+        : null
+    )
     .filter((item) =>
       item ? matchesContextPolicyAsset(item.asset, contextPolicy) : false
     )

@@ -4,6 +4,13 @@ import type {
 } from "@/features/assets/model/types";
 
 export type EvidenceLayer = "chunk" | "assertion" | "summary";
+export type EvidenceMatchReasonCode =
+  | "semantic_match"
+  | "assertion_match"
+  | "summary_match"
+  | "profile_boosted"
+  | "recent_boosted"
+  | "high_priority_asset";
 
 export interface EvidenceSourceView {
   sourceUrl: string | null;
@@ -29,6 +36,12 @@ export interface EvidenceVisibilityView {
   sensitivity: AssetSummary["sensitivity"];
 }
 
+export interface EvidenceMatchReason {
+  code: EvidenceMatchReasonCode;
+  label: string;
+  detail: string;
+}
+
 export interface EvidenceItem {
   id: string;
   layer: EvidenceLayer;
@@ -47,6 +60,12 @@ export interface EvidenceItem {
   assertionKind?: AssetAssertionKind | null | undefined;
   confidence?: number | null | undefined;
   sourceChunkIndex?: number | null | undefined;
+  matchReasons: EvidenceMatchReason[];
+}
+
+export interface GroupedEvidenceSummary {
+  headline: string;
+  bullets: string[];
 }
 
 export interface GroupedEvidenceGroup {
@@ -55,6 +74,7 @@ export interface GroupedEvidenceGroup {
   topScore: number;
   matchedLayers: EvidenceLayer[];
   primaryEvidence: EvidenceItem;
+  groupSummary: GroupedEvidenceSummary;
   items: EvidenceItem[];
 }
 

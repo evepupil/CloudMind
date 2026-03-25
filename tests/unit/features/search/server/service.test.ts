@@ -501,6 +501,11 @@ describe("search service", () => {
             score: 0.95,
             text: "Semantic preview 1",
             snippet: "Semantic preview 1",
+            matchReasons: expect.arrayContaining([
+              expect.objectContaining({
+                code: "semantic_match",
+              }),
+            ]),
             asset: expect.objectContaining({
               id: "asset-1",
               title: "CloudMind Asset 1",
@@ -510,6 +515,11 @@ describe("search service", () => {
             id: "summary:asset-summary-1",
             layer: "summary",
             text: "Summary-only retrieval result",
+            matchReasons: expect.arrayContaining([
+              expect.objectContaining({
+                code: "summary_match",
+              }),
+            ]),
             asset: expect.objectContaining({
               id: "asset-summary-1",
             }),
@@ -529,6 +539,10 @@ describe("search service", () => {
             id: "chunk:chunk-1",
             layer: "chunk",
           }),
+          groupSummary: expect.objectContaining({
+            headline: expect.any(String),
+            bullets: expect.any(Array),
+          }),
           items: [
             expect.objectContaining({
               id: "chunk:chunk-1",
@@ -546,6 +560,10 @@ describe("search service", () => {
           primaryEvidence: expect.objectContaining({
             id: "summary:asset-summary-1",
             layer: "summary",
+          }),
+          groupSummary: expect.objectContaining({
+            headline: expect.any(String),
+            bullets: expect.any(Array),
           }),
           items: [
             expect.objectContaining({
@@ -649,6 +667,11 @@ describe("search service", () => {
             id: "summary:asset-summary-1",
             layer: "summary",
             text: "Summary-only retrieval result",
+            matchReasons: expect.arrayContaining([
+              expect.objectContaining({
+                code: "summary_match",
+              }),
+            ]),
             asset: expect.objectContaining({
               id: "asset-summary-1",
             }),
@@ -666,6 +689,10 @@ describe("search service", () => {
           primaryEvidence: expect.objectContaining({
             id: "summary:asset-summary-1",
             layer: "summary",
+          }),
+          groupSummary: expect.objectContaining({
+            headline: expect.any(String),
+            bullets: expect.any(Array),
           }),
           items: [
             expect.objectContaining({
@@ -829,6 +856,10 @@ describe("search service", () => {
       matchedLayers: ["chunk"],
       primaryEvidence: expect.objectContaining({
         id: "chunk:chunk-asset-a-1",
+      }),
+      groupSummary: expect.objectContaining({
+        headline: expect.any(String),
+        bullets: expect.any(Array),
       }),
       items: [
         expect.objectContaining({

@@ -8,6 +8,7 @@ import type {
   EvidenceIndexingView,
   EvidenceItem,
   EvidenceLayer,
+  EvidenceMatchReason,
 } from "@/features/search/model/evidence";
 import type { SearchResultItem } from "@/features/search/model/types";
 
@@ -71,6 +72,18 @@ const buildEvidenceVisibility = (asset: AssetSummary) => {
   };
 };
 
+const buildMatchReason = (
+  code: EvidenceMatchReason["code"],
+  label: string,
+  detail: string
+): EvidenceMatchReason => {
+  return {
+    code,
+    label,
+    detail,
+  };
+};
+
 export const buildChunkEvidenceItem = (
   chunk: AssetChunkMatch,
   score: number
@@ -88,6 +101,13 @@ export const buildChunkEvidenceItem = (
     chunkId: chunk.id,
     chunkIndex: chunk.chunkIndex,
     vectorId: chunk.vectorId,
+    matchReasons: [
+      buildMatchReason(
+        "semantic_match",
+        "Semantic match",
+        "Matched the query against embedded chunk content."
+      ),
+    ],
   };
 };
 
@@ -105,6 +125,13 @@ export const buildSummaryEvidenceItem = (
     visibility: buildEvidenceVisibility(match.asset),
     text: match.summary,
     snippet: match.summary,
+    matchReasons: [
+      buildMatchReason(
+        "summary_match",
+        "Summary match",
+        "Matched the query against the asset summary layer."
+      ),
+    ],
   };
 };
 
@@ -127,6 +154,13 @@ export const buildAssertionEvidenceItem = (
     assertionKind: match.kind,
     confidence: match.confidence,
     sourceChunkIndex: match.sourceChunkIndex,
+    matchReasons: [
+      buildMatchReason(
+        "assertion_match",
+        "Assertion match",
+        "Matched the query against structured assertion text."
+      ),
+    ],
   };
 };
 
@@ -189,6 +223,36 @@ const getRecencyBonus = (asset: EvidenceItem["asset"]): number => {
 
 const getAssetPriorityBonus = (asset: EvidenceItem["asset"]): number => {
   return clamp(asset.retrievalPriority / 200, -0.12, 0.18);
+};
+
+const getRecencyLabel = (daysSince: number): string => {
+  if (daysSince <= 7) {
+    return "Recent asset";
+  }
+
+  if (daysSince <= 30) {
+    return "Fresh asset";
+  }
+
+  return "Relatively recent asset";
+};
+
+const getDaysSinceReferenceDate = (
+  asset: EvidenceItem["asset"]
+): number | null => {
+  const referenceDate = asset.capturedAt ?? asset.updatedAt ?? asset.createdAt;
+
+  if (!referenceDate) {
+    return null;
+  }
+
+  const timestamp = Date.parse(referenceDate);
+
+  if (Number.isNaN(timestamp)) {
+    return null;
+  }
+
+  return (Date.now() - timestamp) / (1000 * 60 * 60 * 24);
 };
 
 const getLayerCoverageBonus = (matchedLayers: Set<EvidenceLayer>): number => {
@@ -301,6 +365,11 @@ export const buildGroupedEvidence = (items: EvidenceItem[]) => {
             EVIDENCE_LAYER_PRIORITY[right] - EVIDENCE_LAYER_PRIORITY[left]
         ),
         primaryEvidence: orderedItems[0] as EvidenceItem,
+        groupSummary: buildGroupSummary({
+          asset: group.asset,
+          items: orderedItems,
+          matchedLayers: group.matchedLayers,
+        }),
         items: orderedItems,
       };
     })
@@ -323,10 +392,107 @@ export const buildEvidencePacket = (items: EvidenceItem[]) => {
   };
 };
 
+export const annotateEvidenceMatchReasons = (
+  item: EvidenceItem,
+  options?: {
+    profileBoosted?: boolean;
+  }
+): EvidenceItem => {
+  const nextReasons = [...item.matchReasons];
+
+  if (options?.profileBoosted) {
+    nextReasons.push(
+      buildMatchReason(
+        "profile_boosted",
+        "Profile boosted",
+        "Boosted because the asset domain matches the active context profile."
+      )
+    );
+  }
+
+  if (getAssetPriorityBonus(item.asset) > 0.02) {
+    nextReasons.push(
+      buildMatchReason(
+        "high_priority_asset",
+        "High priority asset",
+        "Asset retrieval priority lifted this result in ranking."
+      )
+    );
+  }
+
+  const daysSince = getDaysSinceReferenceDate(item.asset);
+
+  if (daysSince !== null && getRecencyBonus(item.asset) > 0) {
+    nextReasons.push(
+      buildMatchReason(
+        "recent_boosted",
+        getRecencyLabel(daysSince),
+        "Recency contributed to the final ranking of this evidence."
+      )
+    );
+  }
+
+  return {
+    ...item,
+    matchReasons: nextReasons.filter(
+      (reason, index, reasons) =>
+        reasons.findIndex((candidate) => candidate.code === reason.code) ===
+        index
+    ),
+  };
+};
+
 export const flattenGroupedEvidence = (
   groups: ReturnType<typeof buildGroupedEvidence>
 ): EvidenceItem[] => {
   return groups.flatMap((group) => group.items);
+};
+
+const formatLayersForSummary = (layers: EvidenceLayer[]): string => {
+  return layers.map((layer) => layer.replace("_", " ")).join(", ");
+};
+
+const buildGroupSummary = (group: {
+  asset: EvidenceItem["asset"];
+  items: EvidenceItem[];
+  matchedLayers: Set<EvidenceLayer>;
+}) => {
+  const orderedItems = [...group.items].sort(compareEvidenceItems);
+  const primaryEvidence = orderedItems[0] as EvidenceItem;
+  const bullets = [
+    `Primary signal: ${primaryEvidence.matchReasons[0]?.label ?? "Match"}.`,
+  ];
+
+  if (group.items.length > 1) {
+    bullets.push(`Supported by ${group.items.length} evidence items.`);
+  }
+
+  if (group.matchedLayers.size > 1) {
+    bullets.push(
+      `Matched across multiple layers: ${formatLayersForSummary(
+        Array.from(group.matchedLayers).sort(
+          (left, right) =>
+            EVIDENCE_LAYER_PRIORITY[right] - EVIDENCE_LAYER_PRIORITY[left]
+        )
+      )}.`
+    );
+  }
+
+  const extraReasons = primaryEvidence.matchReasons
+    .slice(1)
+    .map((reason) => reason.label);
+
+  if (extraReasons.length > 0) {
+    bullets.push(`Additional boosts: ${extraReasons.join(", ")}.`);
+  }
+
+  return {
+    headline:
+      group.items.length > 1
+        ? `${primaryEvidence.matchReasons[0]?.label ?? "Match"} with supporting evidence`
+        : `${primaryEvidence.matchReasons[0]?.label ?? "Match"} led this asset`,
+    bullets,
+  };
 };
 
 export const toSearchResultItem = (

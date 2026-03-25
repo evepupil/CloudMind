@@ -72,6 +72,13 @@ describe("chat routes", () => {
               aiVisibility: "allow",
               sensitivity: "internal",
             },
+            matchReasons: [
+              {
+                code: "semantic_match",
+                label: "Semantic match",
+                detail: "Matched the query against embedded chunk content.",
+              },
+            ],
             asset: {
               id: "asset-1",
               type: "note",
@@ -120,6 +127,10 @@ describe("chat routes", () => {
           assetScore: 0.96,
           topScore: 0.96,
           matchedLayers: ["chunk"],
+          groupSummary: {
+            headline: "Semantic match led this asset",
+            bullets: ["Primary signal: Semantic match."],
+          },
           primaryEvidence: {
             id: "chunk:chunk-1",
             layer: "chunk",
@@ -150,6 +161,13 @@ describe("chat routes", () => {
               aiVisibility: "allow",
               sensitivity: "internal",
             },
+            matchReasons: [
+              {
+                code: "semantic_match",
+                label: "Semantic match",
+                detail: "Matched the query against embedded chunk content.",
+              },
+            ],
             asset: {
               id: "asset-1",
               type: "note",
@@ -202,6 +220,13 @@ describe("chat routes", () => {
                 aiVisibility: "allow",
                 sensitivity: "internal",
               },
+              matchReasons: [
+                {
+                  code: "semantic_match",
+                  label: "Semantic match",
+                  detail: "Matched the query against embedded chunk content.",
+                },
+              ],
               asset: {
                 id: "asset-1",
                 type: "note",
@@ -261,6 +286,11 @@ describe("chat routes", () => {
           expect.objectContaining({
             id: "chunk:chunk-1",
             layer: "chunk",
+            matchReasons: expect.arrayContaining([
+              expect.objectContaining({
+                code: "semantic_match",
+              }),
+            ]),
             asset: expect.objectContaining({
               id: "asset-1",
             }),
@@ -275,6 +305,10 @@ describe("chat routes", () => {
           assetScore: 0.96,
           topScore: 0.96,
           matchedLayers: ["chunk"],
+          groupSummary: expect.objectContaining({
+            headline: expect.any(String),
+            bullets: expect.any(Array),
+          }),
           primaryEvidence: expect.objectContaining({
             id: "chunk:chunk-1",
             layer: "chunk",

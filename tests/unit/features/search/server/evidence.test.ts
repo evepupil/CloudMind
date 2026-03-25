@@ -56,6 +56,13 @@ const createEvidenceItem = (
     chunkId: "chunk-1",
     chunkIndex: 0,
     vectorId: "vector-1",
+    matchReasons: [
+      {
+        code: "semantic_match",
+        label: "Semantic match",
+        detail: "Matched the query against embedded chunk content.",
+      },
+    ],
     ...overrides,
   };
 };
@@ -107,6 +114,10 @@ describe("buildGroupedEvidence", () => {
         id: "chunk:chunk-1",
         layer: "chunk",
       }),
+      groupSummary: expect.objectContaining({
+        headline: expect.any(String),
+        bullets: expect.any(Array),
+      }),
       items: [
         expect.objectContaining({
           id: "chunk:chunk-1",
@@ -129,6 +140,10 @@ describe("buildGroupedEvidence", () => {
       primaryEvidence: expect.objectContaining({
         id: "chunk:chunk-3",
         layer: "chunk",
+      }),
+      groupSummary: expect.objectContaining({
+        headline: expect.any(String),
+        bullets: expect.any(Array),
       }),
       items: [
         expect.objectContaining({

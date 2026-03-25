@@ -611,6 +611,43 @@ export const SearchPage = ({
                         {asset.summary ?? primaryEvidence.snippet}
                       </p>
 
+                      <article
+                        style={{
+                          padding: "12px 14px",
+                          borderRadius: "16px",
+                          background:
+                            "linear-gradient(135deg, rgba(234,244,255,0.92) 0%, rgba(255,255,255,0.92) 100%)",
+                          border: "1px solid rgba(94, 182, 255, 0.18)",
+                          marginBottom: "16px",
+                        }}
+                      >
+                        <p
+                          style={{
+                            margin: "0 0 8px",
+                            color: "#0b5cab",
+                            fontSize: "13px",
+                            fontWeight: 800,
+                          }}
+                        >
+                          {group.groupSummary.headline}
+                        </p>
+                        <div style={{ display: "grid", gap: "6px" }}>
+                          {group.groupSummary.bullets.map((bullet) => (
+                            <p
+                              key={`${asset.id}:summary:${bullet}`}
+                              style={{
+                                margin: 0,
+                                color: "#3b4757",
+                                fontSize: "13px",
+                                lineHeight: 1.65,
+                              }}
+                            >
+                              {bullet}
+                            </p>
+                          ))}
+                        </div>
+                      </article>
+
                       <div
                         style={{
                           display: "grid",
@@ -705,6 +742,32 @@ export const SearchPage = ({
                             >
                               {evidence.snippet}
                             </p>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: "8px",
+                                flexWrap: "wrap",
+                                marginTop: "10px",
+                              }}
+                            >
+                              {evidence.matchReasons.map((reason) => (
+                                <span
+                                  key={`${evidence.id}:reason:${reason.code}`}
+                                  title={reason.detail}
+                                  style={{
+                                    padding: "4px 8px",
+                                    borderRadius: "999px",
+                                    backgroundColor: "#ffffff",
+                                    border: "1px solid rgba(21, 33, 51, 0.08)",
+                                    color: "#4b5a6b",
+                                    fontSize: "11px",
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {reason.label}
+                                </span>
+                              ))}
+                            </div>
                           </article>
                         ))}
                       </div>
