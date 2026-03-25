@@ -789,8 +789,13 @@ describe("chat service", () => {
           asset: expect.objectContaining({
             id: "asset-1",
           }),
+          assetScore: expect.any(Number),
           topScore: 0.97,
           matchedLayers: ["chunk"],
+          primaryEvidence: expect.objectContaining({
+            id: "chunk:chunk-1",
+            layer: "chunk",
+          }),
           items: [
             expect.objectContaining({
               id: "chunk:chunk-1",
@@ -927,8 +932,13 @@ describe("chat service", () => {
           asset: expect.objectContaining({
             id: "asset-summary-only-1",
           }),
+          assetScore: expect.any(Number),
           topScore: expect.any(Number),
           matchedLayers: ["summary"],
+          primaryEvidence: expect.objectContaining({
+            id: "summary:asset-summary-only-1",
+            layer: "summary",
+          }),
           items: [
             expect.objectContaining({
               id: "summary:asset-summary-only-1",
@@ -1440,8 +1450,13 @@ describe("chat service", () => {
           asset: expect.objectContaining({
             id: "asset-engineering-1",
           }),
+          assetScore: expect.any(Number),
           topScore: expect.any(Number),
           matchedLayers: ["chunk"],
+          primaryEvidence: expect.objectContaining({
+            id: "chunk:engineering-chunk-1",
+            layer: "chunk",
+          }),
           items: [
             expect.objectContaining({
               id: "chunk:engineering-chunk-1",

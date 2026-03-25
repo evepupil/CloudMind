@@ -301,6 +301,106 @@ class AssertionFailureSearchRepository implements AssetSearchRepository {
   }
 }
 
+class DuplicateAssetSearchRepository implements AssetSearchRepository {
+  public async searchAssets(
+    _input: AssetSearchInput
+  ): Promise<AssetListResult> {
+    return {
+      items: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      },
+    };
+  }
+
+  public async getChunkMatchesByVectorIds(): Promise<AssetChunkMatch[]> {
+    return [
+      {
+        id: "chunk-asset-a-1",
+        chunkIndex: 0,
+        textPreview: "Primary retrieval note",
+        contentText: "Primary retrieval note full content",
+        vectorId: "asset-a:0",
+        asset: {
+          id: "asset-a",
+          type: "note",
+          title: "Asset A",
+          summary: "Primary asset summary",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "engineering",
+          sensitivity: "internal",
+          aiVisibility: "allow",
+          retrievalPriority: 20,
+          collectionKey: "engineering:notes",
+          capturedAt: "2026-03-24T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-24T00:00:00.000Z",
+          updatedAt: "2026-03-24T00:00:00.000Z",
+        },
+      },
+      {
+        id: "chunk-asset-a-2",
+        chunkIndex: 1,
+        textPreview: "Supporting retrieval note",
+        contentText: "Supporting retrieval note full content",
+        vectorId: "asset-a:1",
+        asset: {
+          id: "asset-a",
+          type: "note",
+          title: "Asset A",
+          summary: "Primary asset summary",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "engineering",
+          sensitivity: "internal",
+          aiVisibility: "allow",
+          retrievalPriority: 20,
+          collectionKey: "engineering:notes",
+          capturedAt: "2026-03-24T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-24T00:00:00.000Z",
+          updatedAt: "2026-03-24T00:00:00.000Z",
+        },
+      },
+      {
+        id: "chunk-asset-b-1",
+        chunkIndex: 0,
+        textPreview: "Secondary retrieval note",
+        contentText: "Secondary retrieval note full content",
+        vectorId: "asset-b:0",
+        asset: {
+          id: "asset-b",
+          type: "note",
+          title: "Asset B",
+          summary: "Secondary asset summary",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "engineering",
+          sensitivity: "internal",
+          aiVisibility: "allow",
+          retrievalPriority: 0,
+          collectionKey: "engineering:notes",
+          capturedAt: "2026-02-01T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-02-01T00:00:00.000Z",
+          updatedAt: "2026-02-01T00:00:00.000Z",
+        },
+      },
+    ];
+  }
+
+  public async searchAssetSummaries(): Promise<AssetSummaryMatch[]> {
+    return [];
+  }
+}
+
 const embeddingProvider: AIProvider = {
   generateText: vi.fn(async () => ({
     text: "",
@@ -422,8 +522,13 @@ describe("search service", () => {
             id: "asset-1",
             title: "CloudMind Asset 1",
           }),
+          assetScore: expect.any(Number),
           topScore: 0.95,
           matchedLayers: ["chunk"],
+          primaryEvidence: expect.objectContaining({
+            id: "chunk:chunk-1",
+            layer: "chunk",
+          }),
           items: [
             expect.objectContaining({
               id: "chunk:chunk-1",
@@ -435,8 +540,13 @@ describe("search service", () => {
           asset: expect.objectContaining({
             id: "asset-summary-1",
           }),
+          assetScore: expect.any(Number),
           topScore: expect.any(Number),
           matchedLayers: ["summary"],
+          primaryEvidence: expect.objectContaining({
+            id: "summary:asset-summary-1",
+            layer: "summary",
+          }),
           items: [
             expect.objectContaining({
               id: "summary:asset-summary-1",
@@ -550,8 +660,13 @@ describe("search service", () => {
           asset: expect.objectContaining({
             id: "asset-summary-1",
           }),
+          assetScore: expect.any(Number),
           topScore: expect.any(Number),
           matchedLayers: ["summary"],
+          primaryEvidence: expect.objectContaining({
+            id: "summary:asset-summary-1",
+            layer: "summary",
+          }),
           items: [
             expect.objectContaining({
               id: "summary:asset-summary-1",
@@ -664,6 +779,72 @@ describe("search service", () => {
       )
     ).toEqual(["engineering", "personal"]);
     expect(result.resultScope).toBe("fallback_expanded");
+  });
+
+  it("searchAssets paginates by asset group and keeps supporting evidence inside the same asset card", async () => {
+    const repository = new DuplicateAssetSearchRepository();
+    const service = createSearchService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(
+        new FixedVectorStore([
+          {
+            id: "asset-a:0",
+            score: 0.94,
+          },
+          {
+            id: "asset-a:1",
+            score: 0.88,
+          },
+          {
+            id: "asset-b:0",
+            score: 0.9,
+          },
+        ])
+      ),
+      getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+    });
+
+    const result = await service.searchAssets(
+      { APP_NAME: "cloudmind-test" },
+      {
+        query: "retrieval note",
+        page: 1,
+        pageSize: 1,
+      }
+    );
+
+    expect(result.pagination).toEqual({
+      page: 1,
+      pageSize: 1,
+      total: 2,
+      totalPages: 2,
+    });
+    expect(result.groupedEvidence).toHaveLength(1);
+    expect(result.groupedEvidence[0]).toEqual({
+      asset: expect.objectContaining({
+        id: "asset-a",
+      }),
+      assetScore: expect.any(Number),
+      topScore: 0.94,
+      matchedLayers: ["chunk"],
+      primaryEvidence: expect.objectContaining({
+        id: "chunk:chunk-asset-a-1",
+      }),
+      items: [
+        expect.objectContaining({
+          id: "chunk:chunk-asset-a-1",
+        }),
+        expect.objectContaining({
+          id: "chunk:chunk-asset-a-2",
+        }),
+      ],
+    });
+    expect(result.items).toHaveLength(2);
+    expect(
+      result.items.every(
+        (item) => item.kind === "chunk" && item.chunk.asset.id === "asset-a"
+      )
+    ).toBe(true);
   });
 
   it("searchAssets keeps working when assertion lexical search fails", async () => {

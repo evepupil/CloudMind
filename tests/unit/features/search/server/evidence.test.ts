@@ -100,8 +100,13 @@ describe("buildGroupedEvidence", () => {
       asset: expect.objectContaining({
         id: "asset-1",
       }),
+      assetScore: expect.any(Number),
       topScore: 0.95,
       matchedLayers: ["chunk", "summary"],
+      primaryEvidence: expect.objectContaining({
+        id: "chunk:chunk-1",
+        layer: "chunk",
+      }),
       items: [
         expect.objectContaining({
           id: "chunk:chunk-1",
@@ -118,8 +123,13 @@ describe("buildGroupedEvidence", () => {
       asset: expect.objectContaining({
         id: "asset-2",
       }),
+      assetScore: expect.any(Number),
       topScore: 0.82,
       matchedLayers: ["chunk"],
+      primaryEvidence: expect.objectContaining({
+        id: "chunk:chunk-3",
+        layer: "chunk",
+      }),
       items: [
         expect.objectContaining({
           id: "chunk:chunk-3",

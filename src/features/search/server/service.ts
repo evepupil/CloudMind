@@ -23,6 +23,7 @@ import {
   buildEvidencePacket,
   buildGroupedEvidence,
   buildSummaryEvidenceItem,
+  flattenGroupedEvidence,
   toSearchResultItem,
 } from "./evidence";
 import { scoreAssetSummaryMatch } from "./summary-scoring";
@@ -282,9 +283,11 @@ export const createSearchService = (
         contextPolicy
       );
     }
-    const pageItems = orderedEvidence.slice(offset, offset + pageSize);
+    const orderedGroups = buildGroupedEvidence(orderedEvidence);
+    const pageGroups = orderedGroups.slice(offset, offset + pageSize);
+    const pageItems = flattenGroupedEvidence(pageGroups);
     const resultScope = getContextResultScope(
-      pageItems.map((item) => item.asset),
+      pageGroups.map((group) => group.asset),
       contextPolicy
     );
 
@@ -292,15 +295,15 @@ export const createSearchService = (
       {
         items: pageItems.map(toSearchResultItem),
         evidence: buildEvidencePacket(pageItems),
-        groupedEvidence: buildGroupedEvidence(pageItems),
+        groupedEvidence: pageGroups,
         pagination: {
           page,
           pageSize,
-          total: orderedEvidence.length,
+          total: orderedGroups.length,
           totalPages:
-            orderedEvidence.length === 0
+            orderedGroups.length === 0
               ? 0
-              : Math.ceil(orderedEvidence.length / pageSize),
+              : Math.ceil(orderedGroups.length / pageSize),
         },
       },
       resultScope

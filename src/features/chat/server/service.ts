@@ -16,6 +16,7 @@ import {
   buildEvidencePacket,
   buildGroupedEvidence,
   buildSummaryEvidenceItem,
+  flattenGroupedEvidence,
 } from "@/features/search/server/evidence";
 import { scoreAssetSummaryMatch } from "@/features/search/server/summary-scoring";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
@@ -783,9 +784,31 @@ const selectGroundingContexts = (
     allowLowRelevanceSecondary?: boolean;
   }
 ): GroundingContext[] => {
-  const sortedContexts = [...contexts].sort((left, right) =>
-    compareGroundingContexts(question, left, right)
-  );
+  const groupedContexts = buildGroupedEvidence(contexts)
+    .map((group) => ({
+      ...group,
+      assetScore:
+        group.assetScore +
+        getContextQueryRelevance(question, group.primaryEvidence) * 0.18,
+      items: [...group.items].sort((left, right) =>
+        compareGroundingContexts(question, left, right)
+      ),
+      primaryEvidence: [...group.items].sort((left, right) =>
+        compareGroundingContexts(question, left, right)
+      )[0] as GroundingContext,
+    }))
+    .sort((left, right) => {
+      if (right.assetScore !== left.assetScore) {
+        return right.assetScore - left.assetScore;
+      }
+
+      return compareGroundingContexts(
+        question,
+        left.primaryEvidence,
+        right.primaryEvidence
+      );
+    });
+  const sortedContexts = flattenGroupedEvidence(groupedContexts);
   const selected: GroundingContext[] = [];
   const seenContentKeys = new Set<string>();
   const topSelectionScore = sortedContexts[0]

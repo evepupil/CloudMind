@@ -1,4 +1,5 @@
 import { PageShell } from "@/features/layout/components/page-shell";
+import type { EvidenceLayer } from "@/features/search/model/evidence";
 import type { SearchResult } from "@/features/search/model/types";
 
 const starterQueries = [
@@ -32,12 +33,12 @@ const formatLabel = (value: string): string => {
     .join(" ");
 };
 
-const getMatchLabel = (kind: SearchResult["items"][number]["kind"]): string => {
-  if (kind === "chunk") {
+const getEvidenceLayerLabel = (layer: EvidenceLayer): string => {
+  if (layer === "chunk") {
     return "Chunk match";
   }
 
-  if (kind === "assertion") {
+  if (layer === "assertion") {
     return "Assertion match";
   }
 
@@ -81,7 +82,7 @@ export const SearchPage = ({
 }) => {
   const trimmedQuery = query.trim();
   const hasQuery = trimmedQuery.length > 0;
-  const hasResults = result.items.length > 0;
+  const hasResults = result.groupedEvidence.length > 0;
 
   return (
     <PageShell
@@ -184,7 +185,7 @@ export const SearchPage = ({
                   fontSize: "13px",
                 }}
               >
-                {result.pagination.total} retrieval matches
+                {result.pagination.total} ranked assets
               </div>
             </div>
 
@@ -259,7 +260,7 @@ export const SearchPage = ({
                       fontWeight: 700,
                     }}
                   >
-                    Chunk + assertion + summary retrieval
+                    Asset-level rerank + grouped evidence
                   </span>
                 </div>
                 <span
@@ -388,38 +389,20 @@ export const SearchPage = ({
               </article>
             ) : (
               <div style={{ display: "grid", gap: "12px" }}>
-                {result.items.map((item, index) => {
-                  const scoreStyle = getScoreStyles(item.score);
-                  const asset =
-                    item.kind === "chunk"
-                      ? item.chunk.asset
-                      : item.kind === "assertion"
-                        ? item.assertion.asset
-                        : item.asset;
-                  const excerpt =
-                    item.kind === "chunk"
-                      ? item.chunk.textPreview
-                      : item.kind === "assertion"
-                        ? item.assertion.text
-                        : item.summary;
-                  const indexing = item.indexing;
+                {result.groupedEvidence.map((group, index) => {
+                  const asset = group.asset;
+                  const primaryEvidence = group.primaryEvidence;
+                  const scoreStyle = getScoreStyles(group.assetScore);
                   const indexingTags = [
-                    indexing.domain,
-                    indexing.documentClass,
-                    indexing.assertionKind,
-                    indexing.sourceHost,
-                    ...indexing.topics,
+                    asset.domain,
+                    asset.documentClass,
+                    asset.sourceHost,
+                    ...primaryEvidence.indexing.topics,
                   ].filter((value): value is string => Boolean(value?.trim()));
 
                   return (
                     <article
-                      key={
-                        item.kind === "chunk"
-                          ? item.chunk.id
-                          : item.kind === "assertion"
-                            ? `assertion:${item.assertion.id}`
-                            : `summary:${item.asset.id}`
-                      }
+                      key={asset.id}
                       style={{
                         padding: "18px 18px 20px",
                         borderRadius: "22px",
@@ -464,21 +447,6 @@ export const SearchPage = ({
                               style={{
                                 padding: "5px 8px",
                                 borderRadius: "999px",
-                                backgroundColor: "#f8f0ff",
-                                color: "#7a3fb2",
-                                border: "1px solid rgba(122, 63, 178, 0.16)",
-                                fontSize: "11px",
-                                fontWeight: 800,
-                                letterSpacing: "0.08em",
-                                textTransform: "uppercase",
-                              }}
-                            >
-                              {getMatchLabel(item.kind)}
-                            </span>
-                            <span
-                              style={{
-                                padding: "5px 8px",
-                                borderRadius: "999px",
                                 backgroundColor: scoreStyle.bg,
                                 color: scoreStyle.color,
                                 border: `1px solid ${scoreStyle.border}`,
@@ -490,6 +458,49 @@ export const SearchPage = ({
                             >
                               {scoreStyle.label}
                             </span>
+                            <span
+                              style={{
+                                padding: "5px 8px",
+                                borderRadius: "999px",
+                                backgroundColor: "#eef6ff",
+                                color: "#0b5cab",
+                                border: "1px solid rgba(94, 182, 255, 0.22)",
+                                fontSize: "11px",
+                                fontWeight: 800,
+                                letterSpacing: "0.08em",
+                                textTransform: "uppercase",
+                              }}
+                            >
+                              {group.items.length} evidence
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "8px",
+                              flexWrap: "wrap",
+                              marginBottom:
+                                indexingTags.length > 0 ? "8px" : "10px",
+                            }}
+                          >
+                            {group.matchedLayers.map((layer) => (
+                              <span
+                                key={`${asset.id}:layer:${layer}`}
+                                style={{
+                                  padding: "5px 8px",
+                                  borderRadius: "999px",
+                                  backgroundColor: "#f8f0ff",
+                                  color: "#7a3fb2",
+                                  border: "1px solid rgba(122, 63, 178, 0.16)",
+                                  fontSize: "11px",
+                                  fontWeight: 800,
+                                  letterSpacing: "0.08em",
+                                  textTransform: "uppercase",
+                                }}
+                              >
+                                {getEvidenceLayerLabel(layer)}
+                              </span>
+                            ))}
                           </div>
                           {indexingTags.length > 0 ? (
                             <div
@@ -502,7 +513,7 @@ export const SearchPage = ({
                             >
                               {indexingTags.map((tag) => (
                                 <span
-                                  key={`${asset.id}:${item.kind}:${tag}`}
+                                  key={`${asset.id}:group:${tag}`}
                                   style={{
                                     padding: "5px 8px",
                                     borderRadius: "999px",
@@ -545,7 +556,7 @@ export const SearchPage = ({
                               fontWeight: 800,
                             }}
                           >
-                            {formatScore(item.score)}
+                            {formatScore(group.assetScore)}
                           </span>
                           <span
                             style={{
@@ -553,7 +564,15 @@ export const SearchPage = ({
                               fontSize: "12px",
                             }}
                           >
-                            Match #{index + 1}
+                            Asset rank #{index + 1}
+                          </span>
+                          <span
+                            style={{
+                              color: "#6b7685",
+                              fontSize: "12px",
+                            }}
+                          >
+                            {`Top evidence ${formatScore(group.topScore)}`}
                           </span>
                         </div>
                       </div>
@@ -568,17 +587,12 @@ export const SearchPage = ({
                           fontSize: "13px",
                         }}
                       >
-                        {item.kind === "chunk" ? (
-                          <span>Chunk #{item.chunk.chunkIndex}</span>
-                        ) : item.kind === "assertion" ? (
-                          <span>Assertion #{item.assertion.assertionIndex}</span>
-                        ) : (
-                          <span>Summary-only access</span>
-                        )}
-                        <span>{`Layer: ${formatLabel(indexing.matchedLayer)}`}</span>
-                        <span>{`Visibility: ${formatLabel(indexing.aiVisibility)}`}</span>
-                        {indexing.collectionKey ? (
-                          <span>{`Collection: ${indexing.collectionKey}`}</span>
+                        <span>{`Primary: ${getEvidenceLayerLabel(primaryEvidence.layer)}`}</span>
+                        <span>
+                          {`Visibility: ${formatLabel(primaryEvidence.indexing.aiVisibility)}`}
+                        </span>
+                        {primaryEvidence.indexing.collectionKey ? (
+                          <span>{`Collection: ${primaryEvidence.indexing.collectionKey}`}</span>
                         ) : null}
                         <span>{formatDate(asset.createdAt)}</span>
                         <span>
@@ -594,8 +608,106 @@ export const SearchPage = ({
                           fontSize: "15px",
                         }}
                       >
-                        {excerpt}
+                        {asset.summary ?? primaryEvidence.snippet}
                       </p>
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: "10px",
+                          marginBottom: "16px",
+                        }}
+                      >
+                        {group.items.slice(0, 3).map((evidence) => (
+                          <article
+                            key={evidence.id}
+                            style={{
+                              padding: "12px 14px",
+                              borderRadius: "16px",
+                              backgroundColor: "#f7f9fc",
+                              border: "1px solid rgba(21, 33, 51, 0.08)",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                gap: "12px",
+                                flexWrap: "wrap",
+                                marginBottom: "8px",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: "8px",
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    padding: "4px 8px",
+                                    borderRadius: "999px",
+                                    backgroundColor: "#ffffff",
+                                    color: "#4b5a6b",
+                                    fontSize: "11px",
+                                    fontWeight: 800,
+                                  }}
+                                >
+                                  {getEvidenceLayerLabel(evidence.layer)}
+                                </span>
+                                {evidence.layer === "chunk" ? (
+                                  <span
+                                    style={{
+                                      color: "#6b7685",
+                                      fontSize: "12px",
+                                    }}
+                                  >
+                                    {`Chunk #${evidence.chunkIndex ?? 0}`}
+                                  </span>
+                                ) : evidence.layer === "assertion" ? (
+                                  <span
+                                    style={{
+                                      color: "#6b7685",
+                                      fontSize: "12px",
+                                    }}
+                                  >
+                                    {`Assertion #${evidence.assertionIndex ?? 0}`}
+                                  </span>
+                                ) : (
+                                  <span
+                                    style={{
+                                      color: "#6b7685",
+                                      fontSize: "12px",
+                                    }}
+                                  >
+                                    Summary-only evidence
+                                  </span>
+                                )}
+                              </div>
+                              <span
+                                style={{
+                                  color: "#16202d",
+                                  fontSize: "12px",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {formatScore(evidence.score)}
+                              </span>
+                            </div>
+                            <p
+                              style={{
+                                margin: 0,
+                                color: "#3b4757",
+                                lineHeight: 1.7,
+                                fontSize: "14px",
+                              }}
+                            >
+                              {evidence.snippet}
+                            </p>
+                          </article>
+                        ))}
+                      </div>
 
                       <div
                         style={{
@@ -677,11 +789,15 @@ export const SearchPage = ({
                   value: String(result.pagination.total),
                 },
                 {
-                  label: "Page size",
+                  label: "Assets / page",
                   value: String(result.pagination.pageSize),
                 },
                 {
-                  label: "Top page",
+                  label: "Evidence on page",
+                  value: String(result.items.length),
+                },
+                {
+                  label: "Current page",
                   value: String(result.pagination.page),
                 },
               ].map((item, index) => (

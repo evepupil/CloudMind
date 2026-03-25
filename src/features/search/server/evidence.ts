@@ -153,6 +153,95 @@ const compareEvidenceItems = (
   );
 };
 
+const clamp = (value: number, min: number, max: number): number => {
+  return Math.min(Math.max(value, min), max);
+};
+
+const getRecencyBonus = (asset: EvidenceItem["asset"]): number => {
+  const referenceDate = asset.capturedAt ?? asset.updatedAt ?? asset.createdAt;
+
+  if (!referenceDate) {
+    return 0;
+  }
+
+  const timestamp = Date.parse(referenceDate);
+
+  if (Number.isNaN(timestamp)) {
+    return 0;
+  }
+
+  const daysSince = (Date.now() - timestamp) / (1000 * 60 * 60 * 24);
+
+  if (daysSince <= 7) {
+    return 0.08;
+  }
+
+  if (daysSince <= 30) {
+    return 0.04;
+  }
+
+  if (daysSince <= 90) {
+    return 0.015;
+  }
+
+  return 0;
+};
+
+const getAssetPriorityBonus = (asset: EvidenceItem["asset"]): number => {
+  return clamp(asset.retrievalPriority / 200, -0.12, 0.18);
+};
+
+const getLayerCoverageBonus = (matchedLayers: Set<EvidenceLayer>): number => {
+  const layers = Array.from(matchedLayers);
+
+  if (
+    layers.includes("chunk") &&
+    layers.includes("assertion") &&
+    layers.includes("summary")
+  ) {
+    return 0.12;
+  }
+
+  if (layers.includes("chunk") && layers.includes("assertion")) {
+    return 0.08;
+  }
+
+  if (layers.includes("chunk") && layers.includes("summary")) {
+    return 0.06;
+  }
+
+  if (layers.includes("assertion") && layers.includes("summary")) {
+    return 0.04;
+  }
+
+  return layers.length > 1 ? 0.03 : 0;
+};
+
+const getSupportingEvidenceBonus = (itemCount: number): number => {
+  return Math.min(Math.max(itemCount - 1, 0), 3) * 0.025;
+};
+
+const calculateAssetScore = (group: {
+  asset: EvidenceItem["asset"];
+  items: EvidenceItem[];
+  matchedLayers: Set<EvidenceLayer>;
+}): number => {
+  const sortedItems = [...group.items].sort(compareEvidenceItems);
+  const topScore = sortedItems[0]?.score ?? 0;
+  const secondScore = sortedItems[1]?.score ?? 0;
+
+  return Number(
+    (
+      topScore * 0.72 +
+      secondScore * 0.16 +
+      getLayerCoverageBonus(group.matchedLayers) +
+      getSupportingEvidenceBonus(sortedItems.length) +
+      getAssetPriorityBonus(group.asset) +
+      getRecencyBonus(group.asset)
+    ).toFixed(6)
+  );
+};
+
 export const buildGroupedEvidence = (items: EvidenceItem[]) => {
   const grouped = new Map<
     string,
@@ -196,16 +285,30 @@ export const buildGroupedEvidence = (items: EvidenceItem[]) => {
   }
 
   return Array.from(grouped.values())
-    .map((group) => ({
-      asset: group.asset,
-      topScore: group.topScore,
-      matchedLayers: Array.from(group.matchedLayers).sort(
-        (left, right) =>
-          EVIDENCE_LAYER_PRIORITY[right] - EVIDENCE_LAYER_PRIORITY[left]
-      ),
-      items: [...group.items].sort(compareEvidenceItems),
-    }))
+    .map((group) => {
+      const orderedItems = [...group.items].sort(compareEvidenceItems);
+
+      return {
+        asset: group.asset,
+        assetScore: calculateAssetScore({
+          asset: group.asset,
+          items: orderedItems,
+          matchedLayers: group.matchedLayers,
+        }),
+        topScore: group.topScore,
+        matchedLayers: Array.from(group.matchedLayers).sort(
+          (left, right) =>
+            EVIDENCE_LAYER_PRIORITY[right] - EVIDENCE_LAYER_PRIORITY[left]
+        ),
+        primaryEvidence: orderedItems[0] as EvidenceItem,
+        items: orderedItems,
+      };
+    })
     .sort((left, right) => {
+      if (right.assetScore !== left.assetScore) {
+        return right.assetScore - left.assetScore;
+      }
+
       if (right.topScore !== left.topScore) {
         return right.topScore - left.topScore;
       }
@@ -218,6 +321,12 @@ export const buildEvidencePacket = (items: EvidenceItem[]) => {
   return {
     items,
   };
+};
+
+export const flattenGroupedEvidence = (
+  groups: ReturnType<typeof buildGroupedEvidence>
+): EvidenceItem[] => {
+  return groups.flatMap((group) => group.items);
 };
 
 export const toSearchResultItem = (

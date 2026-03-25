@@ -51,8 +51,10 @@ export interface EvidenceItem {
 
 export interface GroupedEvidenceGroup {
   asset: AssetSummary;
+  assetScore: number;
   topScore: number;
   matchedLayers: EvidenceLayer[];
+  primaryEvidence: EvidenceItem;
   items: EvidenceItem[];
 }
 
