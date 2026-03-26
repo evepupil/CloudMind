@@ -812,7 +812,8 @@ export class D1AssetRepository implements AssetRepository {
       createdAt: now,
     }));
 
-    for (const batch of splitIntoBatches(rows, 20)) {
+    // ??????? 7 ??????? 12 ???????? D1 ? 100 ?????
+    for (const batch of splitIntoBatches(rows, 12)) {
       await this.db.insert(assetFacets).values(batch);
     }
   }
