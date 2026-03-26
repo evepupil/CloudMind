@@ -27,6 +27,7 @@ export interface AssetDescriptor {
   domain: AssetDomain;
   documentClass: AssetDocumentClass;
   topics: string[];
+  tags: string[];
   collectionKey: string | null;
   capturedAt: string | null;
   sourceHost: string | null;
@@ -468,6 +469,10 @@ const deriveTopics = (corpus: string): string[] => {
     .slice(0, 3);
 };
 
+const deriveTags = (topics: string[]): string[] => {
+  return topics.slice(0, 5);
+};
+
 const deriveSensitivity = (
   asset: AssetDetail,
   domain: AssetDomain,
@@ -654,6 +659,7 @@ export const deriveDescriptor = (
     sourceHost
   );
   const topics = deriveTopics(corpus);
+  const tags = deriveTags(topics);
   const collectionKey = deriveCollectionKey(context.asset, sourceHost);
   const descriptor: AssetDescriptor = {
     version: 2,
@@ -663,6 +669,7 @@ export const deriveDescriptor = (
     domain,
     documentClass,
     topics,
+    tags,
     collectionKey,
     capturedAt: context.asset.capturedAt ?? context.asset.createdAt,
     sourceHost,
@@ -784,6 +791,10 @@ export const deriveFacets = (
 
   descriptor.topics.forEach((topic, index) => {
     pushFacet(facets, "topic", topic, topic, 20 + index);
+  });
+
+  descriptor.tags.forEach((tag, index) => {
+    pushFacet(facets, "tag", tag, tag, 40 + index);
   });
 
   return facets;

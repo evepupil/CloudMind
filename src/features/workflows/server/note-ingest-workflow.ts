@@ -10,6 +10,8 @@ import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
 import {
   type TextAssetEnrichmentInput,
+  assetDocumentClassValues,
+  assetDomainValues,
   textAssetEnrichmentSchema,
 } from "@/features/ingest/model/enrichment";
 import {
@@ -20,6 +22,7 @@ import {
   type PreparedChunk,
   persistProcessedContent,
 } from "@/features/ingest/server/content-processing";
+import { upsertMetadataTermVectors } from "@/features/ingest/server/metadata-terms";
 
 import {
   type AssetAccessPolicy,
@@ -30,6 +33,19 @@ import {
   deriveFacets,
 } from "./indexing-policy";
 import { enqueueWorkflow, type WorkflowDefinition } from "./runtime";
+
+const defaultDocumentClassByAssetType: Record<
+  AssetDetail["type"],
+  (typeof assetDocumentClassValues)[number]
+> = {
+  note: "general_note",
+  chat: "general_note",
+  url: "reference_doc",
+  pdf: "reference_doc",
+  image: "reference_doc",
+};
+
+const defaultDomain = assetDomainValues.at(-1) ?? "general";
 
 const getNormalizedContent = (asset: AssetDetail): string => {
   const content = asset.contentText?.trim();
@@ -66,16 +82,34 @@ const mergeDescriptorWithEnrichment = (
   }
 
   const topics = normalizeUniqueStrings(enrichment.descriptor?.topics);
+  const tags = normalizeUniqueStrings(enrichment.descriptor?.tags);
   const signals = normalizeUniqueStrings(enrichment.descriptor?.signals);
+  const hasSemanticHints =
+    enrichment.domain !== undefined ||
+    enrichment.documentClass !== undefined ||
+    topics.length > 0 ||
+    tags.length > 0;
+
+  if (!hasSemanticHints) {
+    return {
+      ...descriptor,
+      collectionKey:
+        enrichment.descriptor?.collectionKey ?? descriptor.collectionKey,
+      signals: signals.length > 0 ? signals : descriptor.signals,
+    };
+  }
 
   return {
     ...descriptor,
-    domain: enrichment.domain ?? descriptor.domain,
-    documentClass: enrichment.documentClass ?? descriptor.documentClass,
-    topics: topics.length > 0 ? topics : descriptor.topics,
+    domain: enrichment.domain ?? defaultDomain,
+    documentClass:
+      enrichment.documentClass ??
+      defaultDocumentClassByAssetType[descriptor.assetType],
+    topics,
+    tags,
     collectionKey:
       enrichment.descriptor?.collectionKey ?? descriptor.collectionKey,
-    signals: signals.length > 0 ? signals : descriptor.signals,
+    signals: signals.length > 0 ? signals : ["ai_metadata_selected"],
   };
 };
 
@@ -268,6 +302,11 @@ export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => {
 
           await context.services.assetRepository.replaceAssetFacets?.(
             context.asset.id,
+            facets
+          );
+          await upsertMetadataTermVectors(
+            context.services.vectorStore,
+            context.services.aiProvider,
             facets
           );
 

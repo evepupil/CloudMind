@@ -540,6 +540,133 @@ describe("ingest service", () => {
     );
   });
 
+  it("ingestTextAsset can auto-generate enrichment before processing", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-text-auto-enrichment-1",
+      })
+    );
+    const processedAsset = createAsset({
+      id: "asset-text-auto-enrichment-1",
+      status: "ready",
+      summary: "AI generated summary",
+    });
+
+    vi.mocked(aiProviderMock.generateText)
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          summary: "AI generated summary",
+          domain: "product",
+          documentClass: "design_doc",
+          topics: ["semantic retrieval"],
+          tags: ["memory layer"],
+          catalog: "product/principles",
+          signals: ["auto_enrichment"],
+        }),
+      })
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          summary: "AI generated summary",
+          domain: "product",
+          documentClass: "design_doc",
+          topics: [
+            {
+              mode: "reuse",
+              value: "retrieval",
+            },
+          ],
+          tags: [
+            {
+              mode: "reuse",
+              value: "memory-layer",
+            },
+          ],
+          catalog: {
+            mode: "reuse",
+            value: "product/principles",
+          },
+          signals: ["auto_enrichment"],
+        }),
+      });
+    vi.mocked(vectorStoreMock.search).mockResolvedValue([
+      {
+        id: "term:topic:retrieval",
+        score: 0.93,
+        metadataJson: JSON.stringify({
+          kind: "topic",
+          term: "retrieval",
+          normalized: "retrieval",
+        }),
+      },
+      {
+        id: "term:tag:memory-layer",
+        score: 0.9,
+        metadataJson: JSON.stringify({
+          kind: "tag",
+          term: "memory-layer",
+          normalized: "memory-layer",
+        }),
+      },
+      {
+        id: "term:catalog:product/principles",
+        score: 0.92,
+        metadataJson: JSON.stringify({
+          kind: "catalog",
+          term: "product/principles",
+          normalized: "product/principles",
+        }),
+      },
+    ]);
+
+    const service = createIngestService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
+      processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
+      processUrlAsset: processUrlAssetMock,
+      processPdfAsset: processPdfAssetMock,
+      getProcessTextAssetForced: processTextAssetForcedMock,
+      getProcessUrlAssetForced: processUrlAssetForcedMock,
+      getProcessPdfAssetForced: processPdfAssetForcedMock,
+    });
+
+    await service.ingestTextAsset(env, {
+      title: "Auto enrichment note",
+      content: "CloudMind should reuse topic and tag terms before save.",
+      sourceKind: "mcp",
+    });
+
+    expect(processTextAssetMock).toHaveBeenCalledWith(
+      repository,
+      workflowRepositoryMock,
+      blobStoreMock,
+      vectorStoreMock,
+      aiProviderMock,
+      jobQueueMock,
+      "asset-text-auto-enrichment-1",
+      {
+        enrichment: {
+          summary: "AI generated summary",
+          domain: "product",
+          documentClass: "design_doc",
+          descriptor: {
+            topics: ["retrieval"],
+            tags: ["memory-layer"],
+            collectionKey: "product/principles",
+            signals: ["auto_enrichment"],
+          },
+        },
+      }
+    );
+  });
+
   it("ingestUrlAsset keeps an explicit source kind for non-web entrypoints", async () => {
     const repository = new InMemoryAssetRepository(
       createAsset({

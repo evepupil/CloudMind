@@ -874,13 +874,11 @@ describe("processTextAsset", () => {
     expect(result.sourceKind).toBe("manual");
     expect(result.jobs[0]?.status).toBe("succeeded");
     expect(result.jobs[0]?.errorMessage).toBeNull();
-    expect(vectorStore.upsertCalls).toEqual([
-      [
-        expect.objectContaining({
-          id: "asset-1:0",
-        }),
-      ],
-    ]);
+    expect(
+      vectorStore.upsertCalls.some((batch) =>
+        batch.some((record) => record.id === "asset-1:0")
+      )
+    ).toBe(true);
     expect(workflowRepository.runs).toEqual([
       expect.objectContaining({
         assetId: "asset-1",
@@ -1026,6 +1024,63 @@ describe("processTextAsset", () => {
       collectionKey: "project/cloudmind",
       topics: ["workflow", "mcp", "search"],
       signals: ["seeded_by_client", "manual_reviewed"],
+    });
+  });
+
+  it("uses AI enrichment semantic hints first and keeps heuristic fallback", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        contentText:
+          "TypeScript repository architecture with API design and queue workers.",
+      })
+    );
+    const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new InMemoryAIProvider();
+    const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
+
+    const enqueued = await processTextAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      "asset-1",
+      {
+        enrichment: {
+          descriptor: {
+            topics: ["agent-memory"],
+            tags: ["reuse-first"],
+          },
+        },
+      }
+    );
+
+    expect(enqueued.status).toBe("processing");
+    expect(jobQueue.messages).toHaveLength(1);
+
+    await drainWorkflowQueue(
+      jobQueue,
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider
+    );
+
+    const result = await repository.getAssetById("asset-1");
+    const descriptor = getArtifactContent(workflowRepository, "descriptor");
+
+    expect(result.status).toBe("ready");
+    expect(result.domain).toBe("general");
+    expect(result.documentClass).toBe("general_note");
+    expect(descriptor).toMatchObject({
+      domain: "general",
+      documentClass: "general_note",
+      topics: ["agent-memory"],
+      tags: ["reuse-first"],
     });
   });
 
@@ -1448,13 +1503,11 @@ describe("processPdfAsset", () => {
       },
     ]);
     expect(result.jobs[0]?.status).toBe("succeeded");
-    expect(vectorStore.upsertCalls).toEqual([
-      [
-        expect.objectContaining({
-          id: "asset-pdf-1:0",
-        }),
-      ],
-    ]);
+    expect(
+      vectorStore.upsertCalls.some((batch) =>
+        batch.some((record) => record.id === "asset-pdf-1:0")
+      )
+    ).toBe(true);
     expect(workflowRepository.runs).toEqual([
       expect.objectContaining({
         assetId: "asset-pdf-1",

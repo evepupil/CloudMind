@@ -36,17 +36,24 @@ export class VectorizeStore implements VectorStore {
     await this.index.upsert(
       records.map((record) => {
         const metadata = parseMetadataJson(record.metadataJson);
+        const baseVector = {
+          id: record.id,
+          values: record.values,
+        };
+
+        const vectorWithNamespace = record.namespace
+          ? {
+              ...baseVector,
+              namespace: record.namespace,
+            }
+          : baseVector;
 
         return metadata
           ? {
-              id: record.id,
-              values: record.values,
+              ...vectorWithNamespace,
               metadata,
             }
-          : {
-              id: record.id,
-              values: record.values,
-            };
+          : vectorWithNamespace;
       })
     );
   }

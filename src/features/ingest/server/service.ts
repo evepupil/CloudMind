@@ -26,6 +26,7 @@ import {
   processTextAsset,
   processUrlAsset,
 } from "./processor";
+import { generateAutoTextEnrichment } from "./auto-enrichment";
 
 interface BackfillChunkContentInput {
   dryRun?: boolean | undefined;
@@ -298,9 +299,41 @@ export const createIngestService = (
         await dependencies.getWorkflowRepository(bindings);
       const jobQueue = await dependencies.getJobQueue(bindings);
       const aiProvider = await dependencies.getAIProvider(bindings);
-      const createdAsset = await repository.createTextAsset(input);
+      let resolvedEnrichment = input.enrichment;
 
-      if (input.enrichment) {
+      if (!resolvedEnrichment) {
+        resolvedEnrichment = await generateAutoTextEnrichment(
+          aiProvider,
+          vectorStore,
+          {
+            title: input.title,
+            content: input.content,
+          }
+        ).catch(() => undefined);
+
+        if (!resolvedEnrichment) {
+          try {
+            const fallbackAiProvider = getAIProviderFromBindings(bindings);
+
+            if (fallbackAiProvider !== aiProvider) {
+              resolvedEnrichment = await generateAutoTextEnrichment(
+                fallbackAiProvider,
+                vectorStore,
+                {
+                  title: input.title,
+                  content: input.content,
+                }
+              ).catch(() => undefined);
+            }
+          } catch {}
+        }
+      }
+      const createdAsset = await repository.createTextAsset({
+        ...input,
+        enrichment: resolvedEnrichment,
+      });
+
+      if (resolvedEnrichment) {
         return dependencies.processTextAsset(
           repository,
           workflowRepository,
@@ -310,7 +343,7 @@ export const createIngestService = (
           jobQueue,
           createdAsset.id,
           {
-            enrichment: input.enrichment,
+            enrichment: resolvedEnrichment,
           }
         );
       }

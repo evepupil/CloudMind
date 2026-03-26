@@ -1,6 +1,7 @@
 export interface VectorRecord {
   id: string;
   values: number[];
+  namespace?: string | undefined;
   metadataJson?: string | undefined;
 }
 

@@ -18,6 +18,7 @@ import {
   type PreparedChunk,
   persistProcessedContent,
 } from "@/features/ingest/server/content-processing";
+import { upsertMetadataTermVectors } from "@/features/ingest/server/metadata-terms";
 
 import {
   type AssetAccessPolicy,
@@ -276,6 +277,11 @@ export const createUrlIngestWorkflowDefinition = (): WorkflowDefinition => {
 
           await context.services.assetRepository.replaceAssetFacets?.(
             context.asset.id,
+            facets
+          );
+          await upsertMetadataTermVectors(
+            context.services.vectorStore,
+            context.services.aiProvider,
             facets
           );
 

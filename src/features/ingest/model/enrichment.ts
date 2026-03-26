@@ -32,6 +32,7 @@ export const assetFacetKeyValues = [
   "source_host",
   "year",
   "topic",
+  "tag",
   "ai_visibility",
   "sensitivity",
 ] as const;
@@ -42,6 +43,11 @@ const enrichmentDescriptorSchema = z.object({
     .max(12)
     .optional()
     .describe("Optional descriptor topics to prioritize for indexing."),
+  tags: z
+    .array(z.string().trim().min(1).max(80))
+    .max(12)
+    .optional()
+    .describe("Optional descriptor tags to prioritize for indexing."),
   collectionKey: z
     .string()
     .trim()

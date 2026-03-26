@@ -55,6 +55,7 @@ export type AssetFacetKey =
   | "source_host"
   | "year"
   | "topic"
+  | "tag"
   | "ai_visibility"
   | "sensitivity";
 

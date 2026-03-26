@@ -16,6 +16,7 @@ import {
   type PreparedChunk,
   persistProcessedContent,
 } from "@/features/ingest/server/content-processing";
+import { upsertMetadataTermVectors } from "@/features/ingest/server/metadata-terms";
 import { extractPdfText } from "@/features/ingest/server/pdf-extractor";
 
 import {
@@ -257,6 +258,11 @@ export const createPdfIngestWorkflowDefinition = (): WorkflowDefinition => {
 
           await context.services.assetRepository.replaceAssetFacets?.(
             context.asset.id,
+            facets
+          );
+          await upsertMetadataTermVectors(
+            context.services.vectorStore,
+            context.services.aiProvider,
             facets
           );
 
