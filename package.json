@@ -8,12 +8,16 @@
     "build": "vite build",
     "preview": "vite preview",
     "worker:dev": "wrangler dev",
-    "worker:deploy": "wrangler deploy",
+    "worker:deploy": "npm run deploy",
+    "deploy:bootstrap": "node scripts/one-click-deploy.mjs --bootstrap-only",
+    "deploy:one-click": "node scripts/one-click-deploy.mjs",
     "db:generate": "drizzle-kit generate",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy"
   },
   "dependencies": {
     "@hono/mcp": "^0.1.5",

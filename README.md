@@ -2,6 +2,8 @@
 
 [EN](./README.md) | [ZH-CN](./README.zh-CN.md)
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/evepupil/CloudMind)
+
 CloudMind is an open source, Cloudflare-native, serverless-first
 private AI memory layer for the AI era.
 
@@ -264,11 +266,56 @@ Useful scripts:
 npm run build
 npm run worker:dev
 npm run worker:deploy
+npm run db:migrate:remote
+npm run deploy
+npm run deploy:bootstrap
+npm run deploy:one-click
 npm run typecheck
 npm run lint
 npm run format
 npm run test
 ```
+
+## One-Click Deploy (New Users)
+
+### Option A: Deploy Button (GitHub -> Cloudflare Dashboard)
+
+Use the button at the top of this README, or open:
+
+- https://deploy.workers.cloudflare.com/?url=https://github.com/evepupil/CloudMind
+
+The Deploy flow will guide you to connect your repo and provision
+Cloudflare resources before deployment.
+
+### Option B: Local One-Command Bootstrap
+
+For first-time setup in your own Cloudflare account:
+
+```bash
+npm install
+npm run deploy:one-click -- --prefix my-cloudmind
+```
+
+This command will:
+
+- create D1 / R2 / Vectorize / Queue resources
+- write bindings to `wrangler.jsonc`
+- apply D1 migrations from `drizzle/`
+- run `npm run deploy`
+
+If you only want to initialize resources first:
+
+```bash
+npm run deploy:bootstrap -- --prefix my-cloudmind
+```
+
+### Wrangler Template
+
+`wrangler.jsonc` is committed as a template baseline for new users.
+Real resource IDs/names are expected to be replaced by either:
+
+- Deploy Button provisioning flow, or
+- `npm run deploy:one-click` bootstrap script
 
 ## Cloudflare Bindings
 
