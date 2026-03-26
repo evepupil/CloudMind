@@ -279,7 +279,9 @@ describe("ingest service", () => {
   const getJobQueueMock = vi.fn();
   const getAIProviderMock = vi.fn();
   const getWebPageFetcherMock = vi.fn();
-  const workflowRepositoryMock = {} as WorkflowRepository;
+  const workflowRepositoryMock = {
+    listWorkflowRunsByAssetId: vi.fn().mockResolvedValue([]),
+  } as unknown as WorkflowRepository;
   const jobQueueMock = {} as JobQueue;
   const processTextAssetMock = vi.fn();
   const processUrlAssetMock = vi.fn();
@@ -290,6 +292,9 @@ describe("ingest service", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(workflowRepositoryMock.listWorkflowRunsByAssetId).mockResolvedValue(
+      []
+    );
   });
 
   afterEach(() => {
@@ -848,6 +853,96 @@ describe("ingest service", () => {
       aiProviderMock,
       jobQueueMock,
       "asset-file-1"
+    );
+    expect(result).toEqual(processedAsset);
+  });
+
+  it("reprocessAsset reuses persisted enrichment from the latest workflow run for note assets", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-note-enrichment-1",
+        type: "note",
+      })
+    );
+    const processedAsset = createAsset({
+      id: "asset-note-enrichment-1",
+      status: "ready",
+      summary: "Reprocessed summary with persisted enrichment",
+    });
+
+    vi.mocked(workflowRepositoryMock.listWorkflowRunsByAssetId).mockResolvedValue([
+      {
+        id: "run-1",
+        assetId: "asset-note-enrichment-1",
+        workflowType: "note_ingest_v1",
+        triggerType: "ingest",
+        status: "failed",
+        stateJson: JSON.stringify({
+          enrichment: {
+            summary: "Persisted summary",
+            domain: "engineering",
+            documentClass: "design_doc",
+            descriptor: {
+              topics: ["deploy"],
+              tags: ["cloudflare"],
+              collectionKey: "journal/2026/03",
+            },
+          },
+        }),
+        currentStep: "derive_facets",
+        errorMessage: "failed",
+        startedAt: null,
+        finishedAt: null,
+        createdAt: "2026-03-26T08:00:00.000Z",
+        updatedAt: "2026-03-26T08:00:00.000Z",
+      },
+    ]);
+
+    const service = createIngestService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
+      processTextAsset: processTextAssetMock,
+      processUrlAsset: processUrlAssetMock,
+      processPdfAsset: processPdfAssetMock,
+      getProcessTextAssetForced:
+        processTextAssetForcedMock.mockResolvedValue(processedAsset),
+      getProcessUrlAssetForced: processUrlAssetForcedMock,
+      getProcessPdfAssetForced: processPdfAssetForcedMock,
+    });
+
+    const result = await service.reprocessAsset(env, "asset-note-enrichment-1");
+
+    expect(workflowRepositoryMock.listWorkflowRunsByAssetId).toHaveBeenCalledWith(
+      "asset-note-enrichment-1"
+    );
+    expect(processTextAssetForcedMock).toHaveBeenCalledWith(
+      repository,
+      workflowRepositoryMock,
+      blobStoreMock,
+      vectorStoreMock,
+      aiProviderMock,
+      jobQueueMock,
+      "asset-note-enrichment-1",
+      {
+        enrichment: {
+          summary: "Persisted summary",
+          domain: "engineering",
+          documentClass: "design_doc",
+          descriptor: {
+            topics: ["deploy"],
+            tags: ["cloudflare"],
+            collectionKey: "journal/2026/03",
+          },
+        },
+      }
     );
     expect(result).toEqual(processedAsset);
   });

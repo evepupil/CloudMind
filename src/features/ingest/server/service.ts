@@ -12,7 +12,10 @@ import type { WebPageFetcher } from "@/core/web/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AppBindings } from "@/env";
 import type { AssetDetail } from "@/features/assets/model/types";
-import type { TextAssetEnrichmentInput } from "@/features/ingest/model/enrichment";
+import {
+  textAssetEnrichmentSchema,
+  type TextAssetEnrichmentInput,
+} from "@/features/ingest/model/enrichment";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getBlobStoreFromBindings } from "@/platform/blob/r2/get-blob-store";
 import { getAssetIngestRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
@@ -149,7 +152,8 @@ const defaultDependencies: IngestServiceDependencies = {
     vectorStore,
     aiProvider,
     jobQueue,
-    assetId
+    assetId,
+    options
   ) =>
     processTextAsset(
       repository,
@@ -159,9 +163,14 @@ const defaultDependencies: IngestServiceDependencies = {
       aiProvider,
       jobQueue,
       assetId,
-      {
-        force: true,
-      }
+      options?.enrichment
+        ? {
+            force: true,
+            enrichment: options.enrichment,
+          }
+        : {
+            force: true,
+          }
     ),
   getProcessUrlAssetForced: (
     repository,
@@ -207,6 +216,48 @@ const defaultDependencies: IngestServiceDependencies = {
     ),
 };
 
+const parsePersistedTextEnrichment = (
+  stateJson: string | null
+): TextAssetEnrichmentInput | undefined => {
+  if (!stateJson) {
+    return undefined;
+  }
+
+  try {
+    const parsedState = JSON.parse(stateJson) as {
+      enrichment?: unknown;
+    };
+    const parsedEnrichment = textAssetEnrichmentSchema.safeParse(
+      parsedState.enrichment
+    );
+
+    if (!parsedEnrichment.success) {
+      return undefined;
+    }
+
+    return parsedEnrichment.data;
+  } catch {
+    return undefined;
+  }
+};
+
+const getLatestPersistedTextEnrichment = async (
+  workflowRepository: WorkflowRepository,
+  assetId: string
+): Promise<TextAssetEnrichmentInput | undefined> => {
+  const runs = await workflowRepository.listWorkflowRunsByAssetId(assetId);
+
+  for (const run of runs) {
+    const enrichment = parsePersistedTextEnrichment(run.stateJson);
+
+    if (enrichment) {
+      return enrichment;
+    }
+  }
+
+  return undefined;
+};
+
 const reprocessExistingAsset = async (
   dependencies: IngestServiceDependencies,
   bindings: AppBindings | undefined,
@@ -224,6 +275,26 @@ const reprocessExistingAsset = async (
           dependencies.getAIProvider(bindings),
           dependencies.getJobQueue(bindings),
         ]);
+
+      const enrichment = await getLatestPersistedTextEnrichment(
+        workflowRepository,
+        asset.id
+      );
+
+      if (enrichment) {
+        return dependencies.getProcessTextAssetForced(
+          repository,
+          workflowRepository,
+          blobStore,
+          vectorStore,
+          aiProvider,
+          jobQueue,
+          asset.id,
+          {
+            enrichment,
+          }
+        );
+      }
 
       return dependencies.getProcessTextAssetForced(
         repository,
