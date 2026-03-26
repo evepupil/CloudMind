@@ -305,10 +305,10 @@ Bootstrap only:
 npm run deploy:bootstrap -- --prefix my-cloudmind
 ```
 
-### Wrangler template note
+### Existing Project Note
 
-`wrangler.jsonc` is a template baseline for new users.
-Real resource IDs/names should be written by either:
+`wrangler.jsonc` in this repository uses existing project bindings.
+If you deploy to a fresh account, use either:
 
 - Deploy Button provisioning flow
 - `npm run deploy:one-click` script

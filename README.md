@@ -309,10 +309,10 @@ If you only want to initialize resources first:
 npm run deploy:bootstrap -- --prefix my-cloudmind
 ```
 
-### Wrangler Template
+### Existing Project Note
 
-`wrangler.jsonc` is committed as a template baseline for new users.
-Real resource IDs/names are expected to be replaced by either:
+`wrangler.jsonc` in this repository uses existing project bindings.
+If you deploy to a fresh account, use either:
 
 - Deploy Button provisioning flow, or
 - `npm run deploy:one-click` bootstrap script

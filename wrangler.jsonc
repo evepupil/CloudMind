@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "cloudmind-template",
+  "name": "cloudmind",
   "main": "dist/index.js",
   "compatibility_date": "2026-03-20",
   "compatibility_flags": ["nodejs_compat"],
@@ -16,33 +16,33 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "cloudmind-template-db",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_name": "cloudmind",
+      "database_id": "f4c7f630-0cc9-4f84-9ffd-dbfc05d0bac0",
       "migrations_dir": "drizzle"
     }
   ],
   "r2_buckets": [
     {
       "binding": "ASSET_FILES",
-      "bucket_name": "cloudmind-template-assets"
+      "bucket_name": "cloudmind-assets"
     }
   ],
   "vectorize": [
     {
       "binding": "ASSET_VECTORS",
-      "index_name": "cloudmind-template-vectors"
+      "index_name": "cloudmind-asset-chunks"
     }
   ],
   "queues": {
     "producers": [
       {
-        "queue": "cloudmind-template-workflows",
+        "queue": "cloudmind-workflows",
         "binding": "WORKFLOW_QUEUE"
       }
     ],
     "consumers": [
       {
-        "queue": "cloudmind-template-workflows",
+        "queue": "cloudmind-workflows",
         "max_batch_size": 1,
         "max_batch_timeout": 1,
         "max_retries": 3
