@@ -81,7 +81,10 @@ export type IngestJobType =
   | "index"
   | "finalize";
 
+export type AssetDeletedFilter = "exclude" | "only" | "include";
+
 export interface AssetListQuery {
+  deleted?: AssetDeletedFilter | undefined;
   status?: AssetStatus | undefined;
   type?: AssetType | undefined;
   domain?: AssetDomain | undefined;

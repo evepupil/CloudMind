@@ -91,10 +91,21 @@ export const createAssetService = (
 
       await repository.softDeleteAsset(id);
     },
+
+    async restoreAsset(
+      bindings: AppBindings | undefined,
+      id: string
+    ): Promise<AssetDetail> {
+      const repository = await dependencies.getAssetRepository(bindings);
+      const blobStore = await dependencies.getBlobStore(bindings);
+      const item = await repository.restoreAsset(id);
+
+      return hydrateAssetContent(blobStore, item);
+    },
   };
 };
 
 const assetService = createAssetService();
 
-export const { listAssets, getAssetById, updateAsset, deleteAsset } =
+export const { listAssets, getAssetById, updateAsset, deleteAsset, restoreAsset } =
   assetService;

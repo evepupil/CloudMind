@@ -241,6 +241,14 @@ class InMemoryAssetRepository implements AssetRepository {
       throw new Error(`Asset "${id}" not found.`);
     }
   }
+
+  public async restoreAsset(id: string): Promise<AssetDetail> {
+    if (id !== this.asset.id) {
+      throw new Error(`Asset "${id}" not found.`);
+    }
+
+    return structuredClone(this.asset);
+  }
 }
 
 describe("ingest service", () => {

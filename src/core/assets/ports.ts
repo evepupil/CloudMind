@@ -174,6 +174,7 @@ export interface AssetMutationRepository {
     input: UpdateAssetMetadataInput
   ): Promise<AssetDetail>;
   softDeleteAsset(id: string): Promise<void>;
+  restoreAsset(id: string): Promise<AssetDetail>;
 }
 
 export type AssetRepository = AssetQueryRepository &

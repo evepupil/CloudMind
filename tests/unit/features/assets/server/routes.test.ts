@@ -14,6 +14,7 @@ vi.mock("@/features/assets/server/service", () => {
     deleteAsset: vi.fn(),
     getAssetById: vi.fn(),
     listAssets: vi.fn(),
+    restoreAsset: vi.fn(),
     updateAsset: vi.fn(),
   };
 });
@@ -500,6 +501,35 @@ describe("asset routes", () => {
       }),
     });
     expect(assetService.updateAsset).not.toHaveBeenCalled();
+  });
+
+  it("POST /api/assets/:id/restore restores an asset", async () => {
+    const app = createApp();
+    const env = { APP_NAME: "cloudmind-test" };
+
+    vi.mocked(assetService.restoreAsset).mockResolvedValue(
+      createAssetDetail({
+        id: "asset-restore-1",
+        title: "Restored asset",
+      })
+    );
+
+    const response = await app.request("/api/assets/asset-restore-1/restore", {
+      method: "POST",
+    }, env);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      item: expect.objectContaining({
+        id: "asset-restore-1",
+        title: "Restored asset",
+      }),
+    });
+    expect(assetService.restoreAsset).toHaveBeenCalledWith(
+      env,
+      "asset-restore-1"
+    );
   });
 
   it("GET /api/assets passes list filters to the service", async () => {

@@ -158,7 +158,13 @@ const mapAssertionMatch = (record: {
 };
 
 const buildAssetListWhereClause = (query?: AssetListQuery) => {
-  const conditions = [isNull(assets.deletedAt)];
+  const conditions = [];
+
+  if (query?.deleted === "only") {
+    conditions.push(isNotNull(assets.deletedAt));
+  } else if (query?.deleted !== "include") {
+    conditions.push(isNull(assets.deletedAt));
+  }
 
   if (query?.status) {
     conditions.push(eq(assets.status, query.status));
@@ -1002,5 +1008,19 @@ export class D1AssetRepository implements AssetRepository {
         updatedAt: now,
       })
       .where(eq(assets.id, id));
+  }
+
+  public async restoreAsset(id: string): Promise<AssetDetail> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .update(assets)
+      .set({
+        deletedAt: null,
+        updatedAt: now,
+      })
+      .where(eq(assets.id, id));
+
+    return this.getAssetById(id);
   }
 }

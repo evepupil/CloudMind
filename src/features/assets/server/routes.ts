@@ -14,7 +14,7 @@ import {
   assetListQuerySchema,
   assetUpdatePayloadSchema,
 } from "./schemas";
-import { deleteAsset, getAssetById, listAssets, updateAsset } from "./service";
+import { deleteAsset, getAssetById, listAssets, restoreAsset, updateAsset } from "./service";
 
 const getValidationErrorBody = (error: z.ZodError) => {
   return {
@@ -115,6 +115,29 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
 
       return context.json({
         ok: true,
+      });
+    } catch (error) {
+      if (error instanceof AssetNotFoundError) {
+        return context.json(getAssetNotFoundBody(), 404);
+      }
+
+      throw error;
+    }
+  });
+
+  app.post("/api/assets/:id/restore", async (context) => {
+    const parsedParams = assetIdParamsSchema.safeParse(context.req.param());
+
+    if (!parsedParams.success) {
+      return context.json(getValidationErrorBody(parsedParams.error), 400);
+    }
+
+    try {
+      const item = await restoreAsset(context.env, parsedParams.data.id);
+
+      return context.json({
+        ok: true,
+        item,
       });
     } catch (error) {
       if (error instanceof AssetNotFoundError) {
@@ -245,6 +268,35 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
 
       return context.redirect(
         `/assets/${parsedParams.data.id}?error=${encodeURIComponent(message)}`
+      );
+    }
+  });
+
+  app.post("/assets/actions/:id/restore", async (context) => {
+    const parsedParams = assetIdParamsSchema.safeParse(context.req.param());
+
+    if (!parsedParams.success) {
+      return context.redirect(
+        `/assets?error=${encodeURIComponent("Invalid asset id.")}`
+      );
+    }
+
+    try {
+      await restoreAsset(context.env, parsedParams.data.id);
+
+      return context.redirect("/assets?restored=1");
+    } catch (error) {
+      if (error instanceof AssetNotFoundError) {
+        return context.redirect(
+          `/assets?error=${encodeURIComponent("Asset not found.")}`
+        );
+      }
+
+      const message =
+        error instanceof Error ? error.message : "Failed to restore asset.";
+
+      return context.redirect(
+        `/assets?error=${encodeURIComponent(message)}`
       );
     }
   });

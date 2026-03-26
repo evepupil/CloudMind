@@ -426,6 +426,12 @@ class InMemoryAssetRepository implements AssetRepository {
     this.assertId(id);
   }
 
+  public async restoreAsset(id: string): Promise<AssetDetail> {
+    this.assertId(id);
+
+    return structuredClone(this.asset);
+  }
+
   private assertId(id: string): void {
     if (id !== this.asset.id) {
       throw new Error(`Unexpected asset id "${id}".`);

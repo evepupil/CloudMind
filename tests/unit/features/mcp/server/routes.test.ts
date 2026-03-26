@@ -22,6 +22,7 @@ vi.mock("@/features/assets/server/service", () => {
     deleteAsset: vi.fn(),
     getAssetById: vi.fn(),
     listAssets: vi.fn(),
+    restoreAsset: vi.fn(),
     updateAsset: vi.fn(),
   };
 });
@@ -683,6 +684,7 @@ describe("mcp routes", () => {
       "get_asset",
       "update_asset",
       "delete_asset",
+      "restore_asset",
       "reprocess_asset",
       "list_asset_workflows",
       "get_workflow_run",
@@ -989,7 +991,7 @@ describe("mcp routes", () => {
     );
   });
 
-  it("list_assets, update_asset, delete_asset, reprocess_asset and workflow tools reuse existing services", async () => {
+  it("list_assets, update_asset, delete_asset, restore_asset, reprocess_asset and workflow tools reuse existing services", async () => {
     const app = createApp();
     const item = createAssetDetail({
       id: "asset-manage-1",
@@ -1030,6 +1032,10 @@ describe("mcp routes", () => {
       summary: "Updated summary",
     });
     vi.mocked(assetService.deleteAsset).mockResolvedValue(undefined);
+    vi.mocked(assetService.restoreAsset).mockResolvedValue({
+      ...item,
+      title: "Restored Asset",
+    });
     vi.mocked(ingestService.reprocessAsset).mockResolvedValue({
       ...item,
       status: "processing",
@@ -1053,6 +1059,7 @@ describe("mcp routes", () => {
         domain: "engineering",
         documentClass: "design_doc",
         sourceKind: "manual",
+        deleted: "only",
         aiVisibility: "allow",
         sourceHost: "developers.cloudflare.com",
         page: 1,
@@ -1069,6 +1076,12 @@ describe("mcp routes", () => {
     });
     const deleteCall = await client.callTool({
       name: "delete_asset",
+      arguments: {
+        id: "asset-manage-1",
+      },
+    });
+    const restoreCall = await client.callTool({
+      name: "restore_asset",
       arguments: {
         id: "asset-manage-1",
       },
@@ -1111,6 +1124,12 @@ describe("mcp routes", () => {
       ok: true,
       id: "asset-manage-1",
     });
+    expect(getStructuredContent(restoreCall)).toEqual({
+      item: expect.objectContaining({
+        id: "asset-manage-1",
+        title: "Restored Asset",
+      }),
+    });
     expect(getStructuredContent(reprocessCall)).toEqual({
       item: expect.objectContaining({
         id: "asset-manage-1",
@@ -1128,6 +1147,7 @@ describe("mcp routes", () => {
       domain: "engineering",
       documentClass: "design_doc",
       sourceKind: "manual",
+      deleted: "only",
       aiVisibility: "allow",
       sourceHost: "developers.cloudflare.com",
       page: 1,
@@ -1143,6 +1163,10 @@ describe("mcp routes", () => {
       }
     );
     expect(assetService.deleteAsset).toHaveBeenCalledWith(
+      env,
+      "asset-manage-1"
+    );
+    expect(assetService.restoreAsset).toHaveBeenCalledWith(
       env,
       "asset-manage-1"
     );

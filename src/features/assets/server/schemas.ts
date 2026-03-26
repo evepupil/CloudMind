@@ -46,7 +46,13 @@ const assetSourceKindSchema = z.enum([
 ]);
 const assetAiVisibilitySchema = z.enum(["allow", "summary_only", "deny"]);
 
+const assetDeletedFilterSchema = z.enum(["exclude", "only", "include"]);
+
 export const assetListQuerySchema = z.object({
+  deleted: z.preprocess(
+    emptyStringToUndefined,
+    assetDeletedFilterSchema.optional()
+  ),
   status: z.preprocess(emptyStringToUndefined, assetStatusSchema.optional()),
   type: z.preprocess(emptyStringToUndefined, assetTypeSchema.optional()),
   domain: z.preprocess(emptyStringToUndefined, assetDomainSchema.optional()),

@@ -8,6 +8,7 @@ import {
   deleteAsset,
   getAssetById,
   listAssets,
+  restoreAsset,
   updateAsset,
 } from "@/features/assets/server/service";
 import {
@@ -98,6 +99,7 @@ const getAssetInputSchema = z.object({
 });
 
 const listAssetsInputSchema = z.object({
+  deleted: z.enum(["exclude", "only", "include"]).optional(),
   status: z.enum(["pending", "processing", "ready", "failed"]).optional(),
   type: z.enum(["url", "pdf", "note", "image", "chat"]).optional(),
   domain: z
@@ -155,6 +157,10 @@ const updateAssetInputSchema = z
   );
 
 const deleteAssetInputSchema = z.object({
+  id: z.string().trim().min(1),
+});
+
+const restoreAssetInputSchema = z.object({
   id: z.string().trim().min(1),
 });
 
@@ -464,6 +470,29 @@ export const createMcpServer = (
           ok: true,
           id: input.id,
         });
+      } catch (error) {
+        const code =
+          error instanceof AssetNotFoundError
+            ? "ASSET_NOT_FOUND"
+            : "TOOL_ERROR";
+
+        return createToolErrorResult(getErrorMessage(error), code);
+      }
+    }
+  );
+
+  server.registerTool(
+    "restore_asset",
+    {
+      title: "Restore Asset",
+      description: "Restore one soft-deleted asset from the CloudMind recycle bin.",
+      inputSchema: restoreAssetInputSchema,
+    },
+    async (input) => {
+      try {
+        const item = await restoreAsset(bindings, input.id);
+
+        return createToolResult({ item });
       } catch (error) {
         const code =
           error instanceof AssetNotFoundError

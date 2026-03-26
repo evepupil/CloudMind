@@ -166,6 +166,16 @@ class InMemoryAssetRepository implements AssetRepository {
     await this.getAssetById(id);
     this.deleted = true;
   }
+
+  public async restoreAsset(id: string): Promise<AssetDetail> {
+    if (id !== this.asset.id) {
+      throw new AssetNotFoundError(id);
+    }
+
+    this.deleted = false;
+
+    return structuredClone(this.asset);
+  }
 }
 
 describe("asset service", () => {
@@ -304,6 +314,29 @@ describe("asset service", () => {
       summary: "Manual summary",
       sourceUrl: "https://example.com/edited",
       contentText: "Hydrated content",
+    });
+  });
+
+  it("restoreAsset delegates to the repository", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-restore-1",
+        title: "Restore me",
+      })
+    );
+    const service = createAssetService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+    });
+
+    const item = await service.restoreAsset(
+      { APP_NAME: "cloudmind-test" },
+      "asset-restore-1"
+    );
+
+    expect(item).toMatchObject({
+      id: "asset-restore-1",
+      title: "Restore me",
     });
   });
 
