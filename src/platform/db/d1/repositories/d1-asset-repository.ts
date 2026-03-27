@@ -4,10 +4,12 @@ import {
   count,
   desc,
   eq,
+  gte,
   inArray,
   isNotNull,
   isNull,
   like,
+  lte,
   or,
   sql,
 } from "drizzle-orm";
@@ -246,6 +248,14 @@ const buildAssetListWhereClause = (query?: AssetListQuery) => {
 
   if (query?.aiVisibility) {
     conditions.push(eq(assets.aiVisibility, query.aiVisibility));
+  }
+
+  if (query?.createdAtFrom) {
+    conditions.push(gte(assets.createdAt, query.createdAtFrom));
+  }
+
+  if (query?.createdAtTo) {
+    conditions.push(lte(assets.createdAt, query.createdAtTo));
   }
 
   if (query?.sourceHost) {

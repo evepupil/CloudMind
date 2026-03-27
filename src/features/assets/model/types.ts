@@ -87,6 +87,8 @@ export interface AssetListQuery {
   documentClass?: AssetDocumentClass | undefined;
   sourceKind?: AssetSourceKind | undefined;
   aiVisibility?: AssetAiVisibility | undefined;
+  createdAtFrom?: string | undefined;
+  createdAtTo?: string | undefined;
   sourceHost?: string | undefined;
   topic?: string | undefined;
   tag?: string | undefined;

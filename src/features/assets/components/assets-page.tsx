@@ -90,6 +90,14 @@ const formatDate = (value: string): string => {
   });
 };
 
+const formatDateInputValue = (value: string | undefined): string => {
+  if (!value) {
+    return "";
+  }
+
+  return value.slice(0, 10);
+};
+
 const formatLabel = (value: string): string => {
   return value
     .split("_")
@@ -168,6 +176,14 @@ const buildFilterSummary = (filters: AssetListQuery): string => {
     segments.push(`visibility: ${filters.aiVisibility}`);
   }
 
+  if (filters.createdAtFrom) {
+    segments.push(`from: ${filters.createdAtFrom.slice(0, 10)}`);
+  }
+
+  if (filters.createdAtTo) {
+    segments.push(`to: ${filters.createdAtTo.slice(0, 10)}`);
+  }
+
   if (filters.sourceHost) {
     segments.push(`host: ${filters.sourceHost}`);
   }
@@ -220,6 +236,14 @@ export const AssetsPage = ({
 
   if (filters.aiVisibility) {
     currentParams.set("aiVisibility", filters.aiVisibility);
+  }
+
+  if (filters.createdAtFrom) {
+    currentParams.set("createdAtFrom", filters.createdAtFrom);
+  }
+
+  if (filters.createdAtTo) {
+    currentParams.set("createdAtTo", filters.createdAtTo);
   }
 
   if (filters.sourceHost) {
@@ -392,6 +416,28 @@ export const AssetsPage = ({
                 </option>
               ))}
             </select>
+          </label>
+          <label class="grid gap-2">
+            <span class="text-[13px] font-semibold text-[#37352f]">
+              Created From
+            </span>
+            <input
+              name="createdAtFrom"
+              type="date"
+              defaultValue={formatDateInputValue(filters.createdAtFrom)}
+              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
+            />
+          </label>
+          <label class="grid gap-2">
+            <span class="text-[13px] font-semibold text-[#37352f]">
+              Created To
+            </span>
+            <input
+              name="createdAtTo"
+              type="date"
+              defaultValue={formatDateInputValue(filters.createdAtTo)}
+              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
+            />
           </label>
           <label class="grid gap-2">
             <span class="text-[13px] font-semibold text-[#37352f]">

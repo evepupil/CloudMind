@@ -22,6 +22,10 @@ import {
   textAssetEnrichmentSchema,
 } from "@/features/ingest/model/enrichment";
 import {
+  createdAtFromFilterSchema,
+  createdAtToFilterSchema,
+} from "@/features/assets/server/schemas";
+import {
   ingestTextAsset,
   ingestUrlAsset,
   reprocessAsset,
@@ -155,6 +159,12 @@ const listAssetsInputSchema = z.object({
     .enum(["manual", "browser_extension", "upload", "mcp", "import"])
     .optional(),
   aiVisibility: z.enum(["allow", "summary_only", "deny"]).optional(),
+  createdAtFrom: createdAtFromFilterSchema.describe(
+    "Inclusive asset creation lower bound. Accepts ISO datetime or YYYY-MM-DD."
+  ),
+  createdAtTo: createdAtToFilterSchema.describe(
+    "Inclusive asset creation upper bound. Accepts ISO datetime or YYYY-MM-DD."
+  ),
   sourceHost: z.string().trim().min(1).max(200).optional(),
   topic: z.string().trim().min(1).max(120).optional(),
   tag: z.string().trim().min(1).max(120).optional(),
@@ -364,7 +374,7 @@ export const createMcpServer = (
     {
       title: "List Assets",
       description:
-        "List assets in the CloudMind library with optional filters and pagination, including domain, document class, source kind, AI visibility, source host, topic, tag, and collection.",
+        "List assets in the CloudMind library with optional filters and pagination, including domain, document class, source kind, AI visibility, created-at range, source host, topic, tag, and collection.",
       inputSchema: listAssetsInputSchema,
     },
     async (input) => {

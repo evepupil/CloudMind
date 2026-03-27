@@ -10,6 +10,42 @@ const emptyStringToUndefined = (value: unknown) => {
   return trimmed.length === 0 ? undefined : trimmed;
 };
 
+const normalizeDateFilter = (
+  value: unknown,
+  boundary: "start" | "end"
+): unknown => {
+  const normalized = emptyStringToUndefined(value);
+
+  if (typeof normalized !== "string") {
+    return normalized;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    const suffix =
+      boundary === "start" ? "T00:00:00.000Z" : "T23:59:59.999Z";
+
+    return `${normalized}${suffix}`;
+  }
+
+  const parsed = new Date(normalized);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return normalized;
+  }
+
+  return parsed.toISOString();
+};
+
+export const createdAtFromFilterSchema = z.preprocess(
+  (value) => normalizeDateFilter(value, "start"),
+  z.string().datetime({ offset: true }).optional()
+);
+
+export const createdAtToFilterSchema = z.preprocess(
+  (value) => normalizeDateFilter(value, "end"),
+  z.string().datetime({ offset: true }).optional()
+);
+
 export const assetIdParamsSchema = z.object({
   id: z.string().trim().min(1, "Asset id is required"),
 });
@@ -68,6 +104,8 @@ export const assetListQuerySchema = z.object({
     emptyStringToUndefined,
     assetAiVisibilitySchema.optional()
   ),
+  createdAtFrom: createdAtFromFilterSchema,
+  createdAtTo: createdAtToFilterSchema,
   sourceHost: z.preprocess(
     emptyStringToUndefined,
     z.string().trim().max(200, "Source host is too long").optional()
