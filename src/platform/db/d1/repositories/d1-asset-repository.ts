@@ -60,6 +60,59 @@ import {
   SUMMARY_SEARCH_TERM_BUDGETS,
 } from "./search-term-expansion";
 
+const normalizeUniqueStrings = (values: string[] | undefined): string[] => {
+  if (!values?.length) {
+    return [];
+  }
+
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+};
+
+const createInitialTextDescriptorJson = (
+  input: CreateTextAssetInput
+): string | null => {
+  const topics = normalizeUniqueStrings(input.enrichment?.descriptor?.topics);
+  const tags = normalizeUniqueStrings(input.enrichment?.descriptor?.tags);
+  const signals = normalizeUniqueStrings(input.enrichment?.descriptor?.signals);
+  const collectionKey = input.enrichment?.descriptor?.collectionKey?.trim();
+
+  if (
+    topics.length === 0 &&
+    tags.length === 0 &&
+    signals.length === 0 &&
+    !collectionKey
+  ) {
+    return null;
+  }
+
+  return JSON.stringify({
+    topics,
+    tags,
+    signals,
+    collectionKey: collectionKey || null,
+  });
+};
+
+const createInitialTextFacetRows = (
+  assetId: string,
+  now: string,
+  facets: CreateAssetFacetInput[] | undefined
+): Array<typeof assetFacets.$inferInsert> => {
+  if (!facets?.length) {
+    return [];
+  }
+
+  return facets.map((facet, index) => ({
+    id: crypto.randomUUID(),
+    assetId,
+    facetKey: facet.facetKey,
+    facetValue: facet.facetValue,
+    facetLabel: facet.facetLabel,
+    sortOrder: facet.sortOrder ?? index,
+    createdAt: now,
+  }));
+};
+
 const mapAssetSummary = (record: typeof assets.$inferSelect): AssetSummary => {
   return {
     id: record.id,
@@ -527,24 +580,30 @@ export class D1AssetRepository implements AssetRepository {
     const jobId = crypto.randomUUID();
     const title = input.title?.trim() || "Untitled Note";
     const sourceKind = input.sourceKind ?? "manual";
+    const summary = input.enrichment?.summary ?? null;
+    const domain = input.enrichment?.domain ?? "general";
+    const documentClass = input.enrichment?.documentClass ?? "general_note";
+    const collectionKey =
+      input.enrichment?.descriptor?.collectionKey?.trim() || null;
+    const descriptorJson = createInitialTextDescriptorJson(input);
 
     await this.db.insert(assets).values({
       id: assetId,
       type: "note" satisfies AssetType,
       title,
-      summary: null,
+      summary,
       sourceUrl: null,
       sourceKind,
       status: "pending",
-      domain: "general",
+      domain,
       sensitivity: "internal",
       aiVisibility: "allow",
       retrievalPriority: 0,
-      documentClass: "general_note",
+      documentClass,
       sourceHost: null,
-      collectionKey: null,
+      collectionKey,
       capturedAt: now,
-      descriptorJson: null,
+      descriptorJson,
       contentText: input.content,
       rawR2Key: null,
       contentR2Key: null,
@@ -557,6 +616,16 @@ export class D1AssetRepository implements AssetRepository {
       createdAt: now,
       updatedAt: now,
     });
+
+    const facetRows = createInitialTextFacetRows(
+      assetId,
+      now,
+      input.enrichment?.facets
+    );
+
+    if (facetRows.length > 0) {
+      await this.db.insert(assetFacets).values(facetRows);
+    }
 
     await this.db.insert(assetSources).values({
       id: sourceId,

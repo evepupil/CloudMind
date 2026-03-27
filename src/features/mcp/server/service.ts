@@ -289,6 +289,8 @@ export const createMcpServer = (
       title: "Save Asset",
       description:
         "Save a text note or URL into the CloudMind library and trigger processing. " +
+        "Returns the current asset snapshot immediately after enqueue, so some " +
+        "derived fields may continue updating while processing runs. " +
         "For type=text, you may pass optional enrichment to suggest summary, domain, documentClass, descriptor, and facets using CloudMind enum values.",
       inputSchema: saveAssetInputSchema,
     },
@@ -485,7 +487,8 @@ export const createMcpServer = (
     "restore_asset",
     {
       title: "Restore Asset",
-      description: "Restore one soft-deleted asset from the CloudMind recycle bin.",
+      description:
+        "Restore one soft-deleted asset from the CloudMind recycle bin.",
       inputSchema: restoreAssetInputSchema,
     },
     async (input) => {
