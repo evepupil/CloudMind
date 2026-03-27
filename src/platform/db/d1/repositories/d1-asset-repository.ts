@@ -326,6 +326,60 @@ const buildFacetExistsCondition = (
   )`;
 };
 
+interface RankedFacetMatchedAsset {
+  assetId: string;
+  createdAt: string;
+  matchedTerms: FacetTermRef[];
+}
+
+const getFacetTermOrderKey = (term: FacetTermRef) =>
+  `${term.facetKey}:${term.facetValue}`;
+
+export const sortFacetMatchedAssets = (
+  items: RankedFacetMatchedAsset[],
+  rankedTerms: FacetTermRef[]
+): RankedFacetMatchedAsset[] => {
+  const termOrder = new Map(
+    rankedTerms.map((term, index) => [getFacetTermOrderKey(term), index])
+  );
+
+  const getBestRank = (matchedTerms: FacetTermRef[]) => {
+    return matchedTerms.reduce((best, term) => {
+      const rank = termOrder.get(getFacetTermOrderKey(term));
+
+      if (rank === undefined) {
+        return best;
+      }
+
+      return Math.min(best, rank);
+    }, Number.MAX_SAFE_INTEGER);
+  };
+
+  return [...items].sort((left, right) => {
+    const rankDiff =
+      getBestRank(left.matchedTerms) - getBestRank(right.matchedTerms);
+
+    if (rankDiff !== 0) {
+      return rankDiff;
+    }
+
+    const termCountDiff = right.matchedTerms.length - left.matchedTerms.length;
+
+    if (termCountDiff !== 0) {
+      return termCountDiff;
+    }
+
+    const createdAtDiff =
+      new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+
+    if (createdAtDiff !== 0) {
+      return createdAtDiff;
+    }
+
+    return left.assetId.localeCompare(right.assetId);
+  });
+};
+
 // 这里实现面向 D1 的资产仓储；后续如切数据库，只替换这一层。
 export class D1AssetRepository implements AssetRepository {
   private readonly db: ReturnType<typeof createDb>;
@@ -409,13 +463,23 @@ export class D1AssetRepository implements AssetRepository {
         assetId: assetFacets.assetId,
         facetKey: assetFacets.facetKey,
         facetValue: assetFacets.facetValue,
+        assetCreatedAt: assets.createdAt,
       })
       .from(assetFacets)
       .innerJoin(assets, eq(assetFacets.assetId, assets.id))
-      .where(and(isNull(assets.deletedAt), facetOr));
+      .where(
+        and(
+          isNull(assets.deletedAt),
+          facetOr,
+          input.aiVisibility?.length
+            ? inArray(assets.aiVisibility, input.aiVisibility)
+            : undefined
+        )
+      );
 
     // 按 asset 分组收集匹配的 terms
     const assetTermMap = new Map<string, FacetTermRef[]>();
+    const assetCreatedAtMap = new Map<string, string>();
     const seenFacetKeys = new Set<string>();
 
     for (const row of allFacetRows) {
@@ -433,9 +497,37 @@ export class D1AssetRepository implements AssetRepository {
         facetValue: row.facetValue,
       });
       assetTermMap.set(row.assetId, existing);
+      assetCreatedAtMap.set(row.assetId, row.assetCreatedAt);
     }
 
-    const matchingAssetIds = Array.from(assetTermMap.keys());
+    const rankedAssets = sortFacetMatchedAssets(
+      Array.from(assetTermMap.entries()).map(([assetId, matchedTerms]) => ({
+        assetId,
+        createdAt: assetCreatedAtMap.get(assetId) ?? "",
+        matchedTerms: [...matchedTerms].sort((left, right) => {
+          const leftOrder = input.terms.findIndex(
+            (term) =>
+              term.facetKey === left.facetKey &&
+              term.facetValue === left.facetValue
+          );
+          const rightOrder = input.terms.findIndex(
+            (term) =>
+              term.facetKey === right.facetKey &&
+              term.facetValue === right.facetValue
+          );
+
+          if (leftOrder !== rightOrder) {
+            return leftOrder - rightOrder;
+          }
+
+          return getFacetTermOrderKey(left).localeCompare(
+            getFacetTermOrderKey(right)
+          );
+        }),
+      })),
+      input.terms
+    );
+    const matchingAssetIds = rankedAssets.map((item) => item.assetId);
 
     if (matchingAssetIds.length === 0) {
       return {

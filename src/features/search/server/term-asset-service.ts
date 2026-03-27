@@ -1,5 +1,6 @@
 import type { AppBindings } from "@/env";
 import type {
+  AssetAiVisibility,
   AssetFacetTermQuery,
   AssetFacetTermResult,
 } from "@/features/assets/model/types";
@@ -31,6 +32,11 @@ const defaultDependencies: TermAssetServiceDependencies = {
   getAssetRepository: async (bindings) =>
     getAssetSearchRepositoryFromBindings(bindings),
 };
+
+const TERM_METADATA_VISIBLE_AI_VISIBILITY: AssetAiVisibility[] = [
+  "allow",
+  "summary_only",
+];
 
 export const createTermAssetService = (
   dependencies: TermAssetServiceDependencies = defaultDependencies
@@ -81,6 +87,7 @@ export const createTermAssetService = (
           facetKey: item.kind,
           facetValue: item.normalized,
         })),
+        aiVisibility: [...TERM_METADATA_VISIBLE_AI_VISIBILITY],
         page: input.page,
         pageSize: input.pageSize,
       };

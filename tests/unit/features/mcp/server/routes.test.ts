@@ -15,6 +15,7 @@ import * as ingestService from "@/features/ingest/server/service";
 import { registerMcpRoutes } from "@/features/mcp/server/routes";
 import type { SearchResult } from "@/features/search/model/types";
 import * as searchService from "@/features/search/server/service";
+import * as termAssetService from "@/features/search/server/term-asset-service";
 import * as termSearchService from "@/features/search/server/term-service";
 import * as workflowService from "@/features/workflows/server/service";
 
@@ -53,6 +54,12 @@ vi.mock("@/features/search/server/service", () => {
 vi.mock("@/features/search/server/term-service", () => {
   return {
     searchTerms: vi.fn(),
+  };
+});
+
+vi.mock("@/features/search/server/term-asset-service", () => {
+  return {
+    searchAssetsByTerms: vi.fn(),
   };
 });
 
@@ -706,6 +713,7 @@ describe("mcp routes", () => {
       "save_asset",
       "list_assets",
       "search_terms",
+      "search_assets_by_terms",
       "search_assets",
       "search_assets_for_context",
       "get_asset",
@@ -725,6 +733,9 @@ describe("mcp routes", () => {
 
     expect(toolsByName.search_terms?.description).toContain(
       "metadata term pool"
+    );
+    expect(toolsByName.search_assets_by_terms?.description).toContain(
+      "metadata-driven asset discovery"
     );
     expect(toolsByName.search_assets?.description).toContain(
       "groupedEvidence as the primary view"
@@ -767,6 +778,60 @@ describe("mcp routes", () => {
       query: "cloudmind deploy",
       kinds: ["topic", "collection"],
       topK: 5,
+    });
+  });
+
+  it("search_assets_by_terms reuses the existing term asset service", async () => {
+    const app = createApp();
+    const result = {
+      terms: createTermSearchResult().items,
+      items: [
+        {
+          asset: createAssetDetail({
+            id: "asset-terms-1",
+            title: "CloudMind roadmap",
+            aiVisibility: "summary_only",
+          }),
+          matchedTerms: [
+            {
+              facetKey: "topic" as const,
+              facetValue: "cloudmind",
+            },
+          ],
+        },
+      ],
+      pagination: {
+        page: 1,
+        pageSize: 10,
+        total: 1,
+        totalPages: 1,
+      },
+    };
+
+    vi.mocked(termAssetService.searchAssetsByTerms).mockResolvedValue(result);
+    const connected = await createConnectedClient(app);
+
+    client = connected.client;
+    transport = connected.transport;
+
+    const call = await client.callTool({
+      name: "search_assets_by_terms",
+      arguments: {
+        query: "cloudmind roadmap",
+        kinds: ["topic"],
+        topK: 5,
+        page: 1,
+        pageSize: 10,
+      },
+    });
+
+    expect(getStructuredContent(call)).toEqual(result);
+    expect(termAssetService.searchAssetsByTerms).toHaveBeenCalledWith(env, {
+      query: "cloudmind roadmap",
+      kinds: ["topic"],
+      topK: 5,
+      page: 1,
+      pageSize: 10,
     });
   });
 

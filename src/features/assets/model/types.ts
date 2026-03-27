@@ -197,6 +197,7 @@ export interface FacetTermRef {
 // term 反查：带分页的查询输入。
 export interface AssetFacetTermQuery {
   terms: FacetTermRef[];
+  aiVisibility?: AssetAiVisibility[] | undefined;
   page?: number | undefined;
   pageSize?: number | undefined;
 }
