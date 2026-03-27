@@ -42,6 +42,10 @@ const getEvidenceLayerLabel = (layer: EvidenceLayer): string => {
     return "Assertion match";
   }
 
+  if (layer === "term") {
+    return "Metadata term match";
+  }
+
   return "Summary match";
 };
 
@@ -325,6 +329,10 @@ export const SearchPage = ({
                                   <span class="text-[12px] text-[#787774]">
                                     {`Assertion #${evidence.assertionIndex ?? 0}`}
                                   </span>
+                                ) : evidence.layer === "term" ? (
+                                  <span class="text-[12px] text-[#787774]">
+                                    Metadata-backed asset recall
+                                  </span>
                                 ) : (
                                   <span class="text-[12px] text-[#787774]">
                                     Summary-only evidence
@@ -338,6 +346,20 @@ export const SearchPage = ({
                             <p class="m-0 text-[14px] leading-[1.7] text-[#37352f]">
                               {evidence.snippet}
                             </p>
+                            {evidence.layer === "term" &&
+                            evidence.matchedTerms &&
+                            evidence.matchedTerms.length > 0 ? (
+                              <div class="mt-2 flex flex-wrap gap-2">
+                                {evidence.matchedTerms.map((term) => (
+                                  <span
+                                    key={`${evidence.id}:term:${term.facetKey}:${term.facetValue}`}
+                                    class="px-2 py-0.5 text-[12px] bg-white text-[#787774] rounded border border-[#ededec] font-bold"
+                                  >
+                                    {`${term.facetKey}: ${term.facetValue}`}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
                             <div class="mt-2 flex flex-wrap gap-2">
                               {evidence.matchReasons.map((reason) => (
                                 <span

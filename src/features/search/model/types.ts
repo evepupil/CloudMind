@@ -2,6 +2,7 @@ import type {
   AssetAssertionMatch,
   AssetChunkMatch,
   AssetSummary,
+  FacetTermRef,
 } from "@/features/assets/model/types";
 import type {
   EvidenceIndexingView,
@@ -35,8 +36,17 @@ export interface SearchAssertionResultItem {
   indexing: SearchResultIndexingView;
 }
 
+export interface SearchTermResultItem {
+  kind: "term";
+  score: number;
+  asset: AssetSummary;
+  matchedTerms: FacetTermRef[];
+  indexing: SearchResultIndexingView;
+}
+
 export type SearchResultItem =
   | SearchChunkResultItem
+  | SearchTermResultItem
   | SearchSummaryResultItem
   | SearchAssertionResultItem;
 

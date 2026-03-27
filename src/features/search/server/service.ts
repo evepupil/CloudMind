@@ -24,10 +24,14 @@ import {
   buildEvidencePacket,
   buildGroupedEvidence,
   buildSummaryEvidenceItem,
+  buildTermEvidenceItem,
   flattenGroupedEvidence,
   toSearchResultItem,
 } from "./evidence";
 import { scoreAssetSummaryMatch } from "./summary-scoring";
+import type { SearchAssetsByTermsResult } from "./term-asset-service";
+import { searchAssetsByTerms } from "./term-asset-service";
+import { scoreAssetTermMatch } from "./term-scoring";
 
 const SEARCHABLE_AI_VISIBILITY = ["allow"] as const;
 const SUMMARY_ONLY_AI_VISIBILITY = ["summary_only"] as const;
@@ -42,12 +46,22 @@ interface SearchServiceDependencies {
   getAIProvider: (
     bindings: AppBindings | undefined
   ) => AIProvider | Promise<AIProvider>;
+  searchAssetsByTerms: (
+    bindings: AppBindings | undefined,
+    input: {
+      query: string;
+      topK?: number | undefined;
+      page?: number | undefined;
+      pageSize?: number | undefined;
+    }
+  ) => Promise<SearchAssetsByTermsResult>;
 }
 
 const defaultDependencies: SearchServiceDependencies = {
   getAssetRepository: getAssetSearchRepositoryFromBindings,
   getVectorStore: getVectorStoreFromBindings,
   getAIProvider: getAIProviderFromBindings,
+  searchAssetsByTerms,
 };
 
 const getSummaryMatches = async (
@@ -115,10 +129,42 @@ const withOptionalResultScope = <T extends SearchResult>(
   };
 };
 
+const buildTermEvidence = (
+  termMatches: SearchAssetsByTermsResult,
+  contextPolicy?: ContextRetrievalPolicy
+): EvidenceItem[] => {
+  return termMatches.items
+    .filter((item) =>
+      contextPolicy?.includeSummaryOnly === false
+        ? item.asset.aiVisibility === "allow"
+        : true
+    )
+    .map((item) =>
+      buildTermEvidenceItem(
+        item,
+        applyContextPolicyScore(
+          scoreAssetTermMatch(termMatches.terms, item),
+          item.asset,
+          contextPolicy
+        )
+      )
+    )
+    .map((item) =>
+      annotateEvidenceMatchReasons(item, {
+        profileBoosted: Boolean(
+          contextPolicy?.boostedDomains.includes(item.asset.domain)
+        ),
+      })
+    )
+    .filter((item) => matchesContextPolicyAsset(item.asset, contextPolicy))
+    .sort((left, right) => right.score - left.score);
+};
+
 const buildLexicalEvidence = (
   query: string,
   repositoryMatches: Awaited<ReturnType<typeof getSummaryMatches>>,
   assertionMatches: Awaited<ReturnType<typeof getAssertionMatches>>,
+  termMatches: SearchAssetsByTermsResult,
   contextPolicy?: ContextRetrievalPolicy
 ): EvidenceItem[] => {
   const orderedAssertionEvidence = assertionMatches
@@ -162,9 +208,11 @@ const buildLexicalEvidence = (
     .filter((item) => matchesContextPolicyAsset(item.asset, contextPolicy))
     .sort((left, right) => right.score - left.score);
 
-  return [...orderedAssertionEvidence, ...orderedSummaryEvidence].sort(
-    (left, right) => right.score - left.score
-  );
+  return [
+    ...orderedAssertionEvidence,
+    ...buildTermEvidence(termMatches, contextPolicy),
+    ...orderedSummaryEvidence,
+  ].sort((left, right) => right.score - left.score);
 };
 
 const buildSemanticEvidence = (
@@ -175,6 +223,7 @@ const buildSemanticEvidence = (
   >,
   summaryMatches: Awaited<ReturnType<typeof getSummaryMatches>>,
   assertionMatches: Awaited<ReturnType<typeof getAssertionMatches>>,
+  termMatches: SearchAssetsByTermsResult,
   contextPolicy?: ContextRetrievalPolicy
 ): EvidenceItem[] => {
   const chunkMatchMap = new Map(
@@ -213,6 +262,7 @@ const buildSemanticEvidence = (
       query,
       summaryMatches,
       assertionMatches,
+      termMatches,
       contextPolicy
     ),
   ].sort((left, right) => right.score - left.score);
@@ -261,18 +311,16 @@ export const createSearchService = (
       purpose: "query",
     });
     const queryVector = embeddingResult.embeddings[0];
-    const summaryMatches = await getSummaryMatches(
-      repository,
-      query,
-      topK,
-      contextPolicy
-    );
-    const assertionMatches = await getAssertionMatches(
-      repository,
-      query,
-      topK,
-      contextPolicy
-    );
+    const [summaryMatches, assertionMatches, termMatches] = await Promise.all([
+      getSummaryMatches(repository, query, topK, contextPolicy),
+      getAssertionMatches(repository, query, topK, contextPolicy),
+      dependencies.searchAssetsByTerms(bindings, {
+        query,
+        topK,
+        page: 1,
+        pageSize: topK,
+      }),
+    ]);
 
     let orderedEvidence: EvidenceItem[];
 
@@ -281,6 +329,7 @@ export const createSearchService = (
         query,
         summaryMatches,
         assertionMatches,
+        termMatches,
         contextPolicy
       );
     } else {
@@ -304,6 +353,7 @@ export const createSearchService = (
         chunkMatches,
         summaryMatches,
         assertionMatches,
+        termMatches,
         contextPolicy
       );
     }

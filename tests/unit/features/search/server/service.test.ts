@@ -414,9 +414,21 @@ describe("search service", () => {
   const getAssetRepositoryMock = vi.fn();
   const getVectorStoreMock = vi.fn();
   const getAIProviderMock = vi.fn();
+  const searchAssetsByTermsMock = vi.fn();
+  const emptyTermResult = {
+    terms: [],
+    items: [],
+    pagination: {
+      page: 1,
+      pageSize: 20,
+      total: 0,
+      totalPages: 0,
+    },
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    searchAssetsByTermsMock.mockResolvedValue(emptyTermResult);
   });
 
   it("searchAssets performs semantic retrieval and preserves match order", async () => {
@@ -431,6 +443,7 @@ describe("search service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
       getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+      searchAssetsByTerms: searchAssetsByTermsMock,
     });
 
     const result = await service.searchAssets(
@@ -589,6 +602,7 @@ describe("search service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
       getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+      searchAssetsByTerms: searchAssetsByTermsMock,
     });
 
     const result = await service.searchAssets(
@@ -617,6 +631,8 @@ describe("search service", () => {
             ? ["allow", "summary_only"].includes(
                 item.assertion.asset.aiVisibility
               )
+            : item.kind === "term"
+              ? ["allow", "summary_only"].includes(item.asset.aiVisibility)
             : item.asset.aiVisibility === "summary_only"
       )
     ).toBe(true);
@@ -636,6 +652,7 @@ describe("search service", () => {
           embeddings: [],
         })),
       } satisfies AIProvider),
+      searchAssetsByTerms: searchAssetsByTermsMock,
     });
 
     const result = await service.searchAssets(
@@ -728,6 +745,7 @@ describe("search service", () => {
         ])
       ),
       getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+      searchAssetsByTerms: searchAssetsByTermsMock,
     });
 
     const result = await service.searchAssetsForContext(
@@ -775,6 +793,7 @@ describe("search service", () => {
         ])
       ),
       getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+      searchAssetsByTerms: searchAssetsByTermsMock,
     });
 
     const result = await service.searchAssetsForContext(
@@ -802,6 +821,8 @@ describe("search service", () => {
           ? item.chunk.asset.domain
           : item.kind === "assertion"
             ? item.assertion.asset.domain
+            : item.kind === "term"
+              ? item.asset.domain
             : item.asset.domain
       )
     ).toEqual(["engineering", "personal"]);
@@ -829,6 +850,7 @@ describe("search service", () => {
         ])
       ),
       getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+      searchAssetsByTerms: searchAssetsByTermsMock,
     });
 
     const result = await service.searchAssets(
@@ -891,6 +913,7 @@ describe("search service", () => {
         ])
       ),
       getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+      searchAssetsByTerms: searchAssetsByTermsMock,
     });
 
     const result = await service.searchAssets(
@@ -908,5 +931,165 @@ describe("search service", () => {
     expect(
       result.items[0]?.kind === "chunk" ? result.items[0].chunk.asset.id : null
     ).toBe("asset-d1-1");
+  });
+
+  it("searchAssets fuses metadata term hits into the main result stream", async () => {
+    const repository = new InMemorySearchRepository();
+    const vectorStore = new FixedVectorStore([]);
+    const service = createSearchService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+      searchAssetsByTerms: searchAssetsByTermsMock.mockResolvedValue({
+        terms: [
+          {
+            kind: "topic",
+            term: "cloudmind",
+            normalized: "cloudmind",
+            score: 0.92,
+          },
+        ],
+        items: [
+          {
+            asset: {
+              id: "asset-term-1",
+              type: "note",
+              title: "CloudMind Metadata Plan",
+              summary: "Plan for metadata-term retrieval fusion.",
+              sourceUrl: null,
+              sourceKind: "manual",
+              status: "ready",
+              domain: "engineering",
+              sensitivity: "internal",
+              aiVisibility: "allow",
+              retrievalPriority: 15,
+              collectionKey: "engineering:notes",
+              capturedAt: "2026-03-24T00:00:00.000Z",
+              descriptorJson: null,
+              createdAt: "2026-03-24T00:00:00.000Z",
+              updatedAt: "2026-03-24T00:00:00.000Z",
+            },
+            matchedTerms: [
+              {
+                facetKey: "topic",
+                facetValue: "cloudmind",
+              },
+            ],
+          },
+        ],
+        pagination: {
+          page: 1,
+          pageSize: 5,
+          total: 1,
+          totalPages: 1,
+        },
+      }),
+    });
+
+    const result = await service.searchAssets(
+      { APP_NAME: "cloudmind-test" },
+      {
+        query: "cloudmind metadata",
+        page: 1,
+        pageSize: 5,
+      }
+    );
+
+    expect(result.items.some((item) => item.kind === "term")).toBe(true);
+    expect(
+      result.groupedEvidence.some((group) => group.asset.id === "asset-term-1")
+    ).toBe(true);
+    expect(result.evidence.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "term:asset-term-1",
+          layer: "term",
+          matchedTerms: [
+            {
+              facetKey: "topic",
+              facetValue: "cloudmind",
+            },
+          ],
+          matchReasons: expect.arrayContaining([
+            expect.objectContaining({
+              code: "term_match",
+            }),
+          ]),
+        }),
+      ])
+    );
+  });
+
+  it("searchAssets keeps chunk evidence primary when a term hit recalls the same asset", async () => {
+    const repository = new DuplicateAssetSearchRepository();
+    const service = createSearchService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(
+        new FixedVectorStore([
+          {
+            id: "asset-a:0",
+            score: 0.94,
+          },
+        ])
+      ),
+      getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+      searchAssetsByTerms: searchAssetsByTermsMock.mockResolvedValue({
+        terms: [
+          {
+            kind: "topic",
+            term: "asset-a",
+            normalized: "asset-a",
+            score: 0.95,
+          },
+        ],
+        items: [
+          {
+            asset: {
+              id: "asset-a",
+              type: "note",
+              title: "Asset A",
+              summary: "Primary asset summary",
+              sourceUrl: null,
+              sourceKind: "manual",
+              status: "ready",
+              domain: "engineering",
+              sensitivity: "internal",
+              aiVisibility: "allow",
+              retrievalPriority: 20,
+              collectionKey: "engineering:notes",
+              capturedAt: "2026-03-24T00:00:00.000Z",
+              descriptorJson: null,
+              createdAt: "2026-03-24T00:00:00.000Z",
+              updatedAt: "2026-03-24T00:00:00.000Z",
+            },
+            matchedTerms: [
+              {
+                facetKey: "topic",
+                facetValue: "asset-a",
+              },
+            ],
+          },
+        ],
+        pagination: {
+          page: 1,
+          pageSize: 5,
+          total: 1,
+          totalPages: 1,
+        },
+      }),
+    });
+
+    const result = await service.searchAssets(
+      { APP_NAME: "cloudmind-test" },
+      {
+        query: "asset a retrieval",
+        page: 1,
+        pageSize: 5,
+      }
+    );
+
+    expect(result.groupedEvidence[0]?.asset.id).toBe("asset-a");
+    expect(result.groupedEvidence[0]?.matchedLayers).toEqual(["chunk", "term"]);
+    expect(result.groupedEvidence[0]?.primaryEvidence.layer).toBe("chunk");
   });
 });

@@ -3,6 +3,7 @@ import type {
   AssetChunkMatch,
   AssetSummary,
   AssetSummaryMatch,
+  AssetTermMatchItem,
 } from "@/features/assets/model/types";
 import type {
   EvidenceIndexingView,
@@ -164,9 +165,46 @@ export const buildAssertionEvidenceItem = (
   };
 };
 
+const formatMatchedTerms = (matchedTerms: AssetTermMatchItem["matchedTerms"]) =>
+  matchedTerms
+    .map((term) => `${term.facetKey}: ${term.facetValue}`)
+    .join(" · ");
+
+export const buildTermEvidenceItem = (
+  match: AssetTermMatchItem,
+  score: number
+): EvidenceItem => {
+  const matchedTermsText = formatMatchedTerms(match.matchedTerms);
+  const summaryText = match.asset.summary?.trim();
+  const evidenceText = summaryText
+    ? `${matchedTermsText}\n${summaryText}`
+    : matchedTermsText;
+
+  return {
+    id: `term:${match.asset.id}`,
+    layer: "term",
+    score,
+    asset: match.asset,
+    source: buildEvidenceSource(match.asset),
+    indexing: buildEvidenceIndexing(match.asset, "term"),
+    visibility: buildEvidenceVisibility(match.asset),
+    text: evidenceText,
+    snippet: matchedTermsText,
+    matchedTerms: match.matchedTerms,
+    matchReasons: [
+      buildMatchReason(
+        "term_match",
+        "Metadata term match",
+        "Matched the query through semantic topic, tag, or collection terms."
+      ),
+    ],
+  };
+};
+
 const EVIDENCE_LAYER_PRIORITY: Record<EvidenceLayer, number> = {
-  chunk: 3,
-  assertion: 2,
+  chunk: 4,
+  assertion: 3,
+  term: 2,
   summary: 1,
 };
 
@@ -261,9 +299,30 @@ const getLayerCoverageBonus = (matchedLayers: Set<EvidenceLayer>): number => {
   if (
     layers.includes("chunk") &&
     layers.includes("assertion") &&
+    layers.includes("term") &&
+    layers.includes("summary")
+  ) {
+    return 0.13;
+  }
+
+  if (
+    layers.includes("chunk") &&
+    layers.includes("assertion") &&
     layers.includes("summary")
   ) {
     return 0.12;
+  }
+
+  if (layers.includes("chunk") && layers.includes("term")) {
+    return 0.07;
+  }
+
+  if (layers.includes("assertion") && layers.includes("term")) {
+    return 0.05;
+  }
+
+  if (layers.includes("term") && layers.includes("summary")) {
+    return 0.04;
   }
 
   if (layers.includes("chunk") && layers.includes("assertion")) {
@@ -531,6 +590,16 @@ export const toSearchResultItem = (
         updatedAt: evidence.asset.updatedAt,
         asset: evidence.asset,
       },
+    };
+  }
+
+  if (evidence.layer === "term") {
+    return {
+      kind: "term",
+      score: evidence.score,
+      indexing: evidence.indexing,
+      asset: evidence.asset,
+      matchedTerms: evidence.matchedTerms ?? [],
     };
   }
 

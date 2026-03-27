@@ -1,12 +1,14 @@
 import type {
   AssetAssertionKind,
+  FacetTermRef,
   AssetSummary,
 } from "@/features/assets/model/types";
 
-export type EvidenceLayer = "chunk" | "assertion" | "summary";
+export type EvidenceLayer = "chunk" | "assertion" | "term" | "summary";
 export type EvidenceMatchReasonCode =
   | "semantic_match"
   | "assertion_match"
+  | "term_match"
   | "summary_match"
   | "profile_boosted"
   | "recent_boosted"
@@ -52,6 +54,7 @@ export interface EvidenceItem {
   visibility: EvidenceVisibilityView;
   text: string;
   snippet: string;
+  matchedTerms?: FacetTermRef[] | undefined;
   chunkId?: string | undefined;
   chunkIndex?: number | undefined;
   vectorId?: string | null | undefined;

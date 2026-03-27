@@ -68,8 +68,9 @@ const RETRY_CHAT_SYSTEM_PROMPT =
   "Do not say 'same as above', 'same as v2', or refer to an unseen " +
   "previous answer. Preserve bullet formatting when using lists.";
 const SOURCE_TYPE_PRIORITY: Record<ChatSource["sourceType"], number> = {
-  chunk: 3,
-  assertion: 2,
+  chunk: 4,
+  assertion: 3,
+  term: 2,
   summary: 1,
 };
 const MIN_RELATIVE_CONTEXT_SCORE_RATIO = 0.42;
