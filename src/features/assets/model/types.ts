@@ -188,6 +188,31 @@ export interface AssetAssertionMatch extends AssetAssertionSummary {
   asset: AssetSummary;
 }
 
+// term 反查：记录单个 term 命中信息。
+export interface FacetTermRef {
+  facetKey: "topic" | "tag" | "collection";
+  facetValue: string;
+}
+
+// term 反查：带分页的查询输入。
+export interface AssetFacetTermQuery {
+  terms: FacetTermRef[];
+  page?: number | undefined;
+  pageSize?: number | undefined;
+}
+
+// term 反查：单个资产的 term 命中结果。
+export interface AssetTermMatchItem {
+  asset: AssetSummary;
+  matchedTerms: FacetTermRef[];
+}
+
+// term 反查：完整查询结果。
+export interface AssetFacetTermResult {
+  items: AssetTermMatchItem[];
+  pagination: PaginationInfo;
+}
+
 // 这里定义详情页与详情 API 需要的完整资产结构。
 export interface AssetDetail extends AssetSummary {
   contentText: string | null;

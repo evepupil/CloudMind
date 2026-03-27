@@ -7,6 +7,8 @@ import type {
   AssetDetail,
   AssetDomain,
   AssetFacetKey,
+  AssetFacetTermQuery,
+  AssetFacetTermResult,
   AssetListQuery,
   AssetListResult,
   AssetSensitivity,
@@ -127,6 +129,9 @@ export interface AssetSearchRepository {
   searchAssetAssertions?(
     input: SearchAssetAssertionInput
   ): Promise<AssetAssertionMatch[]>;
+  getAssetsByFacetTerms?(
+    input: AssetFacetTermQuery
+  ): Promise<AssetFacetTermResult>;
 }
 
 // 这里保留采集与处理链路需要的写侧接口。

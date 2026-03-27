@@ -36,12 +36,16 @@ import type {
   AssetChunkSummary,
   AssetDetail,
   AssetFacetSummary,
+  AssetFacetTermQuery,
+  AssetFacetTermResult,
   AssetListQuery,
   AssetListResult,
   AssetSourceKind,
   AssetSummary,
   AssetSummaryMatch,
+  AssetTermMatchItem,
   AssetType,
+  FacetTermRef,
   IngestJobSummary,
 } from "@/features/assets/model/types";
 import { createDb } from "@/platform/db/d1/client";
@@ -367,6 +371,116 @@ export class D1AssetRepository implements AssetRepository {
       page: input.page,
       pageSize: input.pageSize,
     });
+  }
+
+  public async getAssetsByFacetTerms(
+    input: AssetFacetTermQuery
+  ): Promise<AssetFacetTermResult> {
+    if (input.terms.length === 0) {
+      return {
+        items: [],
+        pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+      };
+    }
+
+    const page = input.page ?? 1;
+    const pageSize = input.pageSize ?? 20;
+    const offset = (page - 1) * pageSize;
+
+    // 构建 OR 条件：(facet_key = ? AND facet_value = ?) OR ...
+    const facetConditions = input.terms.map((term) =>
+      and(
+        eq(assetFacets.facetKey, term.facetKey),
+        eq(assetFacets.facetValue, term.facetValue)
+      )
+    );
+    const facetOr = or(...facetConditions);
+
+    if (!facetOr) {
+      return {
+        items: [],
+        pagination: { page, pageSize, total: 0, totalPages: 0 },
+      };
+    }
+
+    // 先查匹配的 asset_id + facet 信息（不过分页，用于构建 matchedTerms）
+    const allFacetRows = await this.db
+      .select({
+        assetId: assetFacets.assetId,
+        facetKey: assetFacets.facetKey,
+        facetValue: assetFacets.facetValue,
+      })
+      .from(assetFacets)
+      .innerJoin(assets, eq(assetFacets.assetId, assets.id))
+      .where(and(isNull(assets.deletedAt), facetOr));
+
+    // 按 asset 分组收集匹配的 terms
+    const assetTermMap = new Map<string, FacetTermRef[]>();
+    const seenFacetKeys = new Set<string>();
+
+    for (const row of allFacetRows) {
+      const facetDedupeKey = `${row.assetId}:${row.facetKey}:${row.facetValue}`;
+
+      if (seenFacetKeys.has(facetDedupeKey)) {
+        continue;
+      }
+
+      seenFacetKeys.add(facetDedupeKey);
+
+      const existing = assetTermMap.get(row.assetId) ?? [];
+      existing.push({
+        facetKey: row.facetKey as FacetTermRef["facetKey"],
+        facetValue: row.facetValue,
+      });
+      assetTermMap.set(row.assetId, existing);
+    }
+
+    const matchingAssetIds = Array.from(assetTermMap.keys());
+
+    if (matchingAssetIds.length === 0) {
+      return {
+        items: [],
+        pagination: { page, pageSize, total: 0, totalPages: 0 },
+      };
+    }
+
+    // 分页查询 assets（按 created_at DESC）
+    const total = matchingAssetIds.length;
+    const pagedIds = matchingAssetIds.slice(offset, offset + pageSize);
+
+    const assetRecords: Array<typeof assets.$inferSelect> = [];
+
+    for (const batch of splitIntoBatches(pagedIds, 80)) {
+      const records = await this.db
+        .select()
+        .from(assets)
+        .where(
+          and(isNull(assets.deletedAt), inArray(assets.id, batch))
+        );
+
+      assetRecords.push(...records);
+    }
+
+    // 保持 pagedIds 顺序
+    const assetMap = new Map(
+      assetRecords.map((record) => [record.id, record])
+    );
+    const items: AssetTermMatchItem[] = pagedIds
+      .filter((id) => assetMap.has(id))
+      .map((id) => ({
+        asset: mapAssetSummary(assetMap.get(id)!),
+        matchedTerms: assetTermMap.get(id) ?? [],
+      }));
+
+    return {
+      items,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: total === 0 ? 0 : Math.ceil(total / pageSize),
+      },
+    };
   }
 
   public async getChunkMatchesByVectorIds(

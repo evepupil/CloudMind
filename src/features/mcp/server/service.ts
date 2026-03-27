@@ -36,6 +36,7 @@ import {
   searchAssets,
   searchAssetsForContext,
 } from "@/features/search/server/service";
+import { searchAssetsByTerms } from "@/features/search/server/term-asset-service";
 import { searchTerms } from "@/features/search/server/term-service";
 import {
   getWorkflowRunDetail,
@@ -98,6 +99,18 @@ const searchTermsInputSchema = z.object({
     .max(3)
     .optional(),
   topK: z.number().int().positive().max(20).optional(),
+});
+
+const searchAssetsByTermsInputSchema = z.object({
+  query: z.string().trim().min(1),
+  kinds: z
+    .array(z.enum(["topic", "tag", "collection"]))
+    .min(1)
+    .max(3)
+    .optional(),
+  topK: z.number().int().positive().max(20).optional(),
+  page: z.number().int().positive().optional(),
+  pageSize: z.number().int().positive().max(50).optional(),
 });
 
 const searchAssetsForContextInputSchema = searchAssetsInputSchema.extend({
@@ -378,6 +391,29 @@ export const createMcpServer = (
     async (input) => {
       try {
         const result = await searchTerms(bindings, input);
+
+        return createToolResult(result);
+      } catch (error) {
+        return createToolErrorResult(getErrorMessage(error));
+      }
+    }
+  );
+
+  server.registerTool(
+    "search_assets_by_terms",
+    {
+      title: "Search Assets By Terms",
+      description:
+        "Search assets by first finding semantically matching topic, tag, or " +
+        "collection terms, then reverse-looking up assets that carry those terms. " +
+        "Returns the matched terms and the associated assets with per-asset " +
+        "term hit details. Use this for metadata-driven asset discovery when " +
+        "you want to find assets by what they are about rather than by content keywords.",
+      inputSchema: searchAssetsByTermsInputSchema,
+    },
+    async (input) => {
+      try {
+        const result = await searchAssetsByTerms(bindings, input);
 
         return createToolResult(result);
       } catch (error) {
