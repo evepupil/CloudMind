@@ -36,6 +36,7 @@ import {
   searchAssets,
   searchAssetsForContext,
 } from "@/features/search/server/service";
+import { searchTerms } from "@/features/search/server/term-service";
 import {
   getWorkflowRunDetail,
   listWorkflowRunsByAssetId,
@@ -87,6 +88,16 @@ const searchAssetsInputSchema = z.object({
   query: z.string().trim().min(1),
   page: z.number().int().positive().optional(),
   pageSize: z.number().int().positive().max(50).optional(),
+});
+
+const searchTermsInputSchema = z.object({
+  query: z.string().trim().min(1),
+  kinds: z
+    .array(z.enum(["topic", "tag", "collection"]))
+    .min(1)
+    .max(3)
+    .optional(),
+  topK: z.number().int().positive().max(20).optional(),
 });
 
 const searchAssetsForContextInputSchema = searchAssetsInputSchema.extend({
@@ -346,6 +357,27 @@ export const createMcpServer = (
     async (input) => {
       try {
         const result = await listAssets(bindings, input);
+
+        return createToolResult(result);
+      } catch (error) {
+        return createToolErrorResult(getErrorMessage(error));
+      }
+    }
+  );
+
+  server.registerTool(
+    "search_terms",
+    {
+      title: "Search Terms",
+      description:
+        "Search existing topic, tag, and collection terms by semantic similarity " +
+        "from the metadata term pool. Use this when you want to discover which " +
+        "indexed terms already exist before filtering or reverse lookup.",
+      inputSchema: searchTermsInputSchema,
+    },
+    async (input) => {
+      try {
+        const result = await searchTerms(bindings, input);
 
         return createToolResult(result);
       } catch (error) {

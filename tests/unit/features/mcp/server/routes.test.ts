@@ -15,6 +15,7 @@ import * as ingestService from "@/features/ingest/server/service";
 import { registerMcpRoutes } from "@/features/mcp/server/routes";
 import type { SearchResult } from "@/features/search/model/types";
 import * as searchService from "@/features/search/server/service";
+import * as termSearchService from "@/features/search/server/term-service";
 import * as workflowService from "@/features/workflows/server/service";
 
 vi.mock("@/features/assets/server/service", () => {
@@ -46,6 +47,12 @@ vi.mock("@/features/search/server/service", () => {
   return {
     searchAssets: vi.fn(),
     searchAssetsForContext: vi.fn(),
+  };
+});
+
+vi.mock("@/features/search/server/term-service", () => {
+  return {
+    searchTerms: vi.fn(),
   };
 });
 
@@ -95,6 +102,25 @@ const createAssetDetail = (
     jobs: [],
     chunks: [],
     ...overrides,
+  };
+};
+
+const createTermSearchResult = () => {
+  return {
+    items: [
+      {
+        kind: "topic" as const,
+        term: "cloudmind",
+        normalized: "cloudmind",
+        score: 0.93,
+      },
+      {
+        kind: "collection" as const,
+        term: "journal/2026/03",
+        normalized: "journal/2026/03",
+        score: 0.87,
+      },
+    ],
   };
 };
 
@@ -679,6 +705,7 @@ describe("mcp routes", () => {
     expect(result.tools.map((tool) => tool.name)).toEqual([
       "save_asset",
       "list_assets",
+      "search_terms",
       "search_assets",
       "search_assets_for_context",
       "get_asset",
@@ -696,6 +723,9 @@ describe("mcp routes", () => {
       result.tools.map((tool) => [tool.name, tool])
     );
 
+    expect(toolsByName.search_terms?.description).toContain(
+      "metadata term pool"
+    );
     expect(toolsByName.search_assets?.description).toContain(
       "groupedEvidence as the primary view"
     );
@@ -711,6 +741,33 @@ describe("mcp routes", () => {
     expect(toolsByName.ask_library_for_context?.description).toContain(
       "Prefer search_assets* plus get_asset"
     );
+  });
+
+  it("search_terms reuses the term search service", async () => {
+    const app = createApp();
+    const result = createTermSearchResult();
+
+    vi.mocked(termSearchService.searchTerms).mockResolvedValue(result);
+    const connected = await createConnectedClient(app);
+
+    client = connected.client;
+    transport = connected.transport;
+
+    const call = await client.callTool({
+      name: "search_terms",
+      arguments: {
+        query: "cloudmind deploy",
+        kinds: ["topic", "collection"],
+        topK: 5,
+      },
+    });
+
+    expect(getStructuredContent(call)).toEqual(result);
+    expect(termSearchService.searchTerms).toHaveBeenCalledWith(env, {
+      query: "cloudmind deploy",
+      kinds: ["topic", "collection"],
+      topK: 5,
+    });
   });
 
   it("save_asset ingests text content through the existing ingest service", async () => {
