@@ -557,7 +557,7 @@ describe("asset routes", () => {
     });
 
     const response = await app.request(
-      "/api/assets?status=ready&type=url&domain=engineering&documentClass=howto&sourceKind=manual&aiVisibility=allow&createdAtFrom=2026-01-01&createdAtTo=2026-12-31&sourceHost=developers.cloudflare.com&topic=cloudmind&tag=mvp&collection=journal/2026/03&query=cloudflare&page=2&pageSize=10",
+      "/api/assets?status=ready&type=url&domain=engineering&documentClass=howto&sourceKind=manual&aiVisibility=allow&timezoneOffsetMinutes=-480&createdAtFrom=2026-03-01&createdAtTo=2026-03-01&sourceHost=developers.cloudflare.com&topic=cloudmind&tag=mvp&collection=journal/2026/03&query=cloudflare&page=2&pageSize=10",
       undefined,
       env
     );
@@ -584,8 +584,9 @@ describe("asset routes", () => {
       documentClass: "howto",
       sourceKind: "manual",
       aiVisibility: "allow",
-      createdAtFrom: "2026-01-01T00:00:00.000Z",
-      createdAtTo: "2026-12-31T23:59:59.999Z",
+      timezoneOffsetMinutes: -480,
+      createdAtFrom: "2026-02-28T16:00:00.000Z",
+      createdAtTo: "2026-03-01T15:59:59.999Z",
       sourceHost: "developers.cloudflare.com",
       topic: "cloudmind",
       tag: "mvp",
@@ -600,7 +601,26 @@ describe("asset routes", () => {
     const app = createApp();
 
     const response = await app.request(
-      "/api/assets?createdAtFrom=not-a-date",
+      "/api/assets?createdAtFrom=2026-03-01",
+      undefined,
+      { APP_NAME: "cloudmind-test" }
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: expect.objectContaining({
+        code: "INVALID_INPUT",
+        message: "Invalid request payload",
+      }),
+    });
+    expect(assetService.listAssets).not.toHaveBeenCalled();
+  });
+
+  it("GET /api/assets returns 400 for timezone-less created-at datetimes", async () => {
+    const app = createApp();
+
+    const response = await app.request(
+      "/api/assets?createdAtFrom=2026-03-01T00:00:00",
       undefined,
       { APP_NAME: "cloudmind-test" }
     );

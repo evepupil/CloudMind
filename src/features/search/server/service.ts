@@ -36,6 +36,8 @@ import { scoreAssetTermMatch } from "./term-scoring";
 
 const SEARCHABLE_AI_VISIBILITY = ["allow"] as const;
 const SUMMARY_ONLY_AI_VISIBILITY = ["summary_only"] as const;
+const FILTERED_VECTOR_FETCH_MULTIPLIERS = [1, 3, 6, 12] as const;
+const MAX_FILTERED_VECTOR_TOP_K = 240;
 
 const getSearchFilters = (input: AssetSearchFilters): AssetSearchFilters => {
   return {
@@ -50,6 +52,12 @@ const getSearchFilters = (input: AssetSearchFilters): AssetSearchFilters => {
     tag: input.tag,
     collection: input.collection,
   };
+};
+
+const hasHardSearchFilters = (filters: AssetSearchFilters): boolean => {
+  return Object.values(getSearchFilters(filters)).some(
+    (value) => value !== undefined
+  );
 };
 
 interface SearchServiceDependencies {
@@ -287,6 +295,64 @@ const buildSemanticEvidence = (
   ].sort((left, right) => right.score - left.score);
 };
 
+const getFilteredSemanticMatches = async (
+  vectorStore: VectorStore,
+  repository: AssetSearchRepository,
+  queryVector: number[],
+  topK: number,
+  filters: AssetSearchFilters
+) => {
+  const shouldOverfetch = hasHardSearchFilters(filters);
+  let lastVectorMatches: Awaited<ReturnType<VectorStore["search"]>> = [];
+  let lastChunkMatches: Awaited<
+    ReturnType<AssetSearchRepository["getChunkMatchesByVectorIds"]>
+  > = [];
+
+  for (const multiplier of FILTERED_VECTOR_FETCH_MULTIPLIERS) {
+    const requestedTopK = shouldOverfetch
+      ? Math.min(topK * multiplier, MAX_FILTERED_VECTOR_TOP_K)
+      : topK;
+
+    if (
+      lastVectorMatches.length > 0 &&
+      requestedTopK <= lastVectorMatches.length
+    ) {
+      continue;
+    }
+
+    const vectorMatches = await vectorStore.search({
+      values: queryVector,
+      topK: requestedTopK,
+    });
+    const chunkMatches =
+      vectorMatches.length > 0
+        ? await repository.getChunkMatchesByVectorIds(
+            vectorMatches.map((match) => match.id),
+            {
+              aiVisibility: [...SEARCHABLE_AI_VISIBILITY],
+              ...getSearchFilters(filters),
+            }
+          )
+        : [];
+
+    lastVectorMatches = vectorMatches;
+    lastChunkMatches = chunkMatches;
+
+    if (!shouldOverfetch) {
+      break;
+    }
+
+    if (chunkMatches.length >= topK || vectorMatches.length < requestedTopK) {
+      break;
+    }
+  }
+
+  return {
+    vectorMatches: lastVectorMatches,
+    chunkMatches: lastChunkMatches,
+  };
+};
+
 // 这里集中资产语义搜索用例，便于后续扩展为混合检索或重排。
 export const createSearchService = (
   dependencies: SearchServiceDependencies = defaultDependencies
@@ -353,20 +419,13 @@ export const createSearchService = (
         contextPolicy
       );
     } else {
-      const vectorMatches = await vectorStore.search({
-        values: queryVector,
+      const { vectorMatches, chunkMatches } = await getFilteredSemanticMatches(
+        vectorStore,
+        repository,
+        queryVector,
         topK,
-      });
-      const chunkMatches =
-        vectorMatches.length > 0
-          ? await repository.getChunkMatchesByVectorIds(
-              vectorMatches.map((match) => match.id),
-              {
-                aiVisibility: [...SEARCHABLE_AI_VISIBILITY],
-                ...getSearchFilters(input),
-              }
-            )
-          : [];
+        input
+      );
 
       orderedEvidence = buildSemanticEvidence(
         query,

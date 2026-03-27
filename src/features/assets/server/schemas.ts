@@ -10,41 +10,100 @@ const emptyStringToUndefined = (value: unknown) => {
   return trimmed.length === 0 ? undefined : trimmed;
 };
 
-const normalizeDateFilter = (
-  value: unknown,
-  boundary: "start" | "end"
-): unknown => {
-  const normalized = emptyStringToUndefined(value);
+const rawCreatedAtFilterSchema = z.preprocess(
+  emptyStringToUndefined,
+  z.string().trim().optional()
+);
 
-  if (typeof normalized !== "string") {
-    return normalized;
+export const timezoneOffsetMinutesSchema = z.coerce
+  .number()
+  .int()
+  .min(-840)
+  .max(840)
+  .optional();
+
+const isoDatetimeWithOffsetSchema = z.string().datetime({ offset: true });
+const dateOnlyFilterPattern = /^\d{4}-\d{2}-\d{2}$/;
+
+const validateCreatedAtFilter = (
+  value: string | undefined,
+  fieldName: "createdAtFrom" | "createdAtTo",
+  timezoneOffsetMinutes: number | undefined,
+  context: z.RefinementCtx
+) => {
+  if (!value) {
+    return;
   }
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-    const suffix =
-      boundary === "start" ? "T00:00:00.000Z" : "T23:59:59.999Z";
+  if (dateOnlyFilterPattern.test(value)) {
+    if (timezoneOffsetMinutes === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [fieldName],
+        message:
+          "timezoneOffsetMinutes is required when using YYYY-MM-DD date filters",
+      });
+    }
 
-    return `${normalized}${suffix}`;
+    return;
   }
 
-  const parsed = new Date(normalized);
+  const parsed = isoDatetimeWithOffsetSchema.safeParse(value);
 
-  if (Number.isNaN(parsed.getTime())) {
-    return normalized;
+  if (!parsed.success) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [fieldName],
+      message:
+        "Created-at filters must be YYYY-MM-DD with timezoneOffsetMinutes or an ISO datetime with offset",
+    });
   }
-
-  return parsed.toISOString();
 };
 
-export const createdAtFromFilterSchema = z.preprocess(
-  (value) => normalizeDateFilter(value, "start"),
-  z.string().datetime({ offset: true }).optional()
-);
+const normalizeDateFilter = (value: string | undefined): string | undefined => {
+  if (!value) {
+    return undefined;
+  }
 
-export const createdAtToFilterSchema = z.preprocess(
-  (value) => normalizeDateFilter(value, "end"),
-  z.string().datetime({ offset: true }).optional()
-);
+  return value;
+};
+
+const normalizeDateOnlyFilter = (
+  value: string | undefined,
+  boundary: "start" | "end",
+  timezoneOffsetMinutes: number | undefined
+): string | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  if (!dateOnlyFilterPattern.test(value)) {
+    return normalizeDateFilter(value);
+  }
+
+  if (timezoneOffsetMinutes === undefined) {
+    return value;
+  }
+
+  const [rawYear = "", rawMonth = "", rawDay = ""] = value.split("-");
+  const year = Number(rawYear);
+  const month = Number(rawMonth);
+  const day = Number(rawDay);
+
+  if ([year, month, day].some((part) => Number.isNaN(part))) {
+    return value;
+  }
+
+  const hour = boundary === "start" ? 0 : 23;
+  const minute = boundary === "start" ? 0 : 59;
+  const second = boundary === "start" ? 0 : 59;
+  const millisecond = boundary === "start" ? 0 : 999;
+  const utcTimestamp =
+    Date.UTC(year, month - 1, day, hour, minute, second, millisecond) +
+    timezoneOffsetMinutes * 60 * 1000;
+
+  return new Date(utcTimestamp).toISOString();
+};
 
 export const assetIdParamsSchema = z.object({
   id: z.string().trim().min(1, "Asset id is required"),
@@ -84,7 +143,7 @@ const assetAiVisibilitySchema = z.enum(["allow", "summary_only", "deny"]);
 
 const assetDeletedFilterSchema = z.enum(["exclude", "only", "include"]);
 
-export const assetListQuerySchema = z.object({
+const assetListRawQuerySchema = z.object({
   deleted: z.preprocess(
     emptyStringToUndefined,
     assetDeletedFilterSchema.optional()
@@ -104,8 +163,12 @@ export const assetListQuerySchema = z.object({
     emptyStringToUndefined,
     assetAiVisibilitySchema.optional()
   ),
-  createdAtFrom: createdAtFromFilterSchema,
-  createdAtTo: createdAtToFilterSchema,
+  timezoneOffsetMinutes: z.preprocess(
+    emptyStringToUndefined,
+    timezoneOffsetMinutesSchema
+  ),
+  createdAtFrom: rawCreatedAtFilterSchema,
+  createdAtTo: rawCreatedAtFilterSchema,
   sourceHost: z.preprocess(
     emptyStringToUndefined,
     z.string().trim().max(200, "Source host is too long").optional()
@@ -129,6 +192,41 @@ export const assetListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(9999).optional(),
   pageSize: z.coerce.number().int().min(1).max(100).optional(),
 });
+
+export const assetListQuerySchema = assetListRawQuerySchema
+  .superRefine((value, context) => {
+    validateCreatedAtFilter(
+      value.createdAtFrom,
+      "createdAtFrom",
+      value.timezoneOffsetMinutes,
+      context
+    );
+    validateCreatedAtFilter(
+      value.createdAtTo,
+      "createdAtTo",
+      value.timezoneOffsetMinutes,
+      context
+    );
+  })
+  .transform((value) => ({
+    ...value,
+    createdAtFrom: normalizeDateOnlyFilter(
+      value.createdAtFrom,
+      "start",
+      value.timezoneOffsetMinutes
+    ),
+    createdAtTo: normalizeDateOnlyFilter(
+      value.createdAtTo,
+      "end",
+      value.timezoneOffsetMinutes
+    ),
+  }));
+
+export {
+  rawCreatedAtFilterSchema as createdAtFilterInputSchema,
+  validateCreatedAtFilter,
+  normalizeDateOnlyFilter,
+};
 
 const nullableSummarySchema = z.preprocess(
   (value) => {

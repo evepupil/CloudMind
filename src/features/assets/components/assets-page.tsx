@@ -246,6 +246,13 @@ export const AssetsPage = ({
     currentParams.set("createdAtTo", filters.createdAtTo);
   }
 
+  if (filters.timezoneOffsetMinutes !== undefined) {
+    currentParams.set(
+      "timezoneOffsetMinutes",
+      String(filters.timezoneOffsetMinutes)
+    );
+  }
+
   if (filters.sourceHost) {
     currentParams.set("sourceHost", filters.sourceHost);
   }
@@ -327,6 +334,16 @@ export const AssetsPage = ({
           action="/assets"
           class="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3"
         >
+          <input
+            id="assets-timezone-offset"
+            name="timezoneOffsetMinutes"
+            type="hidden"
+            defaultValue={
+              filters.timezoneOffsetMinutes !== undefined
+                ? String(filters.timezoneOffsetMinutes)
+                : ""
+            }
+          />
           <label class="grid gap-2">
             <span class="text-[13px] font-semibold text-[#37352f]">Status</span>
             <select
@@ -476,6 +493,17 @@ export const AssetsPage = ({
             </a>
           </div>
         </form>
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "document.addEventListener('DOMContentLoaded', function () {" +
+              "var input = document.getElementById('assets-timezone-offset');" +
+              "if (input instanceof HTMLInputElement) {" +
+              "input.value = String(new Date().getTimezoneOffset());" +
+              "}" +
+              "});",
+          }}
+        />
       </section>
 
       {pagination.totalPages > 1 ? (

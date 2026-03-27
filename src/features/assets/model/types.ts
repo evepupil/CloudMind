@@ -84,6 +84,7 @@ export interface AssetSearchFilters {
   domain?: AssetDomain | undefined;
   documentClass?: AssetDocumentClass | undefined;
   sourceKind?: AssetSourceKind | undefined;
+  timezoneOffsetMinutes?: number | undefined;
   createdAtFrom?: string | undefined;
   createdAtTo?: string | undefined;
   sourceHost?: string | undefined;

@@ -193,6 +193,26 @@ class FixedVectorStore implements VectorStore {
   }
 }
 
+class TrackedVectorStore implements VectorStore {
+  public readonly requestedTopKs: number[] = [];
+
+  public constructor(private readonly matches: VectorSearchMatch[]) {}
+
+  public async upsert(): Promise<void> {
+    return undefined;
+  }
+
+  public async search(input: VectorSearchInput): Promise<VectorSearchMatch[]> {
+    this.requestedTopKs.push(input.topK);
+
+    return this.matches.slice(0, input.topK);
+  }
+
+  public async deleteByIds(): Promise<void> {
+    return undefined;
+  }
+}
+
 class MixedDomainSearchRepository implements AssetSearchRepository {
   public async searchAssets(
     _input: AssetSearchInput
@@ -434,6 +454,95 @@ class DuplicateAssetSearchRepository implements AssetSearchRepository {
         },
       },
     ];
+  }
+
+  public async searchAssetSummaries(): Promise<AssetSummaryMatch[]> {
+    return [];
+  }
+}
+
+class HardFilterAwareSearchRepository implements AssetSearchRepository {
+  public async searchAssets(
+    _input: AssetSearchInput
+  ): Promise<AssetListResult> {
+    return {
+      items: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      },
+    };
+  }
+
+  public async getChunkMatchesByVectorIds(
+    vectorIds: string[],
+    query?: {
+      aiVisibility?: AssetAiVisibility[] | undefined;
+      domain?: string | undefined;
+    }
+  ): Promise<AssetChunkMatch[]> {
+    const records: AssetChunkMatch[] = [
+      {
+        id: "chunk-personal-1",
+        chunkIndex: 0,
+        textPreview: "Personal retrieval note",
+        contentText: "Personal retrieval note full content",
+        vectorId: "personal-1:0",
+        asset: {
+          id: "asset-personal-1",
+          type: "note",
+          title: "Personal Note",
+          summary: "Personal summary",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "personal",
+          sensitivity: "private",
+          aiVisibility: "allow",
+          retrievalPriority: 0,
+          collectionKey: "personal:notes",
+          capturedAt: "2026-03-24T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-24T00:00:00.000Z",
+          updatedAt: "2026-03-24T00:00:00.000Z",
+        },
+      },
+      {
+        id: "chunk-engineering-1",
+        chunkIndex: 1,
+        textPreview: "Engineering retrieval note",
+        contentText: "Engineering retrieval note full content",
+        vectorId: "engineering-1:0",
+        asset: {
+          id: "asset-engineering-1",
+          type: "note",
+          title: "Engineering Note",
+          summary: "Engineering summary",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "engineering",
+          sensitivity: "internal",
+          aiVisibility: "allow",
+          retrievalPriority: 0,
+          collectionKey: "engineering:notes",
+          capturedAt: "2026-03-24T00:00:00.000Z",
+          descriptorJson: null,
+          createdAt: "2026-03-24T00:00:00.000Z",
+          updatedAt: "2026-03-24T00:00:00.000Z",
+        },
+      },
+    ];
+
+    return records.filter(
+      (record) =>
+        vectorIds.includes(record.vectorId ?? "") &&
+        (!query?.aiVisibility?.length ||
+          query.aiVisibility.includes(record.asset.aiVisibility)) &&
+        (!query?.domain || record.asset.domain === query.domain)
+    );
   }
 
   public async searchAssetSummaries(): Promise<AssetSummaryMatch[]> {
@@ -1135,6 +1244,49 @@ describe("search service", () => {
     expect(result.groupedEvidence[0]?.asset.id).toBe("asset-a");
     expect(result.groupedEvidence[0]?.matchedLayers).toEqual(["chunk", "term"]);
     expect(result.groupedEvidence[0]?.primaryEvidence.layer).toBe("chunk");
+  });
+
+  it("searchAssets overfetches vector hits when hard filters exclude top semantic matches", async () => {
+    const repository = new HardFilterAwareSearchRepository();
+    const vectorStore = new TrackedVectorStore([
+      {
+        id: "personal-1:0",
+        score: 0.99,
+      },
+      {
+        id: "personal-2:0",
+        score: 0.98,
+      },
+      {
+        id: "engineering-1:0",
+        score: 0.97,
+      },
+    ]);
+    const service = createSearchService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+      searchAssetsByTerms: searchAssetsByTermsMock,
+    });
+
+    const result = await service.searchAssets(
+      { APP_NAME: "cloudmind-test" },
+      {
+        query: "engineering retrieval",
+        page: 1,
+        pageSize: 1,
+        domain: "engineering",
+      }
+    );
+
+    expect(vectorStore.requestedTopKs).toEqual([1, 3]);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.kind).toBe("chunk");
+    expect(
+      result.items[0]?.kind === "chunk"
+        ? result.items[0].chunk.asset.domain
+        : null
+    ).toBe("engineering");
   });
 
   it("searchAssets forwards hard filters to chunk, summary, and term retrieval", async () => {

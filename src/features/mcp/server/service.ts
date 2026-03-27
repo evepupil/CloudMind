@@ -22,8 +22,10 @@ import {
   textAssetEnrichmentSchema,
 } from "@/features/ingest/model/enrichment";
 import {
-  createdAtFromFilterSchema,
-  createdAtToFilterSchema,
+  createdAtFilterInputSchema,
+  normalizeDateOnlyFilter,
+  timezoneOffsetMinutesSchema,
+  validateCreatedAtFilter,
 } from "@/features/assets/server/schemas";
 import {
   ingestTextAsset,
@@ -90,9 +92,7 @@ const saveAssetInputSchema = z
     }
   });
 
-const searchAssetsInputSchema = assetSearchPayloadSchema.extend({
-  pageSize: z.number().int().positive().max(50).optional(),
-});
+const searchAssetsInputSchema = assetSearchPayloadSchema;
 
 const searchTermsInputSchema = z.object({
   query: z.string().trim().min(1),
@@ -116,10 +116,12 @@ const searchAssetsByTermsInputSchema = z.object({
   pageSize: z.number().int().positive().max(50).optional(),
 });
 
-const searchAssetsForContextInputSchema = searchAssetsInputSchema.extend({
-  profile: z.enum(contextProfileValues).optional(),
-  allowFallback: z.boolean().optional(),
-});
+const searchAssetsForContextInputSchema = assetSearchPayloadSchema.and(
+  z.object({
+    profile: z.enum(contextProfileValues).optional(),
+    allowFallback: z.boolean().optional(),
+  })
+);
 
 const getAssetInputSchema = z.object({
   id: z.string().trim().min(1),
@@ -158,11 +160,15 @@ const listAssetsInputSchema = z.object({
     .enum(["manual", "browser_extension", "upload", "mcp", "import"])
     .optional(),
   aiVisibility: z.enum(["allow", "summary_only", "deny"]).optional(),
-  createdAtFrom: createdAtFromFilterSchema.describe(
-    "Inclusive asset creation lower bound. Accepts ISO datetime or YYYY-MM-DD."
+  timezoneOffsetMinutes: timezoneOffsetMinutesSchema
+    .describe(
+      "Browser-style timezone offset in minutes. Required when using YYYY-MM-DD date filters."
+    ),
+  createdAtFrom: createdAtFilterInputSchema.describe(
+    "Inclusive asset creation lower bound. Use ISO datetime with offset, or YYYY-MM-DD together with timezoneOffsetMinutes."
   ),
-  createdAtTo: createdAtToFilterSchema.describe(
-    "Inclusive asset creation upper bound. Accepts ISO datetime or YYYY-MM-DD."
+  createdAtTo: createdAtFilterInputSchema.describe(
+    "Inclusive asset creation upper bound. Use ISO datetime with offset, or YYYY-MM-DD together with timezoneOffsetMinutes."
   ),
   sourceHost: z.string().trim().min(1).max(200).optional(),
   topic: z.string().trim().min(1).max(120).optional(),
@@ -171,7 +177,34 @@ const listAssetsInputSchema = z.object({
   query: z.string().trim().min(1).optional(),
   page: z.number().int().positive().optional(),
   pageSize: z.number().int().positive().max(50).optional(),
-});
+})
+  .superRefine((value, context) => {
+    validateCreatedAtFilter(
+      value.createdAtFrom,
+      "createdAtFrom",
+      value.timezoneOffsetMinutes,
+      context
+    );
+    validateCreatedAtFilter(
+      value.createdAtTo,
+      "createdAtTo",
+      value.timezoneOffsetMinutes,
+      context
+    );
+  })
+  .transform((value) => ({
+    ...value,
+    createdAtFrom: normalizeDateOnlyFilter(
+      value.createdAtFrom,
+      "start",
+      value.timezoneOffsetMinutes
+    ),
+    createdAtTo: normalizeDateOnlyFilter(
+      value.createdAtTo,
+      "end",
+      value.timezoneOffsetMinutes
+    ),
+  }));
 
 const updateAssetInputSchema = z
   .object({

@@ -302,6 +302,7 @@ describe("search routes", () => {
           query: "cloudmind",
           page: 1,
           pageSize: 20,
+          timezoneOffsetMinutes: 0,
           domain: "engineering",
           documentClass: "design_doc",
           sourceKind: "manual",
@@ -387,6 +388,7 @@ describe("search routes", () => {
       query: "cloudmind",
       page: 1,
       pageSize: 20,
+      timezoneOffsetMinutes: 0,
       domain: "engineering",
       documentClass: "design_doc",
       sourceKind: "manual",
@@ -409,6 +411,30 @@ describe("search routes", () => {
       },
       body: JSON.stringify({
         query: "   ",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: expect.objectContaining({
+        code: "INVALID_INPUT",
+        message: "Invalid request payload",
+      }),
+    });
+    expect(searchService.searchAssets).not.toHaveBeenCalled();
+  });
+
+  it("POST /api/search returns 400 for timezone-less created-at datetimes", async () => {
+    const app = createApp();
+
+    const response = await app.request("/api/search", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query: "cloudmind",
+        createdAtFrom: "2026-03-01T00:00:00",
       }),
     });
 
