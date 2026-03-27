@@ -19,13 +19,35 @@ import type {
 import { createSearchService } from "@/features/search/server/service";
 
 class InMemorySearchRepository implements AssetSearchRepository {
-  public readonly chunkMatchQueries: Array<AssetAiVisibility[] | undefined> =
-    [];
+  public readonly chunkMatchQueries: Array<
+    | {
+        aiVisibility?: AssetAiVisibility[] | undefined;
+        domain?: string | undefined;
+        documentClass?: string | undefined;
+        sourceKind?: string | undefined;
+        sourceHost?: string | undefined;
+        topic?: string | undefined;
+        tag?: string | undefined;
+        collection?: string | undefined;
+        createdAtFrom?: string | undefined;
+        createdAtTo?: string | undefined;
+      }
+    | undefined
+  > = [];
 
   public readonly summaryQueries: Array<{
     query: string;
     limit: number;
     aiVisibility: AssetAiVisibility[];
+    domain?: string | undefined;
+    documentClass?: string | undefined;
+    sourceKind?: string | undefined;
+    sourceHost?: string | undefined;
+    topic?: string | undefined;
+    tag?: string | undefined;
+    collection?: string | undefined;
+    createdAtFrom?: string | undefined;
+    createdAtTo?: string | undefined;
   }> = [];
 
   public async searchAssets(
@@ -46,9 +68,18 @@ class InMemorySearchRepository implements AssetSearchRepository {
     vectorIds: string[],
     query?: {
       aiVisibility?: AssetAiVisibility[] | undefined;
+      domain?: string | undefined;
+      documentClass?: string | undefined;
+      sourceKind?: string | undefined;
+      sourceHost?: string | undefined;
+      topic?: string | undefined;
+      tag?: string | undefined;
+      collection?: string | undefined;
+      createdAtFrom?: string | undefined;
+      createdAtTo?: string | undefined;
     }
   ): Promise<AssetChunkMatch[]> {
-    this.chunkMatchQueries.push(query?.aiVisibility);
+    this.chunkMatchQueries.push(query);
 
     return vectorIds
       .map((vectorId, index) => ({
@@ -91,6 +122,15 @@ class InMemorySearchRepository implements AssetSearchRepository {
     query: string;
     limit: number;
     aiVisibility: AssetAiVisibility[];
+    domain?: string | undefined;
+    documentClass?: string | undefined;
+    sourceKind?: string | undefined;
+    sourceHost?: string | undefined;
+    topic?: string | undefined;
+    tag?: string | undefined;
+    collection?: string | undefined;
+    createdAtFrom?: string | undefined;
+    createdAtTo?: string | undefined;
   }): Promise<AssetSummaryMatch[]> {
     this.summaryQueries.push(input);
 
@@ -614,7 +654,11 @@ describe("search service", () => {
       }
     );
 
-    expect(repository.chunkMatchQueries).toEqual([["allow"]]);
+    expect(repository.chunkMatchQueries).toEqual([
+      {
+        aiVisibility: ["allow"],
+      },
+    ]);
     expect(repository.summaryQueries).toEqual([
       {
         query: "vector search",
@@ -1091,5 +1135,82 @@ describe("search service", () => {
     expect(result.groupedEvidence[0]?.asset.id).toBe("asset-a");
     expect(result.groupedEvidence[0]?.matchedLayers).toEqual(["chunk", "term"]);
     expect(result.groupedEvidence[0]?.primaryEvidence.layer).toBe("chunk");
+  });
+
+  it("searchAssets forwards hard filters to chunk, summary, and term retrieval", async () => {
+    const repository = new InMemorySearchRepository();
+    const vectorStore = new InMemoryVectorStore();
+    const service = createSearchService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+      searchAssetsByTerms: searchAssetsByTermsMock,
+    });
+
+    await service.searchAssets(
+      { APP_NAME: "cloudmind-test" },
+      {
+        query: "cloudmind filters",
+        page: 1,
+        pageSize: 5,
+        domain: "engineering",
+        documentClass: "design_doc",
+        sourceKind: "manual",
+        sourceHost: "developers.cloudflare.com",
+        topic: "cloudmind",
+        tag: "mvp",
+        collection: "project/cloudmind",
+        createdAtFrom: "2026-01-01T00:00:00.000Z",
+        createdAtTo: "2026-12-31T23:59:59.999Z",
+      }
+    );
+
+    expect(repository.summaryQueries[0]).toEqual(
+      expect.objectContaining({
+        query: "cloudmind filters",
+        domain: "engineering",
+        documentClass: "design_doc",
+        sourceKind: "manual",
+        sourceHost: "developers.cloudflare.com",
+        topic: "cloudmind",
+        tag: "mvp",
+        collection: "project/cloudmind",
+        createdAtFrom: "2026-01-01T00:00:00.000Z",
+        createdAtTo: "2026-12-31T23:59:59.999Z",
+      })
+    );
+    expect(repository.chunkMatchQueries[0]).toEqual({
+      aiVisibility: ["allow"],
+      domain: "engineering",
+      documentClass: "design_doc",
+      sourceKind: "manual",
+      sourceHost: "developers.cloudflare.com",
+      topic: "cloudmind",
+      tag: "mvp",
+      collection: "project/cloudmind",
+      createdAtFrom: "2026-01-01T00:00:00.000Z",
+      createdAtTo: "2026-12-31T23:59:59.999Z",
+    });
+    expect(searchAssetsByTermsMock).toHaveBeenCalledWith(
+      { APP_NAME: "cloudmind-test" },
+      {
+        query: "cloudmind filters",
+        filters: {
+          domain: "engineering",
+          documentClass: "design_doc",
+          sourceKind: "manual",
+          sourceHost: "developers.cloudflare.com",
+          topic: "cloudmind",
+          tag: "mvp",
+          collection: "project/cloudmind",
+          createdAtFrom: "2026-01-01T00:00:00.000Z",
+          createdAtTo: "2026-12-31T23:59:59.999Z",
+          type: undefined,
+        },
+        topK: 5,
+        page: 1,
+        pageSize: 5,
+      }
+    );
   });
 });

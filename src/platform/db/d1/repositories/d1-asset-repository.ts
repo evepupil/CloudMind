@@ -42,6 +42,7 @@ import type {
   AssetFacetTermResult,
   AssetListQuery,
   AssetListResult,
+  AssetSearchFilters,
   AssetSourceKind,
   AssetSummary,
   AssetSummaryMatch,
@@ -298,6 +299,63 @@ const buildAssetListWhereClause = (query?: AssetListQuery) => {
   return conditions.length > 0 ? and(...conditions) : undefined;
 };
 
+const buildAssetSearchFilterConditions = (
+  filters?: AssetSearchFilters
+) => {
+  const conditions = [isNull(assets.deletedAt), eq(assets.status, "ready")];
+
+  if (filters?.type) {
+    conditions.push(eq(assets.type, filters.type));
+  }
+
+  if (filters?.domain) {
+    conditions.push(eq(assets.domain, filters.domain));
+  }
+
+  if (filters?.documentClass) {
+    conditions.push(eq(assets.documentClass, filters.documentClass));
+  }
+
+  if (filters?.sourceKind) {
+    conditions.push(eq(assets.sourceKind, filters.sourceKind));
+  }
+
+  if (filters?.createdAtFrom) {
+    conditions.push(gte(assets.createdAt, filters.createdAtFrom));
+  }
+
+  if (filters?.createdAtTo) {
+    conditions.push(lte(assets.createdAt, filters.createdAtTo));
+  }
+
+  if (filters?.sourceHost) {
+    conditions.push(buildLikeCondition(assets.sourceHost, filters.sourceHost));
+  }
+
+  const topicCondition = buildFacetExistsCondition("topic", filters?.topic);
+
+  if (topicCondition) {
+    conditions.push(topicCondition);
+  }
+
+  const tagCondition = buildFacetExistsCondition("tag", filters?.tag);
+
+  if (tagCondition) {
+    conditions.push(tagCondition);
+  }
+
+  const collectionCondition = buildFacetExistsCondition(
+    "collection",
+    filters?.collection
+  );
+
+  if (collectionCondition) {
+    conditions.push(collectionCondition);
+  }
+
+  return conditions;
+};
+
 const splitIntoBatches = <T>(items: T[], batchSize: number): T[][] => {
   const batches: T[][] = [];
 
@@ -468,24 +526,24 @@ export class D1AssetRepository implements AssetRepository {
     }
 
     // 先查匹配的 asset_id + facet 信息（不过分页，用于构建 matchedTerms）
-    const allFacetRows = await this.db
-      .select({
-        assetId: assetFacets.assetId,
-        facetKey: assetFacets.facetKey,
+      const allFacetRows = await this.db
+        .select({
+          assetId: assetFacets.assetId,
+          facetKey: assetFacets.facetKey,
         facetValue: assetFacets.facetValue,
         assetCreatedAt: assets.createdAt,
       })
       .from(assetFacets)
       .innerJoin(assets, eq(assetFacets.assetId, assets.id))
-      .where(
-        and(
-          isNull(assets.deletedAt),
-          facetOr,
-          input.aiVisibility?.length
-            ? inArray(assets.aiVisibility, input.aiVisibility)
-            : undefined
-        )
-      );
+        .where(
+          and(
+            facetOr,
+            ...buildAssetSearchFilterConditions(input.filters),
+            input.aiVisibility?.length
+              ? inArray(assets.aiVisibility, input.aiVisibility)
+              : undefined
+          )
+        );
 
     // 按 asset 分组收集匹配的 terms
     const assetTermMap = new Map<string, FacetTermRef[]>();
@@ -553,11 +611,14 @@ export class D1AssetRepository implements AssetRepository {
     const assetRecords: Array<typeof assets.$inferSelect> = [];
 
     for (const batch of splitIntoBatches(pagedIds, 80)) {
-      const records = await this.db
-        .select()
-        .from(assets)
-        .where(
-          and(isNull(assets.deletedAt), inArray(assets.id, batch))
+        const records = await this.db
+          .select()
+          .from(assets)
+          .where(
+          and(
+            ...buildAssetSearchFilterConditions(input.filters),
+            inArray(assets.id, batch)
+          )
         );
 
       assetRecords.push(...records);
@@ -596,11 +657,11 @@ export class D1AssetRepository implements AssetRepository {
     const records = [];
 
     // 这里按批读取 vectorId，避免 inArray 参数过多时触发 D1 绑定上限。
-    for (const batch of splitIntoBatches(vectorIds, 80)) {
-      const conditions = [
-        inArray(assetChunks.vectorId, batch),
-        isNull(assets.deletedAt),
-      ];
+      for (const batch of splitIntoBatches(vectorIds, 80)) {
+        const conditions = [
+          inArray(assetChunks.vectorId, batch),
+          ...buildAssetSearchFilterConditions(query),
+        ];
 
       if (query?.aiVisibility?.length) {
         conditions.push(inArray(assets.aiVisibility, query.aiVisibility));
@@ -652,12 +713,11 @@ export class D1AssetRepository implements AssetRepository {
           .select()
           .from(assets)
           .where(
-            and(
-              isNull(assets.deletedAt),
-              eq(assets.status, "ready"),
-              isNotNull(assets.summary),
-              inArray(assets.aiVisibility, input.aiVisibility),
-              searchCondition
+              and(
+                ...buildAssetSearchFilterConditions(input),
+                isNotNull(assets.summary),
+                inArray(assets.aiVisibility, input.aiVisibility),
+                searchCondition
             )
           )
           .orderBy(desc(assets.retrievalPriority), desc(assets.updatedAt))
@@ -716,12 +776,11 @@ export class D1AssetRepository implements AssetRepository {
           .from(assetAssertions)
           .innerJoin(assets, eq(assetAssertions.assetId, assets.id))
           .where(
-            and(
-              isNull(assets.deletedAt),
-              eq(assets.status, "ready"),
-              inArray(assets.aiVisibility, input.aiVisibility),
-              searchCondition
-            )
+              and(
+                ...buildAssetSearchFilterConditions(input),
+                inArray(assets.aiVisibility, input.aiVisibility),
+                searchCondition
+              )
           )
           .orderBy(
             desc(assetAssertions.confidence),

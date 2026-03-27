@@ -79,20 +79,23 @@ export type IngestJobType =
 
 export type AssetDeletedFilter = "exclude" | "only" | "include";
 
-export interface AssetListQuery {
-  deleted?: AssetDeletedFilter | undefined;
-  status?: AssetStatus | undefined;
+export interface AssetSearchFilters {
   type?: AssetType | undefined;
   domain?: AssetDomain | undefined;
   documentClass?: AssetDocumentClass | undefined;
   sourceKind?: AssetSourceKind | undefined;
-  aiVisibility?: AssetAiVisibility | undefined;
   createdAtFrom?: string | undefined;
   createdAtTo?: string | undefined;
   sourceHost?: string | undefined;
   topic?: string | undefined;
   tag?: string | undefined;
   collection?: string | undefined;
+}
+
+export interface AssetListQuery extends AssetSearchFilters {
+  deleted?: AssetDeletedFilter | undefined;
+  status?: AssetStatus | undefined;
+  aiVisibility?: AssetAiVisibility | undefined;
   query?: string | undefined;
   page?: number | undefined;
   pageSize?: number | undefined;
@@ -200,6 +203,7 @@ export interface FacetTermRef {
 export interface AssetFacetTermQuery {
   terms: FacetTermRef[];
   aiVisibility?: AssetAiVisibility[] | undefined;
+  filters?: AssetSearchFilters | undefined;
   page?: number | undefined;
   pageSize?: number | undefined;
 }

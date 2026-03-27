@@ -40,6 +40,7 @@ import {
   searchAssets,
   searchAssetsForContext,
 } from "@/features/search/server/service";
+import { assetSearchPayloadSchema } from "@/features/search/server/schemas";
 import { searchAssetsByTerms } from "@/features/search/server/term-asset-service";
 import { searchTerms } from "@/features/search/server/term-service";
 import {
@@ -89,9 +90,7 @@ const saveAssetInputSchema = z
     }
   });
 
-const searchAssetsInputSchema = z.object({
-  query: z.string().trim().min(1),
-  page: z.number().int().positive().optional(),
+const searchAssetsInputSchema = assetSearchPayloadSchema.extend({
   pageSize: z.number().int().positive().max(50).optional(),
 });
 
@@ -439,6 +438,7 @@ export const createMcpServer = (
       description:
         "Search the library with semantic retrieval and return evidence-rich " +
         "results for retrieval-first workflows. " +
+        "Supports optional hard filters such as type, domain, document class, source kind, source host, topic, tag, collection, and created-at range. " +
         `${groupedEvidenceGuidance} ` +
         `${retrievalFirstGuidance} ` +
         cloudMindInvocationGuidance,
@@ -462,6 +462,7 @@ export const createMcpServer = (
       description:
         "Search the library with context-aware retrieval weighting for AI " +
         "clients in retrieval-first workflows. " +
+        "Supports optional hard filters such as type, domain, document class, source kind, source host, topic, tag, collection, and created-at range. " +
         `${groupedEvidenceGuidance} ` +
         `${retrievalFirstGuidance} ` +
         `${cloudMindInvocationGuidance} ` +

@@ -5,6 +5,7 @@ import type {
 } from "@/core/assets/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
+import type { AssetSearchFilters } from "@/features/assets/model/types";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
 import type { EvidenceItem } from "@/features/search/model/evidence";
 import type { SearchResult } from "@/features/search/model/types";
@@ -36,6 +37,21 @@ import { scoreAssetTermMatch } from "./term-scoring";
 const SEARCHABLE_AI_VISIBILITY = ["allow"] as const;
 const SUMMARY_ONLY_AI_VISIBILITY = ["summary_only"] as const;
 
+const getSearchFilters = (input: AssetSearchFilters): AssetSearchFilters => {
+  return {
+    type: input.type,
+    domain: input.domain,
+    documentClass: input.documentClass,
+    sourceKind: input.sourceKind,
+    createdAtFrom: input.createdAtFrom,
+    createdAtTo: input.createdAtTo,
+    sourceHost: input.sourceHost,
+    topic: input.topic,
+    tag: input.tag,
+    collection: input.collection,
+  };
+};
+
 interface SearchServiceDependencies {
   getAssetRepository: (
     bindings: AppBindings | undefined
@@ -50,6 +66,7 @@ interface SearchServiceDependencies {
     bindings: AppBindings | undefined,
     input: {
       query: string;
+      filters?: AssetSearchFilters | undefined;
       topK?: number | undefined;
       page?: number | undefined;
       pageSize?: number | undefined;
@@ -66,7 +83,7 @@ const defaultDependencies: SearchServiceDependencies = {
 
 const getSummaryMatches = async (
   repository: AssetSearchRepository,
-  query: string,
+  input: AssetSearchInput,
   limit: number,
   contextPolicy?: ContextRetrievalPolicy
 ) => {
@@ -76,9 +93,10 @@ const getSummaryMatches = async (
 
   try {
     return await repository.searchAssetSummaries({
-      query,
+      query: input.query,
       limit,
       aiVisibility: [...SUMMARY_ONLY_AI_VISIBILITY],
+      ...getSearchFilters(input),
     });
   } catch {
     // 这里对 lexical summary 检索做兜底，避免边缘 SQL 失败拖垮主链路。
@@ -88,7 +106,7 @@ const getSummaryMatches = async (
 
 const getAssertionMatches = async (
   repository: AssetSearchRepository,
-  query: string,
+  input: AssetSearchInput,
   limit: number,
   contextPolicy?: ContextRetrievalPolicy
 ) => {
@@ -102,12 +120,13 @@ const getAssertionMatches = async (
 
   try {
     return await repository.searchAssetAssertions({
-      query,
+      query: input.query,
       limit,
       aiVisibility: [
         ...SUMMARY_ONLY_AI_VISIBILITY,
         ...SEARCHABLE_AI_VISIBILITY,
       ],
+      ...getSearchFilters(input),
     });
   } catch {
     // 这里对 lexical assertion 检索做兜底，避免长 query 时报错。
@@ -312,10 +331,11 @@ export const createSearchService = (
     });
     const queryVector = embeddingResult.embeddings[0];
     const [summaryMatches, assertionMatches, termMatches] = await Promise.all([
-      getSummaryMatches(repository, query, topK, contextPolicy),
-      getAssertionMatches(repository, query, topK, contextPolicy),
+      getSummaryMatches(repository, input, topK, contextPolicy),
+      getAssertionMatches(repository, input, topK, contextPolicy),
       dependencies.searchAssetsByTerms(bindings, {
         query,
+        filters: getSearchFilters(input),
         topK,
         page: 1,
         pageSize: topK,
@@ -343,6 +363,7 @@ export const createSearchService = (
               vectorMatches.map((match) => match.id),
               {
                 aiVisibility: [...SEARCHABLE_AI_VISIBILITY],
+                ...getSearchFilters(input),
               }
             )
           : [];

@@ -11,6 +11,7 @@ import type {
   AssetFacetTermResult,
   AssetListQuery,
   AssetListResult,
+  AssetSearchFilters,
   AssetSensitivity,
   AssetSourceKind,
   AssetSummaryMatch,
@@ -39,23 +40,23 @@ export interface CreateFileAssetInput {
   rawR2Key: string;
 }
 
-export interface AssetSearchInput {
+export interface AssetSearchInput extends AssetSearchFilters {
   query: string;
   page?: number | undefined;
   pageSize?: number | undefined;
 }
 
-export interface ChunkMatchQuery {
+export interface ChunkMatchQuery extends AssetSearchFilters {
   aiVisibility?: AssetAiVisibility[] | undefined;
 }
 
-export interface SearchAssetSummaryInput {
+export interface SearchAssetSummaryInput extends AssetSearchFilters {
   query: string;
   limit: number;
   aiVisibility: AssetAiVisibility[];
 }
 
-export interface SearchAssetAssertionInput {
+export interface SearchAssetAssertionInput extends AssetSearchFilters {
   query: string;
   limit: number;
   aiVisibility: AssetAiVisibility[];

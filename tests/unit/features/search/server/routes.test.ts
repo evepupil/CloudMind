@@ -302,6 +302,15 @@ describe("search routes", () => {
           query: "cloudmind",
           page: 1,
           pageSize: 20,
+          domain: "engineering",
+          documentClass: "design_doc",
+          sourceKind: "manual",
+          sourceHost: "developers.cloudflare.com",
+          topic: "cloudflare",
+          tag: "database",
+          collection: "inbox:notes",
+          createdAtFrom: "2026-01-01",
+          createdAtTo: "2026-12-31",
         }),
       },
       env
@@ -378,6 +387,15 @@ describe("search routes", () => {
       query: "cloudmind",
       page: 1,
       pageSize: 20,
+      domain: "engineering",
+      documentClass: "design_doc",
+      sourceKind: "manual",
+      sourceHost: "developers.cloudflare.com",
+      topic: "cloudflare",
+      tag: "database",
+      collection: "inbox:notes",
+      createdAtFrom: "2026-01-01T00:00:00.000Z",
+      createdAtTo: "2026-12-31T23:59:59.999Z",
     });
   });
 

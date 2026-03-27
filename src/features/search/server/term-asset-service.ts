@@ -12,6 +12,9 @@ export interface SearchAssetsByTermsInput {
   query: string;
   kinds?: SearchTermsInput["kinds"];
   topK?: number | undefined;
+  filters?:
+    | import("@/features/assets/model/types").AssetSearchFilters
+    | undefined;
   page?: number | undefined;
   pageSize?: number | undefined;
 }
@@ -88,6 +91,7 @@ export const createTermAssetService = (
           facetValue: item.normalized,
         })),
         aiVisibility: [...TERM_METADATA_VISIBLE_AI_VISIBILITY],
+        filters: input.filters,
         page: input.page,
         pageSize: input.pageSize,
       };
