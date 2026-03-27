@@ -22,12 +22,7 @@ export const PageShell = ({
 }) => {
   return (
     <AppShell navigationKey={navigationKey}>
-      <main
-        style={{
-          maxWidth: "1320px",
-          margin: "0 auto",
-        }}
-      >
+      <main class="max-w-[1320px] mx-auto">
         <PageHeader title={title} subtitle={subtitle} actions={actions} />
         {children}
       </main>

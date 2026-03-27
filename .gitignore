@@ -7,3 +7,4 @@ coverage
 .vscode
 *.tsbuildinfo
 *.log
+public/styles.css

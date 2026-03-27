@@ -1,28 +1,12 @@
+import { AssetStatusBadge } from "@/features/assets/components/asset-status-badge";
 import type { AssetSummary } from "@/features/assets/model/types";
-
 import { PageShell } from "@/features/layout/components/page-shell";
 
 const overviewMetrics = [
-  {
-    label: "Assets indexed",
-    value: "1,248",
-    note: "+32 this week",
-  },
-  {
-    label: "Items processing",
-    value: "07",
-    note: "Queue active",
-  },
-  {
-    label: "Answer coverage",
-    value: "84%",
-    note: "With evidence",
-  },
-  {
-    label: "Failed jobs",
-    value: "02",
-    note: "Needs retry",
-  },
+  { label: "Assets indexed", value: "1,248", note: "+32 this week" },
+  { label: "Items processing", value: "07", note: "Queue active" },
+  { label: "Answer coverage", value: "84%", note: "With evidence" },
+  { label: "Failed jobs", value: "02", note: "Needs retry" },
 ];
 
 const activityFeed: AssetSummary[] = [
@@ -103,519 +87,173 @@ const pipelineSteps = [
 const actionCards = [
   {
     title: "Open Library",
-    description:
-      "Inspect assets, statuses, and summaries with less dashboard noise.",
+    description: "Inspect assets, statuses, and summaries.",
     href: "/assets",
-    tone: "#16202d",
-    bg: "#ffffff",
-    border: "rgba(21, 33, 51, 0.12)",
   },
   {
     title: "Capture Source",
     description: "Send a webpage, note, or PDF into the ingest pipeline.",
     href: "/capture",
-    tone: "#16202d",
-    bg: "#fff5e8",
-    border: "rgba(244, 129, 32, 0.22)",
   },
   {
     title: "Ask with Evidence",
     description: "Question the library and verify where the answer came from.",
     href: "/ask",
-    tone: "#16202d",
-    bg: "#eef6ff",
-    border: "rgba(94, 182, 255, 0.22)",
   },
 ];
 
-const statusStyles: Record<
-  AssetSummary["status"],
-  { color: string; bg: string; border: string }
-> = {
-  pending: {
-    color: "#9a5a00",
-    bg: "#fff2de",
-    border: "rgba(244, 129, 32, 0.22)",
-  },
-  processing: {
-    color: "#0b5cab",
-    bg: "#eaf4ff",
-    border: "rgba(94, 182, 255, 0.22)",
-  },
-  ready: {
-    color: "#116149",
-    bg: "#e7f7ef",
-    border: "rgba(17, 97, 73, 0.18)",
-  },
-  failed: {
-    color: "#a12d28",
-    bg: "#ffebe8",
-    border: "rgba(161, 45, 40, 0.18)",
-  },
-};
-
-// 这里重做 Overview，让它更像 Cloudflare 风格的产品工作台首页，而不是营销海报。
+// Notion 风格首页：白底卡片、微边框、小圆角、清晰的文字层级。
 export const HomePage = () => {
   return (
     <PageShell
-      title="Operate your private knowledge system"
-      subtitle="CloudMind should feel like a calm control surface for capture, processing, retrieval, and source-aware answers."
+      title="Overview"
+      subtitle="Your private knowledge workspace — capture, process, retrieve, and ask with evidence."
       navigationKey="overview"
       actions={
         <>
           <a
             href="/capture"
-            style={{
-              padding: "12px 16px",
-              borderRadius: "999px",
-              backgroundColor: "#16202d",
-              color: "#ffffff",
-              textDecoration: "none",
-              fontWeight: 700,
-            }}
+            class="inline-block px-3 py-1.5 rounded-md bg-[#37352f] text-white text-[14px] font-medium no-underline hover:bg-[#2f2d28] transition-colors"
           >
             New capture
           </a>
           <a
             href="/ask"
-            style={{
-              padding: "12px 16px",
-              borderRadius: "999px",
-              backgroundColor: "#fff1dd",
-              color: "#b55d0a",
-              textDecoration: "none",
-              fontWeight: 700,
-              border: "1px solid rgba(244, 129, 32, 0.22)",
-            }}
+            class="inline-block px-3 py-1.5 rounded-md border border-[#e8e8e7] bg-white text-[#37352f] text-[14px] font-medium no-underline hover:bg-[#f1f1f0] transition-colors"
           >
             Open Ask
           </a>
         </>
       }
     >
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1.45fr) minmax(320px, 0.9fr)",
-          gap: "18px",
-          marginBottom: "18px",
-        }}
-      >
-        <article
-          style={{
-            padding: "28px",
-            borderRadius: "30px",
-            border: "1px solid rgba(21, 33, 51, 0.08)",
-            background:
-              "linear-gradient(135deg, rgba(255,255,255,0.92) 0%, rgba(255,245,232,0.96) 100%)",
-            boxShadow: "0 24px 58px rgba(28, 39, 56, 0.07)",
-          }}
-        >
-          <p
-            style={{
-              margin: "0 0 10px",
-              color: "#f48120",
-              fontSize: "11px",
-              fontWeight: 800,
-              letterSpacing: "0.16em",
-              textTransform: "uppercase",
-            }}
-          >
-            Operator summary
-          </p>
-          <h2
-            style={{
-              margin: 0,
-              color: "#16202d",
-              fontSize: "clamp(30px, 4vw, 44px)",
-              lineHeight: 1.03,
-              fontWeight: 800,
-              letterSpacing: "-0.03em",
-              maxWidth: "12ch",
-            }}
-          >
+      {/* --- Two-column: summary + pipeline --- */}
+      <section class="grid grid-cols-1 lg:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.9fr)] gap-4 mb-4">
+        {/* Left: Operator summary card */}
+        <article class="p-6 rounded-lg border border-[#e8e8e7] bg-white">
+          <h2 class="text-[28px] font-semibold text-[#37352f] leading-tight tracking-tight max-w-[14ch]">
             Build a library that answers with receipts.
           </h2>
-          <p
-            style={{
-              margin: "14px 0 0",
-              color: "#566375",
-              fontSize: "16px",
-              lineHeight: 1.8,
-              maxWidth: "66ch",
-            }}
-          >
+          <p class="mt-3 max-w-[66ch] text-[15px] text-[#787774] leading-relaxed">
             The homepage should immediately show what entered the system, what
             still needs processing, and what questions the user can ask next
             without losing trust in the source chain.
           </p>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-              gap: "12px",
-              marginTop: "22px",
-            }}
-          >
+          {/* Metrics grid */}
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
             {overviewMetrics.map((metric) => (
               <article
                 key={metric.label}
-                style={{
-                  padding: "16px 16px 18px",
-                  borderRadius: "18px",
-                  backgroundColor: "rgba(255, 255, 255, 0.72)",
-                  border: "1px solid rgba(21, 33, 51, 0.08)",
-                }}
+                class="p-4 rounded-md border border-[#ededec] bg-[#fafaf9]"
               >
-                <p
-                  style={{
-                    margin: "0 0 8px",
-                    color: "#6b7685",
-                    fontSize: "12px",
-                    fontWeight: 800,
-                    letterSpacing: "0.08em",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {metric.label}
-                </p>
-                <p
-                  style={{
-                    margin: 0,
-                    color: "#16202d",
-                    fontSize: "32px",
-                    fontWeight: 800,
-                    letterSpacing: "-0.03em",
-                  }}
-                >
+                <p class="text-[12px] text-[#9b9a97] mb-1">{metric.label}</p>
+                <p class="text-[28px] font-semibold text-[#37352f] tracking-tight">
                   {metric.value}
                 </p>
-                <p
-                  style={{
-                    margin: "8px 0 0",
-                    color: "#566375",
-                    fontSize: "13px",
-                  }}
-                >
-                  {metric.note}
-                </p>
+                <p class="mt-1 text-[13px] text-[#787774]">{metric.note}</p>
               </article>
             ))}
           </div>
         </article>
 
-        <article
-          style={{
-            padding: "24px",
-            borderRadius: "30px",
-            border: "1px solid rgba(21, 33, 51, 0.08)",
-            backgroundColor: "#fffdfa",
-            boxShadow: "0 24px 58px rgba(28, 39, 56, 0.06)",
-          }}
-        >
-          <p
-            style={{
-              margin: "0 0 12px",
-              color: "#16202d",
-              fontSize: "18px",
-              fontWeight: 800,
-            }}
-          >
+        {/* Right: Processing model */}
+        <article class="p-5 rounded-lg border border-[#e8e8e7] bg-white">
+          <p class="text-[14px] font-semibold text-[#37352f] mb-4">
             Processing model
           </p>
-          <div style={{ display: "grid", gap: "12px" }}>
+          <div class="flex flex-col gap-0">
             {pipelineSteps.map((step, index) => (
-              <article
+              <div
                 key={step.title}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "28px minmax(0, 1fr)",
-                  gap: "14px",
-                  padding: "14px 0",
-                  borderTop:
-                    index === 0 ? "none" : "1px solid rgba(21, 33, 51, 0.08)",
-                }}
+                class={`flex gap-3 py-3 ${index > 0 ? "border-t border-[#ededec]" : ""}`}
               >
-                <div
-                  style={{
-                    width: "28px",
-                    height: "28px",
-                    borderRadius: "999px",
-                    backgroundColor:
-                      index === 0
-                        ? "#fff1dd"
-                        : index === 1
-                          ? "#eef6ff"
-                          : "#eef7f1",
-                    color:
-                      index === 0
-                        ? "#b55d0a"
-                        : index === 1
-                          ? "#0b5cab"
-                          : "#116149",
-                    display: "grid",
-                    placeItems: "center",
-                    fontSize: "12px",
-                    fontWeight: 800,
-                  }}
-                >
+                <span class="w-6 h-6 flex-shrink-0 flex items-center justify-center text-[12px] text-[#9b9a97] bg-[#f1f1f0] rounded">
                   {index + 1}
-                </div>
-                <div>
-                  <h3
-                    style={{
-                      margin: "0 0 6px",
-                      color: "#16202d",
-                      fontSize: "16px",
-                    }}
-                  >
+                </span>
+                <div class="min-w-0">
+                  <h3 class="text-[14px] font-medium text-[#37352f] mb-1">
                     {step.title}
                   </h3>
-                  <p
-                    style={{
-                      margin: 0,
-                      color: "#566375",
-                      lineHeight: 1.75,
-                    }}
-                  >
+                  <p class="text-[13px] text-[#787774] leading-relaxed">
                     {step.copy}
                   </p>
                 </div>
-              </article>
+              </div>
             ))}
           </div>
         </article>
       </section>
 
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "14px",
-          marginBottom: "18px",
-        }}
-      >
+      {/* --- Action cards --- */}
+      <section class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         {actionCards.map((card) => (
           <a
             key={card.title}
             href={card.href}
-            style={{
-              padding: "20px 20px 22px",
-              borderRadius: "24px",
-              textDecoration: "none",
-              color: card.tone,
-              backgroundColor: card.bg,
-              border: `1px solid ${card.border}`,
-              boxShadow: "0 18px 42px rgba(28, 39, 56, 0.05)",
-            }}
+            class="block p-5 rounded-lg border border-[#e8e8e7] bg-white no-underline text-[#37352f] hover:bg-[#fafaf9] transition-colors"
           >
-            <p
-              style={{
-                margin: "0 0 10px",
-                color: "#6b7685",
-                fontSize: "11px",
-                fontWeight: 800,
-                letterSpacing: "0.14em",
-                textTransform: "uppercase",
-              }}
-            >
-              Launch
-            </p>
-            <h3
-              style={{
-                margin: 0,
-                fontSize: "20px",
-                fontWeight: 800,
-              }}
-            >
+            <h3 class="text-[16px] font-medium text-[#37352f] mb-2">
               {card.title}
             </h3>
-            <p
-              style={{
-                margin: "10px 0 0",
-                color: "#566375",
-                lineHeight: 1.75,
-              }}
-            >
+            <p class="text-[14px] text-[#787774] leading-relaxed">
               {card.description}
             </p>
           </a>
         ))}
       </section>
 
-      <section
-        style={{
-          padding: "24px",
-          borderRadius: "30px",
-          backgroundColor: "#fffdfa",
-          border: "1px solid rgba(21, 33, 51, 0.08)",
-          boxShadow: "0 22px 52px rgba(28, 39, 56, 0.06)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "baseline",
-            gap: "12px",
-            marginBottom: "16px",
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <p
-              style={{
-                margin: "0 0 6px",
-                color: "#f48120",
-                fontSize: "11px",
-                fontWeight: 800,
-                letterSpacing: "0.16em",
-                textTransform: "uppercase",
-              }}
-            >
-              Recent activity
-            </p>
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "28px",
-                color: "#16202d",
-                fontWeight: 800,
-                letterSpacing: "-0.03em",
-              }}
-            >
-              What changed in the library
-            </h2>
-          </div>
+      {/* --- Recent activity --- */}
+      <section class="p-6 rounded-lg border border-[#e8e8e7] bg-white">
+        <div class="flex items-baseline justify-between gap-3 mb-5 flex-wrap">
+          <h2 class="text-[20px] font-semibold text-[#37352f]">
+            Recent activity
+          </h2>
           <a
             href="/search"
-            style={{
-              color: "#16202d",
-              textDecoration: "none",
-              fontWeight: 700,
-            }}
+            class="text-[14px] text-[#2383e2] no-underline hover:underline"
           >
             Search across assets
           </a>
         </div>
 
-        <div style={{ display: "grid", gap: "12px" }}>
-          {activityFeed.map((asset) => {
-            const statusStyle = statusStyles[asset.status];
-
-            return (
-              <article
-                key={asset.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "minmax(0, 1.4fr) auto",
-                  gap: "16px",
-                  alignItems: "start",
-                  padding: "18px 18px 20px",
-                  borderRadius: "20px",
-                  border: "1px solid rgba(21, 33, 51, 0.08)",
-                  backgroundColor: "#ffffff",
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                      gap: "10px",
-                      marginBottom: "8px",
-                    }}
-                  >
-                    <span
-                      style={{
-                        padding: "5px 8px",
-                        borderRadius: "999px",
-                        backgroundColor: "#f3f5f8",
-                        color: "#5f6b7d",
-                        fontSize: "11px",
-                        fontWeight: 800,
-                        letterSpacing: "0.08em",
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      {asset.type}
-                    </span>
-                    <span
-                      style={{
-                        padding: "5px 8px",
-                        borderRadius: "999px",
-                        backgroundColor: statusStyle.bg,
-                        color: statusStyle.color,
-                        border: `1px solid ${statusStyle.border}`,
-                        fontSize: "11px",
-                        fontWeight: 800,
-                        letterSpacing: "0.08em",
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      {asset.status}
-                    </span>
-                  </div>
-                  <h3
-                    style={{
-                      margin: "0 0 8px",
-                      color: "#16202d",
-                      fontSize: "20px",
-                      fontWeight: 800,
-                    }}
+        <div class="flex flex-col gap-3">
+          {activityFeed.map((asset) => (
+            <article
+              key={asset.id}
+              class="flex flex-col sm:flex-row sm:items-start gap-4 p-4 rounded-md border border-[#ededec] bg-[#fafaf9]"
+            >
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2 mb-2">
+                  <span class="inline-block px-2 py-0.5 text-[12px] text-[#787774] bg-[#f1f1f0] rounded">
+                    {asset.type}
+                  </span>
+                  <AssetStatusBadge status={asset.status} />
+                </div>
+                <h3 class="text-[15px] font-medium text-[#37352f] mb-1">
+                  <a
+                    href={`/assets/${asset.id}`}
+                    class="no-underline text-[#37352f] hover:text-[#2383e2] transition-colors"
                   >
                     {asset.title}
-                  </h3>
-                  <p
-                    style={{
-                      margin: 0,
-                      color: "#566375",
-                      lineHeight: 1.75,
-                    }}
-                  >
-                    {asset.summary}
-                  </p>
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gap: "8px",
-                    minWidth: "164px",
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: "10px 12px",
-                      borderRadius: "14px",
-                      backgroundColor: "#f7f8fa",
-                      color: "#566375",
-                      fontSize: "13px",
-                    }}
-                  >
-                    {asset.sourceUrl ?? "Local or manual source"}
-                  </div>
-                  <a
-                    href="/ask"
-                    style={{
-                      padding: "11px 12px",
-                      borderRadius: "14px",
-                      backgroundColor: "#16202d",
-                      color: "#ffffff",
-                      textDecoration: "none",
-                      textAlign: "center",
-                      fontSize: "13px",
-                      fontWeight: 700,
-                    }}
-                  >
-                    Ask from this context
                   </a>
+                </h3>
+                <p class="text-[14px] text-[#787774] leading-relaxed">
+                  {asset.summary}
+                </p>
+              </div>
+              <div class="flex flex-col gap-2 sm:min-w-[160px]">
+                <div class="px-3 py-2 rounded-md bg-white border border-[#ededec] text-[12px] text-[#787774] truncate">
+                  {asset.sourceUrl ?? "Local or manual source"}
                 </div>
-              </article>
-            );
-          })}
+                <a
+                  href="/ask"
+                  class="block px-3 py-2 rounded-md bg-[#37352f] text-white text-[13px] font-medium no-underline text-center hover:bg-[#2f2d28] transition-colors"
+                >
+                  Ask from this context
+                </a>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
     </PageShell>

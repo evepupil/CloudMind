@@ -4,9 +4,9 @@ import type {
   AssetDomain,
   AssetListQuery,
   AssetListResult,
+  AssetSourceKind,
   AssetStatus,
   AssetSummary,
-  AssetSourceKind,
   AssetType,
 } from "@/features/assets/model/types";
 import { PageShell } from "@/features/layout/components/page-shell";
@@ -176,7 +176,7 @@ const buildFilterSummary = (filters: AssetListQuery): string => {
     segments.push(`query: ${filters.query}`);
   }
 
-  return segments.length > 0 ? segments.join(" • ") : "All assets";
+  return segments.length > 0 ? segments.join(" \u2022 ") : "All assets";
 };
 
 // 这里重做 Library 页原型，让它先具备知识浏览器的结构，而不是表单堆叠页。
@@ -247,127 +247,49 @@ export const AssetsPage = ({
       subtitle="Browse your saved knowledge as a living library. Filter by type and state, then jump into detail or keep capturing new material."
       navigationKey="library"
       actions={
-        <>
+        <div class="flex gap-2">
           <a
             href="/capture"
-            style={{
-              padding: "12px 18px",
-              borderRadius: "999px",
-              backgroundColor: "#102033",
-              color: "#ffffff",
-              textDecoration: "none",
-              fontWeight: 700,
-            }}
+            class="inline-flex items-center rounded-md bg-[#37352f] px-4 py-2 text-[14px] font-bold text-white no-underline hover:bg-[#2f2d28]"
           >
             Capture New
           </a>
           <a
             href="/ask"
-            style={{
-              padding: "12px 18px",
-              borderRadius: "999px",
-              backgroundColor: "#dff7f5",
-              color: "#0f766e",
-              textDecoration: "none",
-              fontWeight: 700,
-            }}
+            class="inline-flex items-center rounded-md border border-[#e8e8e7] bg-white px-4 py-2 text-[14px] font-bold text-[#37352f] no-underline hover:bg-[#f1f1f0]"
           >
             Ask Library
           </a>
-        </>
+        </div>
       }
     >
       {flashMessage ? (
-        <section
-          style={{
-            marginBottom: "18px",
-            padding: "14px 16px",
-            borderRadius: "16px",
-            backgroundColor: "#ecfeff",
-            border: "1px solid #a5f3fc",
-            color: "#155e75",
-          }}
-        >
+        <section class="mb-4 rounded-lg border border-[#b7dbbf] bg-[#e3f2e8] px-4 py-3 text-[#2e6c3e]">
           {flashMessage}
         </section>
       ) : null}
 
       {errorMessage ? (
-        <section
-          style={{
-            marginBottom: "18px",
-            padding: "14px 16px",
-            borderRadius: "16px",
-            backgroundColor: "#fef2f2",
-            border: "1px solid #fecaca",
-            color: "#991b1b",
-          }}
-        >
+        <section class="mb-4 rounded-lg border border-[#e8b7b7] bg-[#f9e3e3] px-4 py-3 text-[#9c2e2e]">
           {errorMessage}
         </section>
       ) : null}
 
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 0.9fr) minmax(260px, 0.45fr)",
-          gap: "18px",
-          marginBottom: "22px",
-        }}
-      >
-        <article
-          style={{
-            padding: "22px 24px",
-            borderRadius: "24px",
-            backgroundColor: "#ffffff",
-            border: "1px solid rgba(15, 23, 42, 0.08)",
-            boxShadow: "0 16px 40px rgba(15, 23, 42, 0.08)",
-          }}
-        >
-          <p
-            style={{
-              margin: "0 0 8px",
-              color: "#0f766e",
-              fontSize: "12px",
-              fontWeight: 800,
-              letterSpacing: "0.14em",
-              textTransform: "uppercase",
-            }}
-          >
-            Library Summary
-          </p>
-          <h2 style={{ margin: 0, fontSize: "28px" }}>
+      <section class="mb-5 grid grid-cols-[minmax(0,0.9fr)_minmax(260px,0.45fr)] gap-4">
+        <article class="rounded-lg border border-[#e8e8e7] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <h2 class="m-0 text-[24px] font-semibold text-[#37352f]">
             {pagination.total} assets
           </h2>
-          <p
-            style={{
-              margin: "10px 0 0",
-              color: "#526071",
-              lineHeight: 1.8,
-            }}
-          >
+          <p class="mt-2 leading-relaxed text-[#787774]">
             {buildFilterSummary(filters)}
           </p>
         </article>
 
-        <article
-          style={{
-            padding: "22px 24px",
-            borderRadius: "24px",
-            background:
-              "linear-gradient(145deg, rgba(255,255,255,0.96) 0%, rgba(227, 244, 242, 0.92) 100%)",
-            border: "1px solid rgba(15, 23, 42, 0.08)",
-          }}
-        >
-          <h2 style={{ marginTop: 0, fontSize: "20px" }}>Use this page to</h2>
-          <ul
-            style={{
-              margin: 0,
-              paddingLeft: "18px",
-              color: "#526071",
-              lineHeight: 1.9,
-            }}
-          >
+        <article class="rounded-lg border border-[#e8e8e7] bg-white p-5">
+          <h2 class="mt-0 text-[16px] font-semibold text-[#37352f]">
+            Use this page to
+          </h2>
+          <ul class="m-0 list-disc pl-5 leading-loose text-[#787774]">
             <li>Scan recent knowledge at a glance</li>
             <li>Filter by type, domain, visibility, and source</li>
             <li>Jump to detail or keep capturing new material</li>
@@ -375,37 +297,18 @@ export const AssetsPage = ({
         </article>
       </section>
 
-      <section
-        style={{
-          marginBottom: "20px",
-          padding: "20px",
-          borderRadius: "24px",
-          backgroundColor: "#ffffff",
-          border: "1px solid rgba(15, 23, 42, 0.08)",
-          boxShadow: "0 16px 40px rgba(15, 23, 42, 0.06)",
-        }}
-      >
+      <section class="mb-5 rounded-lg border border-[#e8e8e7] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
         <form
           method="get"
           action="/assets"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-            gap: "12px",
-          }}
+          class="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3"
         >
-          <label style={{ display: "grid", gap: "8px" }}>
-            <span style={{ fontWeight: 700 }}>Status</span>
+          <label class="grid gap-2">
+            <span class="text-[13px] font-semibold text-[#37352f]">Status</span>
             <select
               name="status"
               defaultValue={filters.status ?? ""}
-              style={{
-                width: "100%",
-                padding: "12px 14px",
-                borderRadius: "14px",
-                border: "1px solid rgba(15, 23, 42, 0.12)",
-                fontSize: "15px",
-              }}
+              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
             >
               {assetStatusOptions.map((option) => (
                 <option key={option.label} value={option.value}>
@@ -414,18 +317,12 @@ export const AssetsPage = ({
               ))}
             </select>
           </label>
-          <label style={{ display: "grid", gap: "8px" }}>
-            <span style={{ fontWeight: 700 }}>Type</span>
+          <label class="grid gap-2">
+            <span class="text-[13px] font-semibold text-[#37352f]">Type</span>
             <select
               name="type"
               defaultValue={filters.type ?? ""}
-              style={{
-                width: "100%",
-                padding: "12px 14px",
-                borderRadius: "14px",
-                border: "1px solid rgba(15, 23, 42, 0.12)",
-                fontSize: "15px",
-              }}
+              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
             >
               {assetTypeOptions.map((option) => (
                 <option key={option.label} value={option.value}>
@@ -434,18 +331,12 @@ export const AssetsPage = ({
               ))}
             </select>
           </label>
-          <label style={{ display: "grid", gap: "8px" }}>
-            <span style={{ fontWeight: 700 }}>Domain</span>
+          <label class="grid gap-2">
+            <span class="text-[13px] font-semibold text-[#37352f]">Domain</span>
             <select
               name="domain"
               defaultValue={filters.domain ?? ""}
-              style={{
-                width: "100%",
-                padding: "12px 14px",
-                borderRadius: "14px",
-                border: "1px solid rgba(15, 23, 42, 0.12)",
-                fontSize: "15px",
-              }}
+              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
             >
               {assetDomainOptions.map((option) => (
                 <option key={option.label} value={option.value}>
@@ -454,18 +345,14 @@ export const AssetsPage = ({
               ))}
             </select>
           </label>
-          <label style={{ display: "grid", gap: "8px" }}>
-            <span style={{ fontWeight: 700 }}>Document Class</span>
+          <label class="grid gap-2">
+            <span class="text-[13px] font-semibold text-[#37352f]">
+              Document Class
+            </span>
             <select
               name="documentClass"
               defaultValue={filters.documentClass ?? ""}
-              style={{
-                width: "100%",
-                padding: "12px 14px",
-                borderRadius: "14px",
-                border: "1px solid rgba(15, 23, 42, 0.12)",
-                fontSize: "15px",
-              }}
+              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
             >
               {assetDocumentClassOptions.map((option) => (
                 <option key={option.label} value={option.value}>
@@ -474,18 +361,14 @@ export const AssetsPage = ({
               ))}
             </select>
           </label>
-          <label style={{ display: "grid", gap: "8px" }}>
-            <span style={{ fontWeight: 700 }}>Source Kind</span>
+          <label class="grid gap-2">
+            <span class="text-[13px] font-semibold text-[#37352f]">
+              Source Kind
+            </span>
             <select
               name="sourceKind"
               defaultValue={filters.sourceKind ?? ""}
-              style={{
-                width: "100%",
-                padding: "12px 14px",
-                borderRadius: "14px",
-                border: "1px solid rgba(15, 23, 42, 0.12)",
-                fontSize: "15px",
-              }}
+              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
             >
               {assetSourceKindOptions.map((option) => (
                 <option key={option.label} value={option.value}>
@@ -494,18 +377,14 @@ export const AssetsPage = ({
               ))}
             </select>
           </label>
-          <label style={{ display: "grid", gap: "8px" }}>
-            <span style={{ fontWeight: 700 }}>AI Visibility</span>
+          <label class="grid gap-2">
+            <span class="text-[13px] font-semibold text-[#37352f]">
+              AI Visibility
+            </span>
             <select
               name="aiVisibility"
               defaultValue={filters.aiVisibility ?? ""}
-              style={{
-                width: "100%",
-                padding: "12px 14px",
-                borderRadius: "14px",
-                border: "1px solid rgba(15, 23, 42, 0.12)",
-                fontSize: "15px",
-              }}
+              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
             >
               {assetAiVisibilityOptions.map((option) => (
                 <option key={option.label} value={option.value}>
@@ -514,70 +393,38 @@ export const AssetsPage = ({
               ))}
             </select>
           </label>
-          <label style={{ display: "grid", gap: "8px" }}>
-            <span style={{ fontWeight: 700 }}>Source Host</span>
+          <label class="grid gap-2">
+            <span class="text-[13px] font-semibold text-[#37352f]">
+              Source Host
+            </span>
             <input
               name="sourceHost"
               type="search"
               defaultValue={filters.sourceHost ?? ""}
               placeholder="developers.cloudflare.com"
-              style={{
-                width: "100%",
-                padding: "12px 14px",
-                borderRadius: "14px",
-                border: "1px solid rgba(15, 23, 42, 0.12)",
-                fontSize: "15px",
-                boxSizing: "border-box",
-              }}
+              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
             />
           </label>
-          <label style={{ display: "grid", gap: "8px" }}>
-            <span style={{ fontWeight: 700 }}>Search</span>
+          <label class="grid gap-2">
+            <span class="text-[13px] font-semibold text-[#37352f]">Search</span>
             <input
               name="query"
               type="search"
               defaultValue={filters.query ?? ""}
               placeholder="Title, summary, or source URL"
-              style={{
-                width: "100%",
-                padding: "12px 14px",
-                borderRadius: "14px",
-                border: "1px solid rgba(15, 23, 42, 0.12)",
-                fontSize: "15px",
-                boxSizing: "border-box",
-              }}
+              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
             />
           </label>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "end",
-              gap: "10px",
-              flexWrap: "wrap",
-            }}
-          >
+          <div class="flex flex-wrap items-end gap-2">
             <button
               type="submit"
-              style={{
-                padding: "12px 18px",
-                borderRadius: "999px",
-                border: "none",
-                backgroundColor: "#102033",
-                color: "#ffffff",
-                fontSize: "14px",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
+              class="cursor-pointer rounded-md border-none bg-[#37352f] px-4 py-2 text-[14px] font-bold text-white hover:bg-[#2f2d28]"
             >
               Apply
             </button>
             <a
               href="/assets"
-              style={{
-                color: "#526071",
-                textDecoration: "none",
-                fontWeight: 700,
-              }}
+              class="text-[14px] font-bold text-[#787774] no-underline hover:text-[#37352f]"
             >
               Reset
             </a>
@@ -586,174 +433,99 @@ export const AssetsPage = ({
       </section>
 
       {pagination.totalPages > 1 ? (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: "12px",
-            marginBottom: "18px",
-          }}
-        >
-          <span style={{ color: "#5f6e7d", fontSize: "14px" }}>
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <span class="text-[14px] text-[#787774]">
             Page {pagination.page} / {pagination.totalPages}
           </span>
-          <div style={{ display: "flex", gap: "12px" }}>
+          <div class="flex gap-3">
             {previousPage ? (
               <a
                 href={buildPageHref(previousPage)}
-                style={{
-                  color: "#102033",
-                  textDecoration: "none",
-                  fontWeight: 700,
-                }}
+                class="text-[14px] font-semibold text-[#2383e2] no-underline hover:underline"
               >
                 Previous
               </a>
             ) : (
-              <span style={{ color: "#98a4b3" }}>Previous</span>
+              <span class="text-[14px] text-[#9b9a97]">Previous</span>
             )}
             {nextPage ? (
               <a
                 href={buildPageHref(nextPage)}
-                style={{
-                  color: "#102033",
-                  textDecoration: "none",
-                  fontWeight: 700,
-                }}
+                class="text-[14px] font-semibold text-[#2383e2] no-underline hover:underline"
               >
                 Next
               </a>
             ) : (
-              <span style={{ color: "#98a4b3" }}>Next</span>
+              <span class="text-[14px] text-[#9b9a97]">Next</span>
             )}
           </div>
         </div>
       ) : null}
 
       {items.length === 0 ? (
-        <article
-          style={{
-            padding: "24px",
-            borderRadius: "22px",
-            backgroundColor: "#ffffff",
-            border: "1px dashed rgba(15, 23, 42, 0.14)",
-            color: "#526071",
-          }}
-        >
-          Your library is still empty. Start from <a href="/capture">Capture</a>{" "}
+        <article class="rounded-lg border border-dashed border-[#e8e8e7] bg-white p-6 text-[#787774]">
+          Your library is still empty. Start from{" "}
+          <a
+            href="/capture"
+            class="text-[#2383e2] no-underline hover:underline"
+          >
+            Capture
+          </a>{" "}
           and bring in your first URL, note, or PDF.
         </article>
       ) : (
-        <div style={{ display: "grid", gap: "14px" }}>
+        <div class="grid gap-3">
           {items.map((asset) => (
             <article
               key={asset.id}
-              style={{
-                padding: "22px",
-                borderRadius: "22px",
-                border: "1px solid rgba(15, 23, 42, 0.08)",
-                backgroundColor: "#ffffff",
-                boxShadow: "0 14px 32px rgba(15, 23, 42, 0.06)",
-              }}
+              class="rounded-lg border border-[#e8e8e7] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
             >
               {buildAssetTags(asset).length > 0 ? (
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "8px",
-                    flexWrap: "wrap",
-                    marginBottom: "12px",
-                  }}
-                >
+                <div class="mb-3 flex flex-wrap gap-1.5">
                   {buildAssetTags(asset).map((tag) => (
                     <span
                       key={`${asset.id}:${tag}`}
-                      style={{
-                        padding: "5px 8px",
-                        borderRadius: "999px",
-                        backgroundColor: "#f4f7fb",
-                        color: "#4b5a6b",
-                        fontSize: "12px",
-                        fontWeight: 700,
-                      }}
+                      class="rounded bg-[#f1f1f0] px-2 py-0.5 text-[12px] text-[#787774]"
                     >
                       {formatLabel(tag)}
                     </span>
                   ))}
                 </div>
               ) : null}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: "14px",
-                  marginBottom: "12px",
-                  flexWrap: "wrap",
-                }}
-              >
+              <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <a
                     href={`/assets/${asset.id}`}
-                    style={{
-                      color: "#102033",
-                      textDecoration: "none",
-                      fontSize: "18px",
-                      fontWeight: 800,
-                    }}
+                    class="text-[16px] font-semibold text-[#37352f] no-underline hover:text-[#2383e2]"
                   >
                     {asset.title}
                   </a>
-                  <div style={{ marginTop: "6px", color: "#5f6e7d" }}>
-                    {asset.type} • Created {formatDate(asset.createdAt)}
+                  <div class="mt-1 text-[13px] text-[#787774]">
+                    {asset.type} &bull; Created {formatDate(asset.createdAt)}
                   </div>
                 </div>
                 <AssetStatusBadge status={asset.status} />
               </div>
-              <p
-                style={{
-                  marginTop: 0,
-                  marginBottom: "10px",
-                  color: "#445160",
-                  lineHeight: 1.8,
-                }}
-              >
+              <p class="mb-2 leading-relaxed text-[#787774]">
                 {asset.summary ??
                   "Summary has not been generated yet. This record is currently showing raw metadata."}
               </p>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                }}
-              >
-                <div style={{ color: "#5f6e7d", fontSize: "14px" }}>
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="text-[13px] text-[#9b9a97]">
                   {asset.sourceHost ??
                     asset.sourceUrl ??
                     `Asset ID: ${asset.id}`}
                 </div>
-                <div style={{ display: "flex", gap: "14px" }}>
+                <div class="flex gap-3">
                   <a
                     href={`/assets/${asset.id}`}
-                    style={{
-                      color: "#102033",
-                      textDecoration: "none",
-                      fontWeight: 700,
-                    }}
+                    class="text-[14px] font-semibold text-[#2383e2] no-underline hover:underline"
                   >
                     Open Detail
                   </a>
                   <a
                     href="/ask"
-                    style={{
-                      color: "#0f766e",
-                      textDecoration: "none",
-                      fontWeight: 700,
-                    }}
+                    class="text-[14px] font-semibold text-[#2383e2] no-underline hover:underline"
                   >
                     Ask From Here
                   </a>

@@ -96,28 +96,13 @@ const MessageBanner = ({
   children: string;
   tone: "success" | "error";
 }) => {
-  const styles =
+  const toneClasses =
     tone === "success"
-      ? {
-          backgroundColor: "#ecfeff",
-          border: "1px solid #a5f3fc",
-          color: "#155e75",
-        }
-      : {
-          backgroundColor: "#fef2f2",
-          border: "1px solid #fecaca",
-          color: "#991b1b",
-        };
+      ? "bg-[#e3f2e8] text-[#2e6c3e] border-[#b7dbbf]"
+      : "bg-[#f9e3e3] text-[#9c2e2e] border-[#e8b7b7]";
 
   return (
-    <section
-      style={{
-        marginBottom: "18px",
-        padding: "14px 16px",
-        borderRadius: "16px",
-        ...styles,
-      }}
-    >
+    <section class={`mb-[18px] px-4 py-3 rounded-md border ${toneClasses}`}>
       {children}
     </section>
   );
@@ -159,27 +144,13 @@ export const AssetDetailPage = ({
         <>
           <a
             href="/assets"
-            style={{
-              padding: "12px 18px",
-              borderRadius: "999px",
-              backgroundColor: "#eef2f7",
-              color: "#102033",
-              textDecoration: "none",
-              fontWeight: 700,
-            }}
+            class="rounded-md bg-[#f1f1f0] text-[#37352f] px-3 py-1.5 font-medium no-underline hover:bg-[#ebebea]"
           >
             Back to Library
           </a>
           <a
             href="/ask"
-            style={{
-              padding: "12px 18px",
-              borderRadius: "999px",
-              backgroundColor: "#dff7f5",
-              color: "#0f766e",
-              textDecoration: "none",
-              fontWeight: 700,
-            }}
+            class="rounded-md bg-[#e8f0fa] text-[#2383e2] px-3 py-1.5 font-medium no-underline hover:bg-[#d6e6f7]"
           >
             Ask About This
           </a>
@@ -194,50 +165,20 @@ export const AssetDetailPage = ({
         <MessageBanner tone="error">{errorMessage}</MessageBanner>
       ) : null}
 
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1.15fr) minmax(280px, 0.75fr)",
-          gap: "18px",
-        }}
-      >
-        <div style={{ display: "grid", gap: "18px" }}>
-          <article
-            style={{
-              padding: "24px",
-              borderRadius: "24px",
-              border: "1px solid rgba(15, 23, 42, 0.08)",
-              backgroundColor: "#ffffff",
-              boxShadow: "0 18px 48px rgba(15, 23, 42, 0.08)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: "12px",
-                flexWrap: "wrap",
-                marginBottom: "16px",
-              }}
-            >
-              <div style={{ color: "#5f6e7d" }}>
+      <section class="grid grid-cols-[minmax(0,1.15fr)_minmax(280px,0.75fr)] gap-[18px]">
+        <div class="grid gap-[18px]">
+          <article class="rounded-lg border border-[#e8e8e7] bg-white p-6">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div class="text-[#787774]">
                 {item.type} • Created {formatDate(item.createdAt)}
               </div>
               <AssetStatusBadge status={item.status} />
             </div>
-            <h2 style={{ marginTop: 0, fontSize: "22px" }}>Summary</h2>
-            <p style={{ marginBottom: 0, color: "#445160", lineHeight: 1.85 }}>
+            <h2 class="mt-0 text-[22px]">Summary</h2>
+            <p class="mb-0 text-[#787774] leading-[1.85]">
               {item.summary ?? "Summary has not been generated yet."}
             </p>
-            <div
-              style={{
-                display: "flex",
-                gap: "8px",
-                flexWrap: "wrap",
-                marginTop: "16px",
-              }}
-            >
+            <div class="mt-4 flex flex-wrap gap-2">
               {[
                 item.domain,
                 item.documentClass ?? null,
@@ -249,14 +190,7 @@ export const AssetDetailPage = ({
                 .map((value) => (
                   <span
                     key={value}
-                    style={{
-                      padding: "6px 9px",
-                      borderRadius: "999px",
-                      backgroundColor: "#f4f7fb",
-                      color: "#445160",
-                      fontSize: "12px",
-                      fontWeight: 700,
-                    }}
+                    class="px-2 py-0.5 text-[12px] bg-[#f1f1f0] text-[#787774] rounded"
                   >
                     {formatLabel(value)}
                   </span>
@@ -264,24 +198,9 @@ export const AssetDetailPage = ({
             </div>
           </article>
 
-          <article
-            style={{
-              padding: "24px",
-              borderRadius: "24px",
-              border: "1px solid rgba(15, 23, 42, 0.08)",
-              backgroundColor: "#ffffff",
-              boxShadow: "0 18px 48px rgba(15, 23, 42, 0.08)",
-            }}
-          >
-            <h2 style={{ marginTop: 0, fontSize: "22px" }}>Layered Index</h2>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                gap: "12px",
-                marginBottom: "18px",
-              }}
-            >
+          <article class="rounded-lg border border-[#e8e8e7] bg-white p-6">
+            <h2 class="mt-0 text-[22px]">Layered Index</h2>
+            <div class="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3 mb-[18px]">
               {[
                 {
                   label: "Domain",
@@ -289,7 +208,8 @@ export const AssetDetailPage = ({
                 },
                 {
                   label: "Document Class",
-                  value: item.documentClass ?? descriptor?.documentClass ?? "N/A",
+                  value:
+                    item.documentClass ?? descriptor?.documentClass ?? "N/A",
                 },
                 {
                   label: "Source Host",
@@ -297,7 +217,8 @@ export const AssetDetailPage = ({
                 },
                 {
                   label: "Collection",
-                  value: item.collectionKey ?? descriptor?.collectionKey ?? "N/A",
+                  value:
+                    item.collectionKey ?? descriptor?.collectionKey ?? "N/A",
                 },
                 {
                   label: "AI Visibility",
@@ -310,177 +231,85 @@ export const AssetDetailPage = ({
               ].map((entry) => (
                 <div
                   key={entry.label}
-                  style={{
-                    padding: "14px 16px",
-                    borderRadius: "18px",
-                    backgroundColor: "#f8fbfc",
-                    border: "1px solid rgba(15, 23, 42, 0.06)",
-                  }}
+                  class="rounded-md bg-[#fafaf9] border border-[#ededec] px-4 py-3.5"
                 >
-                  <div
-                    style={{
-                      color: "#5f6e7d",
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.08em",
-                    }}
-                  >
+                  <div class="text-[#9b9a97] text-[12px] font-bold uppercase tracking-[0.08em]">
                     {entry.label}
                   </div>
-                  <div
-                    style={{
-                      marginTop: "8px",
-                      color: "#102033",
-                      fontWeight: 700,
-                      wordBreak: "break-word",
-                    }}
-                  >
+                  <div class="mt-2 text-[#37352f] font-bold break-words">
                     {entry.value}
                   </div>
                 </div>
               ))}
             </div>
 
-            <div style={{ display: "grid", gap: "14px" }}>
+            <div class="grid gap-3.5">
               <div>
-                <h3 style={{ margin: "0 0 10px", fontSize: "16px" }}>Topics</h3>
+                <h3 class="m-0 mb-2.5 text-[16px]">Topics</h3>
                 {descriptor?.topics?.length ? (
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <div class="flex flex-wrap gap-2">
                     {descriptor.topics.map((topic) => (
                       <span
                         key={topic}
-                        style={{
-                          padding: "6px 9px",
-                          borderRadius: "999px",
-                          backgroundColor: "#eef6ff",
-                          color: "#0b5cab",
-                          fontSize: "12px",
-                          fontWeight: 700,
-                        }}
+                        class="px-2 py-0.5 text-[12px] bg-[#e8f0fa] text-[#2383e2] rounded"
                       >
                         {formatLabel(topic)}
                       </span>
                     ))}
                   </div>
                 ) : (
-                  <p style={{ margin: 0, color: "#5f6e7d" }}>
-                    No topic signals yet.
-                  </p>
+                  <p class="m-0 text-[#787774]">No topic signals yet.</p>
                 )}
               </div>
 
               <div>
-                <h3 style={{ margin: "0 0 10px", fontSize: "16px" }}>Facets</h3>
+                <h3 class="m-0 mb-2.5 text-[16px]">Facets</h3>
                 {item.facets?.length ? (
-                  <div style={{ display: "grid", gap: "10px" }}>
+                  <div class="grid gap-2.5">
                     {item.facets.map((facet) => (
                       <div
                         key={facet.id}
-                        style={{
-                          padding: "14px 16px",
-                          borderRadius: "16px",
-                          backgroundColor: "#faf8f4",
-                          border: "1px solid rgba(15, 23, 42, 0.06)",
-                        }}
+                        class="rounded-md bg-[#fafaf9] border border-[#ededec] px-4 py-3.5"
                       >
-                        <div
-                          style={{
-                            color: "#8b6c35",
-                            fontSize: "12px",
-                            fontWeight: 700,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                        <div class="text-[#9b9a97] text-[12px] font-bold uppercase tracking-[0.08em]">
                           {formatLabel(facet.facetKey)}
                         </div>
-                        <div
-                          style={{
-                            marginTop: "6px",
-                            color: "#102033",
-                            fontWeight: 700,
-                          }}
-                        >
+                        <div class="mt-1.5 text-[#37352f] font-bold">
                           {facet.facetLabel}
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p style={{ margin: 0, color: "#5f6e7d" }}>
-                    No facet records yet.
-                  </p>
+                  <p class="m-0 text-[#787774]">No facet records yet.</p>
                 )}
               </div>
             </div>
           </article>
 
-          <article
-            style={{
-              padding: "24px",
-              borderRadius: "24px",
-              border: "1px solid rgba(15, 23, 42, 0.08)",
-              backgroundColor: "#ffffff",
-              boxShadow: "0 18px 48px rgba(15, 23, 42, 0.08)",
-            }}
-          >
-            <h2 style={{ marginTop: 0, fontSize: "22px" }}>Content</h2>
-            <pre
-              style={{
-                margin: 0,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                fontFamily:
-                  '"IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace',
-                color: "#102033",
-                lineHeight: 1.8,
-              }}
-            >
+          <article class="rounded-lg border border-[#e8e8e7] bg-white p-6">
+            <h2 class="mt-0 text-[22px]">Content</h2>
+            <pre class="m-0 whitespace-pre-wrap break-words font-[IBM_Plex_Mono,SFMono-Regular,Consolas,monospace] text-[#37352f] leading-[1.8]">
               {item.contentText ?? "Content has not been stored yet."}
             </pre>
           </article>
 
-          <article
-            style={{
-              padding: "24px",
-              borderRadius: "24px",
-              border: "1px solid rgba(15, 23, 42, 0.08)",
-              backgroundColor: "#ffffff",
-              boxShadow: "0 18px 48px rgba(15, 23, 42, 0.08)",
-            }}
-          >
-            <h2 style={{ marginTop: 0, fontSize: "22px" }}>Chunks</h2>
+          <article class="rounded-lg border border-[#e8e8e7] bg-white p-6">
+            <h2 class="mt-0 text-[22px]">Chunks</h2>
             {item.chunks.length === 0 ? (
-              <p style={{ marginBottom: 0, color: "#5f6e7d" }}>
-                No chunk records yet.
-              </p>
+              <p class="mb-0 text-[#787774]">No chunk records yet.</p>
             ) : (
-              <div style={{ display: "grid", gap: "12px" }}>
+              <div class="grid gap-3">
                 {item.chunks.map((chunk) => (
                   <article
                     key={chunk.id}
-                    style={{
-                      padding: "16px",
-                      borderRadius: "18px",
-                      backgroundColor: "#f8fbfc",
-                      border: "1px solid rgba(15, 23, 42, 0.06)",
-                    }}
+                    class="rounded-md bg-[#fafaf9] border border-[#ededec] p-4"
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: "12px",
-                        color: "#102033",
-                        fontWeight: 700,
-                        marginBottom: "8px",
-                      }}
-                    >
+                    <div class="flex justify-between gap-3 text-[#37352f] font-bold mb-2">
                       <span>Chunk #{chunk.chunkIndex}</span>
                       <span>{chunk.vectorId ?? "No vector"}</span>
                     </div>
-                    <p style={{ margin: 0, color: "#445160", lineHeight: 1.7 }}>
+                    <p class="m-0 text-[#787774] leading-[1.7]">
                       {chunk.textPreview}
                     </p>
                   </article>
@@ -489,147 +318,77 @@ export const AssetDetailPage = ({
             )}
           </article>
 
-          <article
-            style={{
-              padding: "24px",
-              borderRadius: "24px",
-              border: "1px solid rgba(15, 23, 42, 0.08)",
-              backgroundColor: "#ffffff",
-              boxShadow: "0 18px 48px rgba(15, 23, 42, 0.08)",
-            }}
-          >
-            <h2 style={{ marginTop: 0, fontSize: "22px" }}>Assertions</h2>
+          <article class="rounded-lg border border-[#e8e8e7] bg-white p-6">
+            <h2 class="mt-0 text-[22px]">Assertions</h2>
             {item.assertions?.length ? (
-              <div style={{ display: "grid", gap: "12px" }}>
+              <div class="grid gap-3">
                 {item.assertions.map((assertion) => (
                   <article
                     key={assertion.id}
-                    style={{
-                      padding: "16px",
-                      borderRadius: "18px",
-                      backgroundColor: "#fffdf7",
-                      border: "1px solid rgba(15, 23, 42, 0.06)",
-                    }}
+                    class="rounded-md bg-[#fafaf9] border border-[#ededec] p-4"
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: "12px",
-                        flexWrap: "wrap",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      <span
-                        style={{
-                          color: "#8b6c35",
-                          fontSize: "12px",
-                          fontWeight: 800,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.08em",
-                        }}
-                      >
+                    <div class="flex flex-wrap justify-between gap-3 mb-2">
+                      <span class="text-[#9b9a97] text-[12px] font-extrabold uppercase tracking-[0.08em]">
                         {formatLabel(assertion.kind)}
                       </span>
-                      <span style={{ color: "#5f6e7d", fontSize: "13px" }}>
+                      <span class="text-[#787774] text-[13px]">
                         Confidence:{" "}
                         {typeof assertion.confidence === "number"
                           ? assertion.confidence.toFixed(2)
                           : "N/A"}
                       </span>
                     </div>
-                    <p style={{ margin: 0, color: "#445160", lineHeight: 1.8 }}>
+                    <p class="m-0 text-[#787774] leading-[1.8]">
                       {assertion.text}
                     </p>
                   </article>
                 ))}
               </div>
             ) : (
-              <p style={{ marginBottom: 0, color: "#5f6e7d" }}>
-                No assertion records yet.
-              </p>
+              <p class="mb-0 text-[#787774]">No assertion records yet.</p>
             )}
           </article>
         </div>
 
-        <aside style={{ display: "grid", gap: "18px" }}>
-          <article
-            style={{
-              padding: "22px",
-              borderRadius: "24px",
-              border: "1px solid rgba(15, 23, 42, 0.08)",
-              backgroundColor: "#ffffff",
-            }}
-          >
-            <h2 style={{ marginTop: 0, fontSize: "20px" }}>Manage</h2>
+        <aside class="grid gap-[18px]">
+          <article class="rounded-lg border border-[#e8e8e7] bg-white p-[22px]">
+            <h2 class="mt-0 text-[20px]">Manage</h2>
             <form
               action={`/assets/actions/${item.id}/update`}
               method="post"
-              style={{ display: "grid", gap: "12px" }}
+              class="grid gap-3"
             >
-              <label style={{ display: "grid", gap: "8px" }}>
-                <span style={{ fontWeight: 700 }}>Title</span>
+              <label class="grid gap-2">
+                <span class="font-bold">Title</span>
                 <input
                   name="title"
                   defaultValue={item.title}
                   required
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: "14px",
-                    border: "1px solid rgba(15, 23, 42, 0.12)",
-                    fontSize: "14px",
-                    boxSizing: "border-box",
-                  }}
+                  class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] focus:outline-none focus:border-[#2383e2] box-border"
                 />
               </label>
-              <label style={{ display: "grid", gap: "8px" }}>
-                <span style={{ fontWeight: 700 }}>Source URL</span>
+              <label class="grid gap-2">
+                <span class="font-bold">Source URL</span>
                 <input
                   name="sourceUrl"
                   type="url"
                   defaultValue={item.sourceUrl ?? ""}
                   placeholder="https://example.com"
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: "14px",
-                    border: "1px solid rgba(15, 23, 42, 0.12)",
-                    fontSize: "14px",
-                    boxSizing: "border-box",
-                  }}
+                  class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] focus:outline-none focus:border-[#2383e2] box-border"
                 />
               </label>
-              <label style={{ display: "grid", gap: "8px" }}>
-                <span style={{ fontWeight: 700 }}>Summary</span>
+              <label class="grid gap-2">
+                <span class="font-bold">Summary</span>
                 <textarea
                   name="summary"
                   defaultValue={item.summary ?? ""}
                   rows={5}
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: "14px",
-                    border: "1px solid rgba(15, 23, 42, 0.12)",
-                    fontSize: "14px",
-                    lineHeight: 1.7,
-                    boxSizing: "border-box",
-                    resize: "vertical",
-                  }}
+                  class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] leading-[1.7] box-border resize-y focus:outline-none focus:border-[#2383e2]"
                 />
               </label>
               <button
                 type="submit"
-                style={{
-                  padding: "12px 16px",
-                  borderRadius: "999px",
-                  border: "none",
-                  backgroundColor: "#102033",
-                  color: "#ffffff",
-                  fontSize: "14px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
+                class="bg-[#37352f] text-white hover:bg-[#2f2d28] rounded-md px-3 py-1.5 font-medium cursor-pointer"
               >
                 Save Changes
               </button>
@@ -637,96 +396,54 @@ export const AssetDetailPage = ({
             <form
               action={`/assets/actions/${item.id}/delete`}
               method="post"
-              style={{ marginTop: "14px" }}
+              class="mt-3.5"
             >
               <button
                 type="submit"
-                style={{
-                  width: "100%",
-                  padding: "12px 16px",
-                  borderRadius: "999px",
-                  border: "1px solid #fecaca",
-                  backgroundColor: "#fff1f2",
-                  color: "#b91c1c",
-                  fontSize: "14px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
+                class="w-full bg-[#f9e3e3] text-[#9c2e2e] border border-[#e8b7b7] hover:bg-[#f5d4d4] rounded-md px-3 py-1.5 font-medium cursor-pointer"
               >
                 Delete Asset
               </button>
             </form>
-            <p
-              style={{
-                marginBottom: 0,
-                color: "#7f1d1d",
-                fontSize: "13px",
-                lineHeight: 1.7,
-              }}
-            >
+            <p class="mb-0 text-[#9c2e2e] text-[13px] leading-[1.7]">
               Deletion is soft-delete for now. The asset disappears from list,
               search, and chat results.
             </p>
           </article>
 
-          <article
-            style={{
-              padding: "22px",
-              borderRadius: "24px",
-              border: "1px solid rgba(15, 23, 42, 0.08)",
-              backgroundColor: "#ffffff",
-            }}
-          >
-            <h2 style={{ marginTop: 0, fontSize: "20px" }}>Source</h2>
-            <dl
-              style={{
-                display: "grid",
-                gap: "12px",
-                margin: 0,
-              }}
-            >
+          <article class="rounded-lg border border-[#e8e8e7] bg-white p-[22px]">
+            <h2 class="mt-0 text-[20px]">Source</h2>
+            <dl class="grid gap-3 m-0">
               <div>
-                <dt style={{ color: "#5f6e7d" }}>Kind</dt>
-                <dd style={{ margin: "6px 0 0" }}>
+                <dt class="text-[#787774]">Kind</dt>
+                <dd class="mt-1.5">
                   {item.source?.kind ?? "No source record yet."}
                 </dd>
               </div>
               <div>
-                <dt style={{ color: "#5f6e7d" }}>URL</dt>
-                <dd style={{ margin: "6px 0 0", wordBreak: "break-word" }}>
+                <dt class="text-[#787774]">URL</dt>
+                <dd class="mt-1.5 break-words">
                   {item.source?.sourceUrl ?? item.sourceUrl ?? "N/A"}
                 </dd>
               </div>
               <div>
-                <dt style={{ color: "#5f6e7d" }}>Raw R2 Key</dt>
-                <dd style={{ margin: "6px 0 0", wordBreak: "break-word" }}>
-                  {item.rawR2Key ?? "N/A"}
-                </dd>
+                <dt class="text-[#787774]">Raw R2 Key</dt>
+                <dd class="mt-1.5 break-words">{item.rawR2Key ?? "N/A"}</dd>
               </div>
             </dl>
           </article>
 
-          <article
-            style={{
-              padding: "22px",
-              borderRadius: "24px",
-              border: "1px solid rgba(15, 23, 42, 0.08)",
-              background:
-                "linear-gradient(145deg, rgba(255,255,255,0.96) 0%, rgba(232, 250, 244, 0.9) 100%)",
-            }}
-          >
-            <h2 style={{ marginTop: 0, fontSize: "20px" }}>Processing</h2>
-            <div style={{ display: "grid", gap: "10px" }}>
-              <div style={{ color: "#5f6e7d" }}>
+          <article class="rounded-lg border border-[#e8e8e7] bg-white p-[22px]">
+            <h2 class="mt-0 text-[20px]">Processing</h2>
+            <div class="grid gap-2.5">
+              <div class="text-[#787774]">
                 Updated: {formatDate(item.updatedAt)}
               </div>
-              <div style={{ color: "#5f6e7d" }}>
+              <div class="text-[#787774]">
                 Processed: {formatDate(item.processedAt)}
               </div>
-              <div style={{ color: "#5f6e7d" }}>
-                MIME: {item.mimeType ?? "N/A"}
-              </div>
-              <div style={{ color: "#5f6e7d" }}>
+              <div class="text-[#787774]">MIME: {item.mimeType ?? "N/A"}</div>
+              <div class="text-[#787774]">
                 Language: {item.language ?? "N/A"}
               </div>
               {isReprocessable ? (
@@ -736,17 +453,7 @@ export const AssetDetailPage = ({
                 >
                   <button
                     type="submit"
-                    style={{
-                      marginTop: "8px",
-                      padding: "12px 16px",
-                      borderRadius: "999px",
-                      border: "none",
-                      backgroundColor: "#102033",
-                      color: "#ffffff",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
+                    class="mt-2 bg-[#37352f] text-white hover:bg-[#2f2d28] rounded-md px-3 py-1.5 font-medium cursor-pointer"
                   >
                     Reprocess Asset
                   </button>
@@ -755,50 +462,26 @@ export const AssetDetailPage = ({
             </div>
           </article>
 
-          <article
-            style={{
-              padding: "22px",
-              borderRadius: "24px",
-              border: "1px solid rgba(15, 23, 42, 0.08)",
-              backgroundColor: "#ffffff",
-            }}
-          >
-            <h2 style={{ marginTop: 0, fontSize: "20px" }}>Jobs</h2>
+          <article class="rounded-lg border border-[#e8e8e7] bg-white p-[22px]">
+            <h2 class="mt-0 text-[20px]">Jobs</h2>
             {item.jobs.length === 0 ? (
-              <p style={{ marginBottom: 0, color: "#5f6e7d" }}>
-                No job records yet.
-              </p>
+              <p class="mb-0 text-[#787774]">No job records yet.</p>
             ) : (
-              <div style={{ display: "grid", gap: "12px" }}>
+              <div class="grid gap-3">
                 {item.jobs.map((job) => (
                   <article
                     key={job.id}
-                    style={{
-                      padding: "14px 16px",
-                      borderRadius: "16px",
-                      backgroundColor: "#f8fbfc",
-                      border: "1px solid rgba(15, 23, 42, 0.06)",
-                    }}
+                    class="rounded-md bg-[#fafaf9] border border-[#ededec] px-4 py-3.5"
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: "12px",
-                        color: "#102033",
-                        fontWeight: 700,
-                      }}
-                    >
+                    <div class="flex justify-between gap-3 text-[#37352f] font-bold">
                       <span>{job.jobType}</span>
                       <span>{job.status}</span>
                     </div>
-                    <div style={{ marginTop: "8px", color: "#5f6e7d" }}>
+                    <div class="mt-2 text-[#787774]">
                       attempt {job.attempt} • {formatDate(job.createdAt)}
                     </div>
                     {job.errorMessage ? (
-                      <p style={{ marginBottom: 0, color: "#b91c1c" }}>
-                        {job.errorMessage}
-                      </p>
+                      <p class="mb-0 text-[#9c2e2e]">{job.errorMessage}</p>
                     ) : null}
                   </article>
                 ))}

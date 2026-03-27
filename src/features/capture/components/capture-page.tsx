@@ -26,54 +26,35 @@ const modes: Array<{
   },
 ];
 
-const inputStyles = {
-  width: "100%",
-  padding: "12px 14px",
-  borderRadius: "14px",
-  border: "1px solid rgba(15, 23, 42, 0.12)",
-  fontSize: "15px",
-  boxSizing: "border-box" as const,
-  backgroundColor: "#ffffff",
-};
-
 const renderForm = (mode: CaptureMode) => {
   if (mode === "url") {
     return (
       <form
         action="/assets/actions/ingest-url"
         method="post"
-        style={{ display: "grid", gap: "14px" }}
+        class="grid gap-4"
       >
-        <label style={{ display: "grid", gap: "8px" }}>
-          <span style={{ fontWeight: 700 }}>Title</span>
+        <label class="grid gap-2">
+          <span class="font-bold text-ink">Title</span>
           <input
             name="title"
             type="text"
             placeholder="Optional title"
-            style={inputStyles}
+            class="rounded-md border border-line bg-white px-3 py-1.5 text-[14px] text-ink focus:outline-none focus:border-accent"
           />
         </label>
-        <label style={{ display: "grid", gap: "8px" }}>
-          <span style={{ fontWeight: 700 }}>URL</span>
+        <label class="grid gap-2">
+          <span class="font-bold text-ink">URL</span>
           <input
             name="url"
             type="url"
             placeholder="https://example.com/article"
-            style={inputStyles}
+            class="rounded-md border border-line bg-white px-3 py-1.5 text-[14px] text-ink focus:outline-none focus:border-accent"
           />
         </label>
         <button
           type="submit"
-          style={{
-            justifySelf: "start",
-            padding: "12px 18px",
-            borderRadius: "999px",
-            border: "none",
-            backgroundColor: "#102033",
-            color: "#ffffff",
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
+          class="w-fit bg-ink text-white rounded-md px-4 py-2 font-medium hover:bg-[#2f2d28] transition-colors cursor-pointer"
         >
           Save URL
         </button>
@@ -87,41 +68,29 @@ const renderForm = (mode: CaptureMode) => {
         action="/assets/actions/ingest-file"
         method="post"
         encType="multipart/form-data"
-        style={{ display: "grid", gap: "14px" }}
+        class="grid gap-4"
       >
-        <label style={{ display: "grid", gap: "8px" }}>
-          <span style={{ fontWeight: 700 }}>Title</span>
+        <label class="grid gap-2">
+          <span class="font-bold text-ink">Title</span>
           <input
             name="title"
             type="text"
             placeholder="Optional title"
-            style={inputStyles}
+            class="rounded-md border border-line bg-white px-3 py-1.5 text-[14px] text-ink focus:outline-none focus:border-accent"
           />
         </label>
-        <label style={{ display: "grid", gap: "8px" }}>
-          <span style={{ fontWeight: 700 }}>PDF File</span>
+        <label class="grid gap-2">
+          <span class="font-bold text-ink">PDF File</span>
           <input
             name="file"
             type="file"
             accept="application/pdf,.pdf"
-            style={{
-              ...inputStyles,
-              padding: "10px 12px",
-            }}
+            class="rounded-md border border-line bg-white px-3 py-2 text-[14px] text-ink focus:outline-none focus:border-accent"
           />
         </label>
         <button
           type="submit"
-          style={{
-            justifySelf: "start",
-            padding: "12px 18px",
-            borderRadius: "999px",
-            border: "none",
-            backgroundColor: "#0f766e",
-            color: "#ffffff",
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
+          class="w-fit bg-ink text-white rounded-md px-4 py-2 font-medium hover:bg-[#2f2d28] transition-colors cursor-pointer"
         >
           Upload PDF
         </button>
@@ -130,45 +99,28 @@ const renderForm = (mode: CaptureMode) => {
   }
 
   return (
-    <form
-      action="/assets/actions/ingest-text"
-      method="post"
-      style={{ display: "grid", gap: "14px" }}
-    >
-      <label style={{ display: "grid", gap: "8px" }}>
-        <span style={{ fontWeight: 700 }}>Title</span>
+    <form action="/assets/actions/ingest-text" method="post" class="grid gap-4">
+      <label class="grid gap-2">
+        <span class="font-bold text-ink">Title</span>
         <input
           name="title"
           type="text"
           placeholder="Weekly research notes"
-          style={inputStyles}
+          class="rounded-md border border-line bg-white px-3 py-1.5 text-[14px] text-ink focus:outline-none focus:border-accent"
         />
       </label>
-      <label style={{ display: "grid", gap: "8px" }}>
-        <span style={{ fontWeight: 700 }}>Content</span>
+      <label class="grid gap-2">
+        <span class="font-bold text-ink">Content</span>
         <textarea
           name="content"
           placeholder="Paste notes, article excerpts, or chat summaries here."
           rows={8}
-          style={{
-            ...inputStyles,
-            resize: "vertical",
-            fontFamily: "inherit",
-          }}
+          class="resize-y rounded-md border border-line bg-white px-3 py-1.5 text-[14px] text-ink focus:outline-none focus:border-accent"
         />
       </label>
       <button
         type="submit"
-        style={{
-          justifySelf: "start",
-          padding: "12px 18px",
-          borderRadius: "999px",
-          border: "none",
-          backgroundColor: "#102033",
-          color: "#ffffff",
-          fontWeight: 700,
-          cursor: "pointer",
-        }}
+        class="w-fit bg-ink text-white rounded-md px-4 py-2 font-medium hover:bg-[#2f2d28] transition-colors cursor-pointer"
       >
         Save Text
       </button>
@@ -186,110 +138,55 @@ export const CapturePage = ({ mode }: { mode: CaptureMode }) => {
       actions={
         <a
           href="/assets"
-          style={{
-            padding: "12px 18px",
-            borderRadius: "999px",
-            backgroundColor: "#dff7f5",
-            color: "#0f766e",
-            textDecoration: "none",
-            fontWeight: 700,
-          }}
+          class="border border-line bg-white text-ink rounded-md px-4 py-2 font-medium hover:bg-[#f1f1f0] transition-colors no-underline"
         >
           Open Library
         </a>
       }
     >
       <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1.3fr) minmax(280px, 0.7fr)",
-          gap: "18px",
-        }}
+        class="grid gap-4"
+        style="grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr)"
       >
-        <article
-          style={{
-            padding: "24px",
-            borderRadius: "24px",
-            backgroundColor: "#ffffff",
-            border: "1px solid rgba(15, 23, 42, 0.08)",
-            boxShadow: "0 18px 48px rgba(15, 23, 42, 0.08)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "10px",
-              marginBottom: "20px",
-            }}
-          >
+        <article class="rounded-lg border border-line bg-white p-6 shadow-card">
+          <div class="flex flex-wrap gap-2 mb-5">
             {modes.map((item) => (
               <a
                 key={item.key}
                 href={`/capture?mode=${item.key}`}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: "999px",
-                  textDecoration: "none",
-                  fontWeight: 700,
-                  backgroundColor:
-                    item.key === mode ? "#102033" : "rgba(15, 23, 42, 0.06)",
-                  color: item.key === mode ? "#ffffff" : "#102033",
-                }}
+                class={
+                  "px-4 py-2 rounded-md no-underline font-medium transition-colors " +
+                  (item.key === mode
+                    ? "bg-ink text-white"
+                    : "text-ink-soft hover:bg-[#f1f1f0]")
+                }
               >
                 {item.label}
               </a>
             ))}
           </div>
-          <h2 style={{ marginTop: 0, fontSize: "28px" }}>
+          <h2 class="mt-0 text-2xl text-ink">
             {modes.find((item) => item.key === mode)?.label}
           </h2>
-          <p style={{ color: "#526071", marginTop: 0, marginBottom: "22px" }}>
+          <p class="mt-0 mb-5 text-ink-soft">
             {modes.find((item) => item.key === mode)?.description}
           </p>
           {renderForm(mode)}
         </article>
 
-        <aside
-          style={{
-            display: "grid",
-            gap: "16px",
-          }}
-        >
-          <article
-            style={{
-              padding: "20px",
-              borderRadius: "24px",
-              background:
-                "linear-gradient(145deg, rgba(255,255,255,0.94) 0%, rgba(225, 244, 241, 0.92) 100%)",
-              border: "1px solid rgba(15, 23, 42, 0.08)",
-            }}
-          >
-            <h3 style={{ marginTop: 0, fontSize: "20px" }}>Capture Rules</h3>
-            <ul
-              style={{
-                margin: 0,
-                paddingLeft: "18px",
-                color: "#526071",
-                lineHeight: 1.8,
-              }}
-            >
+        <aside class="grid gap-4">
+          <article class="rounded-lg border border-line bg-white p-5">
+            <h3 class="mt-0 text-xl text-ink">Capture Rules</h3>
+            <ul class="m-0 pl-[18px] text-ink-soft leading-8">
               <li>Always keep original assets recoverable.</li>
               <li>AI-derived summaries should remain recomputable.</li>
               <li>Prefer fast ingest over over-designed workflows.</li>
             </ul>
           </article>
 
-          <article
-            style={{
-              padding: "20px",
-              borderRadius: "24px",
-              backgroundColor: "#ffffff",
-              border: "1px solid rgba(15, 23, 42, 0.08)",
-            }}
-          >
-            <h3 style={{ marginTop: 0, fontSize: "20px" }}>After saving</h3>
-            <p style={{ margin: 0, color: "#526071", lineHeight: 1.8 }}>
+          <article class="rounded-lg border border-line bg-white p-5">
+            <h3 class="mt-0 text-xl text-ink">After saving</h3>
+            <p class="m-0 text-ink-soft leading-8">
               Assets enter the processing pipeline, become searchable, and can
               later feed Ask Library with traceable sources.
             </p>

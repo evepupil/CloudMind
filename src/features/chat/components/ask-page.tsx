@@ -38,118 +38,39 @@ export const AskPage = ({
         <>
           <a
             href="/search"
-            style={{
-              padding: "12px 16px",
-              borderRadius: "999px",
-              backgroundColor: "#ffffff",
-              color: "#16202d",
-              textDecoration: "none",
-              fontWeight: 700,
-              border: "1px solid rgba(21, 33, 51, 0.1)",
-            }}
+            class="border border-[#e8e8e7] bg-white text-[#37352f] rounded-md px-3 py-1.5 font-medium hover:bg-[#f1f1f0] transition-colors no-underline"
           >
             Search first
           </a>
           <a
             href="/capture"
-            style={{
-              padding: "12px 16px",
-              borderRadius: "999px",
-              backgroundColor: "#fff1dd",
-              color: "#b55d0a",
-              textDecoration: "none",
-              fontWeight: 700,
-              border: "1px solid rgba(244, 129, 32, 0.22)",
-            }}
+            class="border border-[#e8e8e7] bg-white text-[#37352f] rounded-md px-3 py-1.5 font-medium hover:bg-[#f1f1f0] transition-colors no-underline"
           >
             Add more context
           </a>
         </>
       }
     >
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1.55fr) minmax(320px, 0.85fr)",
-          gap: "18px",
-        }}
-      >
-        <article
-          style={{
-            padding: "24px",
-            borderRadius: "30px",
-            border: "1px solid rgba(21, 33, 51, 0.08)",
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(255,250,245,0.96) 100%)",
-            boxShadow: "0 24px 58px rgba(28, 39, 56, 0.06)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              gap: "16px",
-              marginBottom: "16px",
-              flexWrap: "wrap",
-            }}
-          >
+      <section class="grid grid-cols-[minmax(0,1.55fr)_minmax(320px,0.85fr)] gap-[18px]">
+        {/* 左栏：提问、回答、建议 */}
+        <article class="rounded-lg border border-[#e8e8e7] bg-white p-6">
+          <div class="mb-4 flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p
-                style={{
-                  margin: "0 0 6px",
-                  color: "#f48120",
-                  fontSize: "11px",
-                  fontWeight: 800,
-                  letterSpacing: "0.16em",
-                  textTransform: "uppercase",
-                }}
-              >
+              <p class="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-[#9b9a97]">
                 Answer workspace
               </p>
-              <h2
-                style={{
-                  margin: 0,
-                  color: "#16202d",
-                  fontSize: "28px",
-                  fontWeight: 800,
-                  letterSpacing: "-0.03em",
-                }}
-              >
+              <h2 class="m-0 text-[20px] font-bold text-[#37352f]">
                 Query, answer, verify
               </h2>
             </div>
-            <div
-              style={{
-                padding: "10px 12px",
-                borderRadius: "16px",
-                backgroundColor: "#f6f7f9",
-                border: "1px solid rgba(21, 33, 51, 0.08)",
-                color: "#566375",
-                fontSize: "13px",
-              }}
-            >
+            <div class="rounded-md border border-[#ededec] bg-[#fafaf9] px-3 py-2 text-[13px] text-[#787774]">
               Retrieval mode: chunks + summary-only assets
             </div>
           </div>
 
-          <form
-            method="get"
-            action="/ask"
-            style={{
-              display: "grid",
-              gap: "12px",
-              marginBottom: "18px",
-            }}
-          >
-            <label style={{ display: "grid", gap: "8px" }}>
-              <span
-                style={{
-                  color: "#16202d",
-                  fontSize: "14px",
-                  fontWeight: 700,
-                }}
-              >
+          <form method="get" action="/ask" class="mb-5 grid gap-3">
+            <label class="grid gap-2">
+              <span class="text-[14px] font-semibold text-[#37352f]">
                 Ask a grounded question
               </span>
               <textarea
@@ -157,160 +78,54 @@ export const AskPage = ({
                 rows={5}
                 defaultValue={question}
                 placeholder="Ask CloudMind to explain, compare, summarize, or locate something in your saved library..."
-                style={{
-                  width: "100%",
-                  padding: "16px 18px",
-                  borderRadius: "22px",
-                  border: "1px solid rgba(21, 33, 51, 0.12)",
-                  backgroundColor: "#fffdfa",
-                  color: "#16202d",
-                  fontSize: "15px",
-                  lineHeight: 1.7,
-                  resize: "vertical",
-                  fontFamily: "inherit",
-                }}
+                class="w-full rounded-md border border-[#e8e8e7] bg-white px-3 py-2 text-[14px] text-[#37352f] leading-relaxed resize-y font-inherit focus:outline-none focus:border-[#2383e2]"
               />
             </label>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "12px",
-                flexWrap: "wrap",
-              }}
-            >
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="flex flex-wrap gap-2.5">
                 <button
                   type="submit"
-                  style={{
-                    padding: "12px 18px",
-                    borderRadius: "999px",
-                    border: "none",
-                    backgroundColor: "#16202d",
-                    color: "#ffffff",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
+                  class="bg-[#37352f] text-white rounded-md px-4 py-2 font-medium hover:bg-[#2f2d28] transition-colors cursor-pointer border-none"
                 >
                   Ask Library
                 </button>
-                <span
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: "999px",
-                    backgroundColor: "#fff1dd",
-                    color: "#b55d0a",
-                    border: "1px solid rgba(244, 129, 32, 0.22)",
-                    fontSize: "13px",
-                    fontWeight: 700,
-                  }}
-                >
+                <span class="px-2 py-0.5 text-[12px] bg-[#f1f1f0] text-[#787774] rounded">
                   Evidence required
                 </span>
               </div>
-              <span
-                style={{
-                  color: "#6b7685",
-                  fontSize: "13px",
-                }}
-              >
+              <span class="text-[13px] text-[#9b9a97]">
                 Full-page submit for now. AJAX comes next.
               </span>
             </div>
           </form>
 
-          <div
-            style={{
-              display: "grid",
-              gap: "14px",
-            }}
-          >
+          {/* 回答区域 */}
+          <div class="grid gap-3.5">
             {hasQuestion ? (
-              <article
-                style={{
-                  padding: "18px 20px",
-                  borderRadius: "22px",
-                  backgroundColor: "#eef6ff",
-                  border: "1px solid rgba(94, 182, 255, 0.2)",
-                }}
-              >
-                <p
-                  style={{
-                    margin: "0 0 8px",
-                    color: "#0b5cab",
-                    fontSize: "11px",
-                    fontWeight: 800,
-                    letterSpacing: "0.14em",
-                    textTransform: "uppercase",
-                  }}
-                >
+              <article class="rounded-md border border-[#ededec] bg-[#fafaf9] p-4">
+                <p class="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#2383e2]">
                   User query
                 </p>
-                <p
-                  style={{
-                    margin: 0,
-                    color: "#16202d",
-                    lineHeight: 1.8,
-                    fontSize: "15px",
-                  }}
-                >
+                <p class="m-0 text-[15px] leading-7 text-[#37352f]">
                   {question}
                 </p>
               </article>
             ) : null}
 
-            <article
-              style={{
-                padding: "20px 22px",
-                borderRadius: "24px",
-                backgroundColor: "#ffffff",
-                border: "1px solid rgba(21, 33, 51, 0.08)",
-              }}
-            >
-              <p
-                style={{
-                  margin: "0 0 10px",
-                  color: "#16202d",
-                  fontSize: "12px",
-                  fontWeight: 800,
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                }}
-              >
+            <article class="rounded-md border border-[#ededec] bg-white p-5">
+              <p class="mb-2.5 text-[12px] font-semibold uppercase tracking-wide text-[#9b9a97]">
                 CloudMind answer
               </p>
               {errorMessage ? (
-                <p
-                  style={{
-                    margin: 0,
-                    color: "#a12d28",
-                    lineHeight: 1.85,
-                    fontSize: "15px",
-                  }}
-                >
+                <p class="m-0 text-[15px] leading-7 text-[#9c2e2e]">
                   {errorMessage}
                 </p>
               ) : result ? (
-                <p
-                  style={{
-                    margin: 0,
-                    color: "#3b4757",
-                    lineHeight: 1.95,
-                    fontSize: "15px",
-                  }}
-                >
+                <p class="m-0 text-[15px] leading-7 text-[#37352f]">
                   {result.answer}
                 </p>
               ) : (
-                <p
-                  style={{
-                    margin: 0,
-                    color: "#566375",
-                    lineHeight: 1.85,
-                    fontSize: "15px",
-                  }}
-                >
+                <p class="m-0 text-[15px] leading-7 text-[#787774]">
                   Ask a question about your saved material. The answer area is
                   designed to stay readable, with evidence cards alongside it
                   instead of burying sources after the fact.
@@ -319,27 +134,13 @@ export const AskPage = ({
             </article>
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              gap: "10px",
-              flexWrap: "wrap",
-              marginTop: "18px",
-            }}
-          >
+          {/* 建议提问 */}
+          <div class="mt-5 flex flex-wrap gap-2.5">
             {suggestionPrompts.map((prompt) => (
               <a
                 key={prompt}
                 href={buildSuggestionHref(prompt)}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: "999px",
-                  backgroundColor: "#f5f7fa",
-                  border: "1px solid rgba(21, 33, 51, 0.08)",
-                  color: "#566375",
-                  fontSize: "13px",
-                  textDecoration: "none",
-                }}
+                class="rounded-md border border-[#ededec] bg-[#fafaf9] px-3 py-2 text-[13px] text-[#787774] no-underline hover:bg-[#f1f1f0] transition-colors"
               >
                 {prompt}
               </a>
@@ -347,122 +148,46 @@ export const AskPage = ({
           </div>
         </article>
 
-        <aside style={{ display: "grid", gap: "16px" }}>
-          <article
-            style={{
-              padding: "20px",
-              borderRadius: "28px",
-              border: "1px solid rgba(21, 33, 51, 0.08)",
-              backgroundColor: "#fffdfa",
-              boxShadow: "0 20px 46px rgba(28, 39, 56, 0.05)",
-            }}
-          >
-            <p
-              style={{
-                margin: "0 0 10px",
-                color: "#f48120",
-                fontSize: "11px",
-                fontWeight: 800,
-                letterSpacing: "0.16em",
-                textTransform: "uppercase",
-              }}
-            >
+        {/* 右栏：证据面板 + 检索链 */}
+        <aside class="grid gap-4">
+          {/* 证据面板 */}
+          <article class="rounded-lg border border-[#e8e8e7] bg-white p-5">
+            <p class="mb-2.5 text-[12px] font-semibold uppercase tracking-wide text-[#9b9a97]">
               Evidence panel
             </p>
-            <h3
-              style={{
-                margin: "0 0 12px",
-                color: "#16202d",
-                fontSize: "22px",
-                fontWeight: 800,
-              }}
-            >
+            <h3 class="mb-3 text-[18px] font-bold text-[#37352f]">
               Retrieved sources
             </h3>
-            <div style={{ display: "grid", gap: "12px" }}>
+            <div class="grid gap-3">
               {result?.sources.length ? (
                 result.sources.map((source, index) => (
                   <article
                     key={`${source.assetId}:${source.chunkId ?? "source"}`}
-                    style={{
-                      padding: "16px",
-                      borderRadius: "18px",
-                      backgroundColor: index === 0 ? "#fff5e8" : "#ffffff",
-                      border:
-                        index === 0
-                          ? "1px solid rgba(244, 129, 32, 0.22)"
-                          : "1px solid rgba(21, 33, 51, 0.08)",
-                    }}
+                    class="p-4 rounded-md border border-[#ededec] bg-[#fafaf9]"
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: "10px",
-                        alignItems: "center",
-                        marginBottom: "8px",
-                        flexWrap: "wrap",
-                      }}
-                    >
+                    <div class="mb-2 flex flex-wrap items-center justify-between gap-2.5">
                       <a
                         href={`/assets/${source.assetId}`}
-                        style={{
-                          color: "#16202d",
-                          textDecoration: "none",
-                          fontWeight: 800,
-                        }}
+                        class="font-semibold text-[#2383e2] hover:underline"
                       >
                         {source.title}
                       </a>
-                      <span
-                        style={{
-                          padding: "5px 8px",
-                          borderRadius: "999px",
-                          backgroundColor: "#f3f5f8",
-                          color: "#5f6b7d",
-                          fontSize: "11px",
-                          fontWeight: 800,
-                          letterSpacing: "0.08em",
-                          textTransform: "uppercase",
-                        }}
-                      >
+                      <span class="px-2 py-0.5 text-[12px] bg-[#f1f1f0] text-[#787774] rounded">
                         {source.sourceType === "chunk"
                           ? `Chunk ${index + 1}`
                           : `Summary ${index + 1}`}
                       </span>
                     </div>
-                    <p
-                      style={{
-                        margin: 0,
-                        color: "#566375",
-                        lineHeight: 1.75,
-                        fontSize: "14px",
-                      }}
-                    >
+                    <p class="m-0 text-[14px] leading-relaxed text-[#787774]">
                       {source.snippet}
                     </p>
-                    <p
-                      style={{
-                        margin: "10px 0 0",
-                        color: "#6b7685",
-                        fontSize: "12px",
-                      }}
-                    >
+                    <p class="mt-2.5 text-[12px] text-[#9b9a97]">
                       {source.sourceUrl ?? `Asset ID: ${source.assetId}`}
                     </p>
                   </article>
                 ))
               ) : (
-                <article
-                  style={{
-                    padding: "16px",
-                    borderRadius: "18px",
-                    border: "1px dashed rgba(21, 33, 51, 0.14)",
-                    color: "#566375",
-                    backgroundColor: "#ffffff",
-                    lineHeight: 1.75,
-                  }}
-                >
+                <article class="rounded-md border border-dashed border-[#ededec] bg-white p-4 text-[14px] leading-relaxed text-[#787774]">
                   Submit a question to see retrieved chunks, summary-only
                   sources, and evidence cards here.
                 </article>
@@ -470,62 +195,21 @@ export const AskPage = ({
             </div>
           </article>
 
-          <article
-            style={{
-              padding: "20px",
-              borderRadius: "28px",
-              border: "1px solid rgba(21, 33, 51, 0.08)",
-              background:
-                "linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(238,246,255,0.96) 100%)",
-              boxShadow: "0 20px 46px rgba(28, 39, 56, 0.05)",
-            }}
-          >
-            <p
-              style={{
-                margin: "0 0 10px",
-                color: "#0b5cab",
-                fontSize: "11px",
-                fontWeight: 800,
-                letterSpacing: "0.16em",
-                textTransform: "uppercase",
-              }}
-            >
+          {/* 检索链 */}
+          <article class="rounded-lg border border-[#e8e8e7] bg-white p-5">
+            <p class="mb-2.5 text-[12px] font-semibold uppercase tracking-wide text-[#2383e2]">
               Retrieval chain
             </p>
-            <div style={{ display: "grid", gap: "12px" }}>
+            <div class="grid gap-3">
               {retrievalStages.map((stage, index) => (
                 <div
                   key={stage}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "26px minmax(0, 1fr)",
-                    gap: "12px",
-                    alignItems: "start",
-                  }}
+                  class="grid grid-cols-[26px_minmax(0,1fr)] gap-3 items-start"
                 >
-                  <span
-                    style={{
-                      width: "26px",
-                      height: "26px",
-                      borderRadius: "999px",
-                      backgroundColor: "#ffffff",
-                      border: "1px solid rgba(94, 182, 255, 0.22)",
-                      color: "#0b5cab",
-                      display: "grid",
-                      placeItems: "center",
-                      fontSize: "12px",
-                      fontWeight: 800,
-                    }}
-                  >
+                  <span class="inline-flex h-[26px] w-[26px] items-center justify-center rounded-full border border-[#ededec] bg-white text-[12px] font-bold text-[#2383e2]">
                     {index + 1}
                   </span>
-                  <p
-                    style={{
-                      margin: "4px 0 0",
-                      color: "#3b4757",
-                      lineHeight: 1.7,
-                    }}
-                  >
+                  <p class="m-0 mt-0.5 text-[14px] leading-relaxed text-[#37352f]">
                     {stage}
                   </p>
                 </div>

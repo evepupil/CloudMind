@@ -5,7 +5,8 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build:css": "npx tailwindcss -i src/styles/app.css -o public/styles.css --minify",
+    "build": "npm run build:css && vite build",
     "preview": "vite preview",
     "worker:dev": "wrangler dev",
     "worker:deploy": "npm run deploy",
@@ -22,10 +23,12 @@
   "dependencies": {
     "@hono/mcp": "^0.1.5",
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "@tailwindcss/vite": "^4.2.2",
     "drizzle-orm": "^0.45.1",
     "drizzle-zod": "^0.8.3",
     "hono": "^4.12.8",
     "honox": "^0.1.55",
+    "tailwindcss": "^4.2.2",
     "unpdf": "^1.4.0",
     "zod": "^4.3.6"
   },
@@ -33,6 +36,7 @@
     "@biomejs/biome": "^2.4.8",
     "@cloudflare/workers-types": "^4.20260301.1",
     "@hono/vite-build": "^1.10.0",
+    "@tailwindcss/cli": "^4.2.2",
     "@types/node": "^24.5.2",
     "drizzle-kit": "^0.31.10",
     "typescript": "^5.9.3",
