@@ -514,9 +514,13 @@ describe("asset routes", () => {
       })
     );
 
-    const response = await app.request("/api/assets/asset-restore-1/restore", {
-      method: "POST",
-    }, env);
+    const response = await app.request(
+      "/api/assets/asset-restore-1/restore",
+      {
+        method: "POST",
+      },
+      env
+    );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -553,7 +557,7 @@ describe("asset routes", () => {
     });
 
     const response = await app.request(
-      "/api/assets?status=ready&type=url&domain=engineering&documentClass=howto&sourceKind=manual&aiVisibility=allow&sourceHost=developers.cloudflare.com&query=cloudflare&page=2&pageSize=10",
+      "/api/assets?status=ready&type=url&domain=engineering&documentClass=howto&sourceKind=manual&aiVisibility=allow&sourceHost=developers.cloudflare.com&topic=cloudmind&tag=mvp&collection=journal/2026/03&query=cloudflare&page=2&pageSize=10",
       undefined,
       env
     );
@@ -581,6 +585,9 @@ describe("asset routes", () => {
       sourceKind: "manual",
       aiVisibility: "allow",
       sourceHost: "developers.cloudflare.com",
+      topic: "cloudmind",
+      tag: "mvp",
+      collection: "journal/2026/03",
       query: "cloudflare",
       page: 2,
       pageSize: 10,

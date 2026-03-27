@@ -72,6 +72,18 @@ export const assetListQuerySchema = z.object({
     emptyStringToUndefined,
     z.string().trim().max(200, "Source host is too long").optional()
   ),
+  topic: z.preprocess(
+    emptyStringToUndefined,
+    z.string().trim().max(120, "Topic is too long").optional()
+  ),
+  tag: z.preprocess(
+    emptyStringToUndefined,
+    z.string().trim().max(120, "Tag is too long").optional()
+  ),
+  collection: z.preprocess(
+    emptyStringToUndefined,
+    z.string().trim().max(120, "Collection is too long").optional()
+  ),
   query: z.preprocess(
     emptyStringToUndefined,
     z.string().trim().max(200, "Query is too long").optional()

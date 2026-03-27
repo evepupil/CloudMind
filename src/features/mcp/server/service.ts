@@ -132,6 +132,9 @@ const listAssetsInputSchema = z.object({
     .optional(),
   aiVisibility: z.enum(["allow", "summary_only", "deny"]).optional(),
   sourceHost: z.string().trim().min(1).max(200).optional(),
+  topic: z.string().trim().min(1).max(120).optional(),
+  tag: z.string().trim().min(1).max(120).optional(),
+  collection: z.string().trim().min(1).max(120).optional(),
   query: z.string().trim().min(1).optional(),
   page: z.number().int().positive().optional(),
   pageSize: z.number().int().positive().max(50).optional(),
@@ -337,7 +340,7 @@ export const createMcpServer = (
     {
       title: "List Assets",
       description:
-        "List assets in the CloudMind library with optional filters and pagination, including domain, document class, source kind, AI visibility, and source host.",
+        "List assets in the CloudMind library with optional filters and pagination, including domain, document class, source kind, AI visibility, source host, topic, tag, and collection.",
       inputSchema: listAssetsInputSchema,
     },
     async (input) => {

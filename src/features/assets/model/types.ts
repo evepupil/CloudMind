@@ -24,11 +24,7 @@ export type AssetDomain =
   | "general";
 
 // 这里区分敏感级别，供 AI 可见性与后续权限边界复用。
-export type AssetSensitivity =
-  | "public"
-  | "internal"
-  | "private"
-  | "restricted";
+export type AssetSensitivity = "public" | "internal" | "private" | "restricted";
 
 // 这里表达 AI 在读取资产时的可见范围。
 export type AssetAiVisibility = "allow" | "summary_only" | "deny";
@@ -92,6 +88,9 @@ export interface AssetListQuery {
   sourceKind?: AssetSourceKind | undefined;
   aiVisibility?: AssetAiVisibility | undefined;
   sourceHost?: string | undefined;
+  topic?: string | undefined;
+  tag?: string | undefined;
+  collection?: string | undefined;
   query?: string | undefined;
   page?: number | undefined;
   pageSize?: number | undefined;

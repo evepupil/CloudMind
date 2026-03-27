@@ -9,6 +9,7 @@ import {
   isNull,
   like,
   or,
+  sql,
 } from "drizzle-orm";
 
 import { AssetNotFoundError } from "@/core/assets/errors";
@@ -247,6 +248,27 @@ const buildAssetListWhereClause = (query?: AssetListQuery) => {
     conditions.push(buildLikeCondition(assets.sourceHost, query.sourceHost));
   }
 
+  const topicCondition = buildFacetExistsCondition("topic", query?.topic);
+
+  if (topicCondition) {
+    conditions.push(topicCondition);
+  }
+
+  const tagCondition = buildFacetExistsCondition("tag", query?.tag);
+
+  if (tagCondition) {
+    conditions.push(tagCondition);
+  }
+
+  const collectionCondition = buildFacetExistsCondition(
+    "collection",
+    query?.collection
+  );
+
+  if (collectionCondition) {
+    conditions.push(collectionCondition);
+  }
+
   if (query?.query) {
     const searchCondition = or(
       buildLikeCondition(assets.title, query.query),
@@ -281,6 +303,23 @@ const buildLikeCondition = (
   term: string
 ) => {
   return like(column, `%${term}%`);
+};
+
+const buildFacetExistsCondition = (
+  facetKey: "topic" | "tag" | "collection",
+  facetValue: string | undefined
+) => {
+  if (!facetValue) {
+    return undefined;
+  }
+
+  return sql`exists (
+    select 1
+    from ${assetFacets}
+    where ${assetFacets.assetId} = ${assets.id}
+      and ${assetFacets.facetKey} = ${facetKey}
+      and ${assetFacets.facetValue} = ${facetValue}
+  )`;
 };
 
 // 这里实现面向 D1 的资产仓储；后续如切数据库，只替换这一层。
