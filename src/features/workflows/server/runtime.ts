@@ -15,6 +15,7 @@ import type {
   WorkflowTriggerType,
   WorkflowType,
 } from "@/features/workflows/model/types";
+import { createLogger } from "@/platform/observability/logger";
 
 export interface WorkflowServices {
   assetRepository: AssetIngestRepository;
@@ -90,18 +91,7 @@ const getLatestJob = (asset: AssetDetail) => {
   return asset.jobs[0] ?? null;
 };
 
-const logWorkflowEvent = (
-  event: string,
-  fields: Record<string, unknown>
-): void => {
-  console.log(
-    JSON.stringify({
-      scope: "workflow",
-      event,
-      ...fields,
-    })
-  );
-};
+const workflowLogger = createLogger("workflow");
 
 const createWorkflowStepMessage = (
   payload: WorkflowStepQueuePayload
@@ -197,7 +187,7 @@ export const enqueueWorkflow = async (
     });
 
     runId = run.id;
-    logWorkflowEvent("run_enqueued", {
+    workflowLogger.info("run_enqueued", {
       runId: run.id,
       assetId: asset.id,
       workflowType: definition.type,
@@ -231,7 +221,7 @@ export const enqueueWorkflow = async (
         stepKey: firstStep.stepKey,
       })
     );
-    logWorkflowEvent("step_queued", {
+    workflowLogger.info("step_queued", {
       runId: run.id,
       assetId: asset.id,
       workflowType: definition.type,
@@ -310,7 +300,7 @@ export const consumeWorkflowStepMessage = async (
     step.stepKey
   );
   await services.workflowRepository.markWorkflowStepRunning(step.id);
-  logWorkflowEvent("step_started", {
+  workflowLogger.info("step_started", {
     runId: run.id,
     assetId: asset.id,
     workflowType: run.workflowType,
@@ -347,7 +337,7 @@ export const consumeWorkflowStepMessage = async (
         step.id,
         stringifyJson(result.output)
       );
-      logWorkflowEvent("step_skipped", {
+      workflowLogger.info("step_skipped", {
         runId: run.id,
         assetId: asset.id,
         workflowType: run.workflowType,
@@ -359,7 +349,7 @@ export const consumeWorkflowStepMessage = async (
         step.id,
         stringifyJson(result.output)
       );
-      logWorkflowEvent("step_succeeded", {
+      workflowLogger.info("step_succeeded", {
         runId: run.id,
         assetId: asset.id,
         workflowType: run.workflowType,
@@ -372,7 +362,7 @@ export const consumeWorkflowStepMessage = async (
 
     if (!nextStep) {
       await services.workflowRepository.completeWorkflowRun(run.id);
-      logWorkflowEvent("run_succeeded", {
+      workflowLogger.info("run_succeeded", {
         runId: run.id,
         assetId: asset.id,
         workflowType: run.workflowType,
@@ -391,7 +381,7 @@ export const consumeWorkflowStepMessage = async (
         stepKey: nextStep.key,
       })
     );
-    logWorkflowEvent("step_queued", {
+    workflowLogger.info("step_queued", {
       runId: run.id,
       assetId: asset.id,
       workflowType: run.workflowType,
@@ -413,17 +403,16 @@ export const consumeWorkflowStepMessage = async (
       await services.assetRepository.failIngestJob(latestJob.id, message);
     }
 
-    console.error(
-      JSON.stringify({
-        scope: "workflow",
-        event: "step_failed",
+    workflowLogger.error(
+      "step_failed",
+      {
         runId: run.id,
         assetId: asset.id,
         workflowType: run.workflowType,
         stepKey: step.stepKey,
         durationMs: Date.now() - startedAt,
-        errorMessage: message,
-      })
+      },
+      { error }
     );
 
     throw error;

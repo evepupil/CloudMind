@@ -1,8 +1,10 @@
 import type { AIProvider } from "@/core/ai/ports";
 import type { CreateAssetFacetInput } from "@/core/assets/ports";
 import type { VectorStore } from "@/core/vector/ports";
+import { createLogger } from "@/platform/observability/logger";
 
 const METADATA_TERM_NAMESPACE = "metadata_terms";
+const metadataTermLogger = createLogger("metadata_terms");
 
 type MetadataTermKind = "topic" | "tag" | "catalog";
 
@@ -153,9 +155,14 @@ export const upsertMetadataTermVectors = async (
       }))
     );
   } catch (error) {
-    console.warn(
-      "[metadata_terms] upsert skipped:",
-      error instanceof Error ? error.message : "unknown error"
+    metadataTermLogger.warn(
+      "upsert_skipped",
+      {
+        termCount: terms.length,
+      },
+      {
+        error,
+      }
     );
   }
 };

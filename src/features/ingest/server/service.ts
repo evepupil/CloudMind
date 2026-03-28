@@ -20,6 +20,7 @@ import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provi
 import { getBlobStoreFromBindings } from "@/platform/blob/r2/get-blob-store";
 import { getAssetIngestRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
 import { getWorkflowRepositoryFromBindings } from "@/platform/db/d1/repositories/get-workflow-repository";
+import { createLogger } from "@/platform/observability/logger";
 import { getJobQueueFromBindings } from "@/platform/queue/cloudflare/get-job-queue";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 import { getWebPageFetcherFromBindings } from "@/platform/web/jina/get-web-page-fetcher";
@@ -214,6 +215,7 @@ const defaultDependencies: IngestServiceDependencies = {
       }
     ),
 };
+const ingestLogger = createLogger("ingest");
 
 const parsePersistedTextEnrichment = (
   stateJson: string | null
@@ -362,97 +364,152 @@ export const createIngestService = (
       bindings: AppBindings | undefined,
       input: CreateTextAssetInput
     ): Promise<AssetDetail> {
-      const repository = await dependencies.getAssetRepository(bindings);
-      const blobStore = await dependencies.getBlobStore(bindings);
-      const vectorStore = await dependencies.getVectorStore(bindings);
-      const workflowRepository =
-        await dependencies.getWorkflowRepository(bindings);
-      const jobQueue = await dependencies.getJobQueue(bindings);
-      const aiProvider = await dependencies.getAIProvider(bindings);
-      let resolvedEnrichment = input.enrichment;
+      const startedAt = Date.now();
 
-      if (!resolvedEnrichment) {
-        resolvedEnrichment = await generateAutoTextEnrichment(
-          aiProvider,
-          vectorStore,
-          {
-            title: input.title,
-            content: input.content,
-          }
-        ).catch(() => undefined);
+      try {
+        const repository = await dependencies.getAssetRepository(bindings);
+        const blobStore = await dependencies.getBlobStore(bindings);
+        const vectorStore = await dependencies.getVectorStore(bindings);
+        const workflowRepository =
+          await dependencies.getWorkflowRepository(bindings);
+        const jobQueue = await dependencies.getJobQueue(bindings);
+        const aiProvider = await dependencies.getAIProvider(bindings);
+        let resolvedEnrichment = input.enrichment;
 
         if (!resolvedEnrichment) {
-          try {
-            const fallbackAiProvider = getAIProviderFromBindings(bindings);
-
-            if (fallbackAiProvider !== aiProvider) {
-              resolvedEnrichment = await generateAutoTextEnrichment(
-                fallbackAiProvider,
-                vectorStore,
-                {
-                  title: input.title,
-                  content: input.content,
-                }
-              ).catch(() => undefined);
+          resolvedEnrichment = await generateAutoTextEnrichment(
+            aiProvider,
+            vectorStore,
+            {
+              title: input.title,
+              content: input.content,
             }
-          } catch {}
-        }
-      }
-      const createdAsset = await repository.createTextAsset({
-        ...input,
-        enrichment: resolvedEnrichment,
-      });
+          ).catch(() => undefined);
 
-      if (resolvedEnrichment) {
-        return dependencies.processTextAsset(
-          repository,
-          workflowRepository,
-          blobStore,
-          vectorStore,
-          aiProvider,
-          jobQueue,
-          createdAsset.id,
-          {
-            enrichment: resolvedEnrichment,
+          if (!resolvedEnrichment) {
+            try {
+              const fallbackAiProvider = getAIProviderFromBindings(bindings);
+
+              if (fallbackAiProvider !== aiProvider) {
+                resolvedEnrichment = await generateAutoTextEnrichment(
+                  fallbackAiProvider,
+                  vectorStore,
+                  {
+                    title: input.title,
+                    content: input.content,
+                  }
+                ).catch(() => undefined);
+              }
+            } catch {}
           }
-        );
-      }
+        }
+        const createdAsset = await repository.createTextAsset({
+          ...input,
+          enrichment: resolvedEnrichment,
+        });
 
-      return dependencies.processTextAsset(
-        repository,
-        workflowRepository,
-        blobStore,
-        vectorStore,
-        aiProvider,
-        jobQueue,
-        createdAsset.id
-      );
+        const result = resolvedEnrichment
+          ? await dependencies.processTextAsset(
+              repository,
+              workflowRepository,
+              blobStore,
+              vectorStore,
+              aiProvider,
+              jobQueue,
+              createdAsset.id,
+              {
+                enrichment: resolvedEnrichment,
+              }
+            )
+          : await dependencies.processTextAsset(
+              repository,
+              workflowRepository,
+              blobStore,
+              vectorStore,
+              aiProvider,
+              jobQueue,
+              createdAsset.id
+            );
+
+        ingestLogger.info("ingest_completed", {
+          durationMs: Date.now() - startedAt,
+          assetId: result.id,
+          assetType: result.type,
+          sourceKind: result.sourceKind,
+          status: result.status,
+          enrichmentSource: input.enrichment
+            ? "client"
+            : resolvedEnrichment
+              ? "auto"
+              : "none",
+        });
+
+        return result;
+      } catch (error) {
+        ingestLogger.error(
+          "ingest_failed",
+          {
+            durationMs: Date.now() - startedAt,
+            assetType: "text",
+            sourceKind: input.sourceKind,
+            hasClientEnrichment: Boolean(input.enrichment),
+          },
+          { error }
+        );
+
+        throw error;
+      }
     },
 
     async ingestUrlAsset(
       bindings: AppBindings | undefined,
       input: CreateUrlAssetInput
     ): Promise<AssetDetail> {
-      const repository = await dependencies.getAssetRepository(bindings);
-      const blobStore = await dependencies.getBlobStore(bindings);
-      const vectorStore = await dependencies.getVectorStore(bindings);
-      const workflowRepository =
-        await dependencies.getWorkflowRepository(bindings);
-      const jobQueue = await dependencies.getJobQueue(bindings);
-      const aiProvider = await dependencies.getAIProvider(bindings);
-      const webPageFetcher = await dependencies.getWebPageFetcher(bindings);
-      const createdAsset = await repository.createUrlAsset(input);
+      const startedAt = Date.now();
 
-      return dependencies.processUrlAsset(
-        repository,
-        workflowRepository,
-        blobStore,
-        vectorStore,
-        aiProvider,
-        jobQueue,
-        webPageFetcher,
-        createdAsset.id
-      );
+      try {
+        const repository = await dependencies.getAssetRepository(bindings);
+        const blobStore = await dependencies.getBlobStore(bindings);
+        const vectorStore = await dependencies.getVectorStore(bindings);
+        const workflowRepository =
+          await dependencies.getWorkflowRepository(bindings);
+        const jobQueue = await dependencies.getJobQueue(bindings);
+        const aiProvider = await dependencies.getAIProvider(bindings);
+        const webPageFetcher = await dependencies.getWebPageFetcher(bindings);
+        const createdAsset = await repository.createUrlAsset(input);
+        const result = await dependencies.processUrlAsset(
+          repository,
+          workflowRepository,
+          blobStore,
+          vectorStore,
+          aiProvider,
+          jobQueue,
+          webPageFetcher,
+          createdAsset.id
+        );
+
+        ingestLogger.info("ingest_completed", {
+          durationMs: Date.now() - startedAt,
+          assetId: result.id,
+          assetType: result.type,
+          sourceKind: result.sourceKind,
+          status: result.status,
+        });
+
+        return result;
+      } catch (error) {
+        ingestLogger.error(
+          "ingest_failed",
+          {
+            durationMs: Date.now() - startedAt,
+            assetType: "url",
+            sourceKind: input.sourceKind,
+          },
+          { error }
+        );
+
+        throw error;
+      }
     },
 
     async ingestFileAsset(
@@ -462,105 +519,199 @@ export const createIngestService = (
         file: File;
       }
     ): Promise<AssetDetail> {
-      const repository = await dependencies.getAssetRepository(bindings);
-      const blobStore = await dependencies.getBlobStore(bindings);
-      const vectorStore = await dependencies.getVectorStore(bindings);
-      const workflowRepository =
-        await dependencies.getWorkflowRepository(bindings);
-      const jobQueue = await dependencies.getJobQueue(bindings);
-      const aiProvider = await dependencies.getAIProvider(bindings);
-      const assetId = crypto.randomUUID();
-      const rawR2Key = createRawAssetBlobKey(assetId, input.file.name);
-      const contentDisposition = `inline; filename="${input.file.name.replace(
-        /"/g,
-        '\\"'
-      )}"`;
+      const startedAt = Date.now();
 
-      await blobStore.put({
-        key: rawR2Key,
-        body: await input.file.arrayBuffer(),
-        contentType: input.file.type || "application/pdf",
-        contentDisposition,
-      });
+      try {
+        const repository = await dependencies.getAssetRepository(bindings);
+        const blobStore = await dependencies.getBlobStore(bindings);
+        const vectorStore = await dependencies.getVectorStore(bindings);
+        const workflowRepository =
+          await dependencies.getWorkflowRepository(bindings);
+        const jobQueue = await dependencies.getJobQueue(bindings);
+        const aiProvider = await dependencies.getAIProvider(bindings);
+        const assetId = crypto.randomUUID();
+        const rawR2Key = createRawAssetBlobKey(assetId, input.file.name);
+        const contentDisposition = `inline; filename="${input.file.name.replace(
+          /"/g,
+          '\\"'
+        )}"`;
 
-      const createdAsset = await repository.createFileAsset({
-        id: assetId,
-        title: input.title,
-        fileName: input.file.name,
-        fileSize: input.file.size,
-        mimeType: input.file.type || "application/pdf",
-        rawR2Key,
-      });
+        await blobStore.put({
+          key: rawR2Key,
+          body: await input.file.arrayBuffer(),
+          contentType: input.file.type || "application/pdf",
+          contentDisposition,
+        });
 
-      return dependencies.processPdfAsset(
-        repository,
-        workflowRepository,
-        blobStore,
-        vectorStore,
-        aiProvider,
-        jobQueue,
-        createdAsset.id
-      );
+        const createdAsset = await repository.createFileAsset({
+          id: assetId,
+          title: input.title,
+          fileName: input.file.name,
+          fileSize: input.file.size,
+          mimeType: input.file.type || "application/pdf",
+          rawR2Key,
+        });
+
+        const result = await dependencies.processPdfAsset(
+          repository,
+          workflowRepository,
+          blobStore,
+          vectorStore,
+          aiProvider,
+          jobQueue,
+          createdAsset.id
+        );
+
+        ingestLogger.info("ingest_completed", {
+          durationMs: Date.now() - startedAt,
+          assetId: result.id,
+          assetType: result.type,
+          sourceKind: result.sourceKind,
+          status: result.status,
+          fileName: input.file.name,
+          fileSize: input.file.size,
+        });
+
+        return result;
+      } catch (error) {
+        ingestLogger.error(
+          "ingest_failed",
+          {
+            durationMs: Date.now() - startedAt,
+            assetType: "pdf",
+            sourceKind: "upload",
+            fileName: input.file.name,
+            fileSize: input.file.size,
+          },
+          { error }
+        );
+
+        throw error;
+      }
     },
 
     async reprocessAsset(
       bindings: AppBindings | undefined,
       id: string
     ): Promise<AssetDetail> {
-      const repository = await dependencies.getAssetRepository(bindings);
-      const asset = await repository.getAssetById(id);
+      const startedAt = Date.now();
 
-      return reprocessExistingAsset(dependencies, bindings, repository, asset);
+      try {
+        const repository = await dependencies.getAssetRepository(bindings);
+        const asset = await repository.getAssetById(id);
+        const result = await reprocessExistingAsset(
+          dependencies,
+          bindings,
+          repository,
+          asset
+        );
+
+        ingestLogger.info("reprocess_completed", {
+          durationMs: Date.now() - startedAt,
+          assetId: result.id,
+          assetType: result.type,
+          status: result.status,
+        });
+
+        return result;
+      } catch (error) {
+        ingestLogger.error(
+          "reprocess_failed",
+          {
+            durationMs: Date.now() - startedAt,
+            assetId: id,
+          },
+          { error }
+        );
+
+        throw error;
+      }
     },
 
     async backfillChunkContent(
       bindings: AppBindings | undefined,
       input?: BackfillChunkContentInput
     ): Promise<BackfillChunkContentResult> {
-      const repository = await dependencies.getAssetRepository(bindings);
-      const candidateAssetIds =
-        await repository.listAssetIdsMissingChunkContent(input?.limit ?? 50);
+      const startedAt = Date.now();
 
-      if (input?.dryRun ?? false) {
-        return {
-          dryRun: true,
-          candidateAssetIds,
-          processedAssetIds: [],
-          failedItems: [],
-        };
-      }
+      try {
+        const repository = await dependencies.getAssetRepository(bindings);
+        const candidateAssetIds =
+          await repository.listAssetIdsMissingChunkContent(input?.limit ?? 50);
 
-      const processedAssetIds: string[] = [];
-      const failedItems: BackfillChunkContentResult["failedItems"] = [];
+        if (input?.dryRun ?? false) {
+          const dryRunResult = {
+            dryRun: true,
+            candidateAssetIds,
+            processedAssetIds: [],
+            failedItems: [],
+          };
 
-      for (const assetId of candidateAssetIds) {
-        try {
-          const asset = await repository.getAssetById(assetId);
-
-          await reprocessExistingAsset(
-            dependencies,
-            bindings,
-            repository,
-            asset
-          );
-          processedAssetIds.push(assetId);
-        } catch (error) {
-          failedItems.push({
-            assetId,
-            errorMessage:
-              error instanceof Error
-                ? error.message
-                : "Unknown backfill error.",
+          ingestLogger.info("chunk_content_backfill_completed", {
+            durationMs: Date.now() - startedAt,
+            dryRun: true,
+            candidateCount: candidateAssetIds.length,
+            processedCount: 0,
+            failedCount: 0,
           });
-        }
-      }
 
-      return {
-        dryRun: false,
-        candidateAssetIds,
-        processedAssetIds,
-        failedItems,
-      };
+          return dryRunResult;
+        }
+
+        const processedAssetIds: string[] = [];
+        const failedItems: BackfillChunkContentResult["failedItems"] = [];
+
+        for (const assetId of candidateAssetIds) {
+          try {
+            const asset = await repository.getAssetById(assetId);
+
+            await reprocessExistingAsset(
+              dependencies,
+              bindings,
+              repository,
+              asset
+            );
+            processedAssetIds.push(assetId);
+          } catch (error) {
+            failedItems.push({
+              assetId,
+              errorMessage:
+                error instanceof Error
+                  ? error.message
+                  : "Unknown backfill error.",
+            });
+          }
+        }
+
+        const result = {
+          dryRun: false,
+          candidateAssetIds,
+          processedAssetIds,
+          failedItems,
+        };
+
+        ingestLogger.info("chunk_content_backfill_completed", {
+          durationMs: Date.now() - startedAt,
+          dryRun: false,
+          candidateCount: candidateAssetIds.length,
+          processedCount: processedAssetIds.length,
+          failedCount: failedItems.length,
+        });
+
+        return result;
+      } catch (error) {
+        ingestLogger.error(
+          "chunk_content_backfill_failed",
+          {
+            durationMs: Date.now() - startedAt,
+            dryRun: input?.dryRun ?? false,
+            limit: input?.limit ?? 50,
+          },
+          { error }
+        );
+
+        throw error;
+      }
     },
   };
 };

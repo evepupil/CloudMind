@@ -49,6 +49,7 @@ import {
   getWorkflowRunDetail,
   listWorkflowRunsByAssetId,
 } from "@/features/workflows/server/service";
+import { createLogger } from "@/platform/observability/logger";
 
 const saveAssetInputSchema = z
   .object({
@@ -298,6 +299,19 @@ const createToolErrorResult = (message: string, code = "TOOL_ERROR") => {
   };
 };
 
+type McpToolResult =
+  | ReturnType<typeof createToolErrorResult>
+  | {
+      isError?: boolean | undefined;
+      content: Array<{
+        type: "text";
+        text: string;
+      }>;
+      structuredContent: Record<string, unknown>;
+    };
+
+const mcpLogger = createLogger("mcp");
+
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof AssetNotFoundError) {
     return error.message;
@@ -312,6 +326,94 @@ const getErrorMessage = (error: unknown): string => {
   }
 
   return "Unknown MCP tool error.";
+};
+
+const getInputKeys = (input: unknown): string[] => {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return [];
+  }
+
+  return Object.keys(input).sort();
+};
+
+const getToolResultFields = (
+  result: McpToolResult
+): Record<string, unknown> => {
+  const structuredContent = result.structuredContent as Record<string, unknown>;
+  const items = Array.isArray(structuredContent.items)
+    ? structuredContent.items
+    : [];
+  const sources = Array.isArray(structuredContent.sources)
+    ? structuredContent.sources
+    : [];
+  const groupedEvidence = Array.isArray(structuredContent.groupedEvidence)
+    ? structuredContent.groupedEvidence
+    : [];
+  const pagination =
+    structuredContent.pagination &&
+    typeof structuredContent.pagination === "object" &&
+    !Array.isArray(structuredContent.pagination)
+      ? (structuredContent.pagination as Record<string, unknown>)
+      : null;
+
+  return {
+    isError: result.isError === true,
+    itemCount: items.length,
+    sourceCount: sources.length,
+    groupedEvidenceCount: groupedEvidence.length,
+    hasItem: Boolean(structuredContent.item),
+    resultScope:
+      typeof structuredContent.resultScope === "string"
+        ? structuredContent.resultScope
+        : null,
+    page:
+      pagination && typeof pagination.page === "number"
+        ? pagination.page
+        : null,
+    total:
+      pagination && typeof pagination.total === "number"
+        ? pagination.total
+        : null,
+  };
+};
+
+const withToolLogging = <TInput>(
+  toolName: string,
+  handler: (input: TInput) => Promise<McpToolResult>
+) => {
+  return async (input: TInput): Promise<McpToolResult> => {
+    const startedAt = Date.now();
+
+    try {
+      const result = await handler(input);
+      const logFields = {
+        toolName,
+        durationMs: Date.now() - startedAt,
+        inputKeys: getInputKeys(input),
+        ...getToolResultFields(result),
+      };
+
+      if (result.isError === true) {
+        mcpLogger.warn("tool_completed", logFields);
+      } else {
+        mcpLogger.info("tool_completed", logFields);
+      }
+
+      return result;
+    } catch (error) {
+      mcpLogger.error(
+        "tool_failed",
+        {
+          toolName,
+          durationMs: Date.now() - startedAt,
+          inputKeys: getInputKeys(input),
+        },
+        { error }
+      );
+
+      return createToolErrorResult(getErrorMessage(error));
+    }
+  };
 };
 
 const contextProfileDescriptions = getContextProfileDescriptions()
@@ -363,7 +465,7 @@ export const createMcpServer = (
         "For type=text, you may pass optional enrichment to suggest summary, domain, documentClass, descriptor, and facets using CloudMind enum values.",
       inputSchema: saveAssetInputSchema,
     },
-    async (input) => {
+    withToolLogging("save_asset", async (input) => {
       try {
         if (input.type === "text") {
           const content = input.content;
@@ -398,7 +500,7 @@ export const createMcpServer = (
       } catch (error) {
         return createToolErrorResult(getErrorMessage(error));
       }
-    }
+    })
   );
 
   server.registerTool(
@@ -409,7 +511,7 @@ export const createMcpServer = (
         "List assets in the CloudMind library with optional filters and pagination, including domain, document class, source kind, AI visibility, created-at range, source host, topic, tag, and collection.",
       inputSchema: listAssetsInputSchema,
     },
-    async (input) => {
+    withToolLogging("list_assets", async (input) => {
       try {
         const result = await listAssets(bindings, input);
 
@@ -417,7 +519,7 @@ export const createMcpServer = (
       } catch (error) {
         return createToolErrorResult(getErrorMessage(error));
       }
-    }
+    })
   );
 
   server.registerTool(
@@ -430,7 +532,7 @@ export const createMcpServer = (
         "indexed terms already exist before filtering or reverse lookup.",
       inputSchema: searchTermsInputSchema,
     },
-    async (input) => {
+    withToolLogging("search_terms", async (input) => {
       try {
         const result = await searchTerms(bindings, input);
 
@@ -438,7 +540,7 @@ export const createMcpServer = (
       } catch (error) {
         return createToolErrorResult(getErrorMessage(error));
       }
-    }
+    })
   );
 
   server.registerTool(
@@ -453,7 +555,7 @@ export const createMcpServer = (
         "you want to find assets by what they are about rather than by content keywords.",
       inputSchema: searchAssetsByTermsInputSchema,
     },
-    async (input) => {
+    withToolLogging("search_assets_by_terms", async (input) => {
       try {
         const result = await searchAssetsByTerms(bindings, input);
 
@@ -461,7 +563,7 @@ export const createMcpServer = (
       } catch (error) {
         return createToolErrorResult(getErrorMessage(error));
       }
-    }
+    })
   );
 
   server.registerTool(
@@ -477,7 +579,7 @@ export const createMcpServer = (
         cloudMindInvocationGuidance,
       inputSchema: searchAssetsInputSchema,
     },
-    async (input) => {
+    withToolLogging("search_assets", async (input) => {
       try {
         const result = await searchAssets(bindings, input);
 
@@ -485,7 +587,7 @@ export const createMcpServer = (
       } catch (error) {
         return createToolErrorResult(getErrorMessage(error));
       }
-    }
+    })
   );
 
   server.registerTool(
@@ -502,7 +604,7 @@ export const createMcpServer = (
         `${contextFallbackGuidance} Available profiles: ${contextProfileDescriptions}`,
       inputSchema: searchAssetsForContextInputSchema,
     },
-    async (input) => {
+    withToolLogging("search_assets_for_context", async (input) => {
       try {
         const policy = resolveContextRetrievalPolicy(input.profile, {
           allowFallback: input.allowFallback,
@@ -516,7 +618,7 @@ export const createMcpServer = (
       } catch (error) {
         return createToolErrorResult(getErrorMessage(error));
       }
-    }
+    })
   );
 
   server.registerTool(
@@ -528,7 +630,7 @@ export const createMcpServer = (
         "you need to inspect a selected asset in detail.",
       inputSchema: getAssetInputSchema,
     },
-    async (input) => {
+    withToolLogging("get_asset", async (input) => {
       try {
         const item = await getAssetById(bindings, input.id);
 
@@ -541,7 +643,7 @@ export const createMcpServer = (
 
         return createToolErrorResult(getErrorMessage(error), code);
       }
-    }
+    })
   );
 
   server.registerTool(
@@ -552,7 +654,7 @@ export const createMcpServer = (
         "Update editable asset fields such as title, summary, or source URL.",
       inputSchema: updateAssetInputSchema,
     },
-    async (input) => {
+    withToolLogging("update_asset", async (input) => {
       try {
         const item = await updateAsset(bindings, input.id, {
           title: normalizeOptionalString(input.title),
@@ -569,7 +671,7 @@ export const createMcpServer = (
 
         return createToolErrorResult(getErrorMessage(error), code);
       }
-    }
+    })
   );
 
   server.registerTool(
@@ -579,7 +681,7 @@ export const createMcpServer = (
       description: "Soft delete one asset from the CloudMind library.",
       inputSchema: deleteAssetInputSchema,
     },
-    async (input) => {
+    withToolLogging("delete_asset", async (input) => {
       try {
         await deleteAsset(bindings, input.id);
 
@@ -595,7 +697,7 @@ export const createMcpServer = (
 
         return createToolErrorResult(getErrorMessage(error), code);
       }
-    }
+    })
   );
 
   server.registerTool(
@@ -606,7 +708,7 @@ export const createMcpServer = (
         "Restore one soft-deleted asset from the CloudMind recycle bin.",
       inputSchema: restoreAssetInputSchema,
     },
-    async (input) => {
+    withToolLogging("restore_asset", async (input) => {
       try {
         const item = await restoreAsset(bindings, input.id);
 
@@ -619,7 +721,7 @@ export const createMcpServer = (
 
         return createToolErrorResult(getErrorMessage(error), code);
       }
-    }
+    })
   );
 
   server.registerTool(
@@ -630,7 +732,7 @@ export const createMcpServer = (
         "Trigger reprocessing for an existing asset and return the updated asset state.",
       inputSchema: reprocessAssetInputSchema,
     },
-    async (input) => {
+    withToolLogging("reprocess_asset", async (input) => {
       try {
         const item = await reprocessAsset(bindings, input.id);
 
@@ -643,7 +745,7 @@ export const createMcpServer = (
 
         return createToolErrorResult(getErrorMessage(error), code);
       }
-    }
+    })
   );
 
   server.registerTool(
@@ -653,7 +755,7 @@ export const createMcpServer = (
       description: "List workflow runs associated with one asset.",
       inputSchema: listAssetWorkflowsInputSchema,
     },
-    async (input) => {
+    withToolLogging("list_asset_workflows", async (input) => {
       try {
         await getAssetById(bindings, input.assetId);
         const items = await listWorkflowRunsByAssetId(bindings, input.assetId);
@@ -667,7 +769,7 @@ export const createMcpServer = (
 
         return createToolErrorResult(getErrorMessage(error), code);
       }
-    }
+    })
   );
 
   server.registerTool(
@@ -678,7 +780,7 @@ export const createMcpServer = (
         "Fetch the detail of one workflow run including steps and artifacts.",
       inputSchema: getWorkflowRunInputSchema,
     },
-    async (input) => {
+    withToolLogging("get_workflow_run", async (input) => {
       try {
         const item = await getWorkflowRunDetail(bindings, input.runId);
 
@@ -691,7 +793,7 @@ export const createMcpServer = (
 
         return createToolErrorResult(getErrorMessage(error), code);
       }
-    }
+    })
   );
 
   server.registerTool(
@@ -705,7 +807,7 @@ export const createMcpServer = (
         cloudMindInvocationGuidance,
       inputSchema: askLibraryInputSchema,
     },
-    async (input) => {
+    withToolLogging("ask_library", async (input) => {
       try {
         const result = await askLibrary(bindings, input);
 
@@ -713,7 +815,7 @@ export const createMcpServer = (
       } catch (error) {
         return createToolErrorResult(getErrorMessage(error));
       }
-    }
+    })
   );
 
   server.registerTool(
@@ -729,7 +831,7 @@ export const createMcpServer = (
         `${contextFallbackGuidance} Available profiles: ${contextProfileDescriptions}`,
       inputSchema: askLibraryForContextInputSchema,
     },
-    async (input) => {
+    withToolLogging("ask_library_for_context", async (input) => {
       try {
         const policy = resolveContextRetrievalPolicy(input.profile, {
           allowFallback: input.allowFallback,
@@ -743,7 +845,7 @@ export const createMcpServer = (
       } catch (error) {
         return createToolErrorResult(getErrorMessage(error));
       }
-    }
+    })
   );
 
   return server;

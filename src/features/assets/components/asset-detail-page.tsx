@@ -1,7 +1,9 @@
 import type { AssetDetail, AssetType } from "@/features/assets/model/types";
 import { PageShell } from "@/features/layout/components/page-shell";
 
+import { AssetPageActions } from "./asset-page-actions";
 import { AssetStatusBadge } from "./asset-status-badge";
+import { AssetTabs } from "./asset-tabs";
 
 const reprocessableAssetTypes: AssetType[] = ["note", "chat", "url", "pdf"];
 
@@ -124,6 +126,7 @@ export const AssetDetailPage = ({
         title="Asset detail"
         subtitle="Review source, processed content, and job history for a single knowledge asset."
         navigationKey="library"
+        actions={<AssetPageActions />}
       >
         <MessageBanner tone="error">
           {errorMessage ?? "Asset not found."}
@@ -138,24 +141,9 @@ export const AssetDetailPage = ({
   return (
     <PageShell
       title={item.title}
-      subtitle="Read the cleaned content, inspect the source record, and trace processing history without leaving the workspace."
+      subtitle="Read cleaned content, inspect the source record, and manage the asset here. Open Workflow Inspection for run-by-run execution details."
       navigationKey="library"
-      actions={
-        <>
-          <a
-            href="/assets"
-            class="rounded-md bg-[#f1f1f0] text-[#37352f] px-3 py-1.5 font-medium no-underline hover:bg-[#ebebea]"
-          >
-            Back to Library
-          </a>
-          <a
-            href="/ask"
-            class="rounded-md bg-[#e8f0fa] text-[#2383e2] px-3 py-1.5 font-medium no-underline hover:bg-[#d6e6f7]"
-          >
-            Ask About This
-          </a>
-        </>
-      }
+      actions={<AssetPageActions assetId={item.id} />}
     >
       {flashMessage ? (
         <MessageBanner tone="success">{flashMessage}</MessageBanner>
@@ -164,6 +152,8 @@ export const AssetDetailPage = ({
       {errorMessage ? (
         <MessageBanner tone="error">{errorMessage}</MessageBanner>
       ) : null}
+
+      <AssetTabs assetId={item.id} activeTab="detail" />
 
       <section class="grid grid-cols-[minmax(0,1.15fr)_minmax(280px,0.75fr)] gap-[18px]">
         <div class="grid gap-[18px]">

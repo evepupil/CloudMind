@@ -11,6 +11,7 @@ import type { EvidenceItem } from "@/features/search/model/evidence";
 import type { SearchResult } from "@/features/search/model/types";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
+import { createLogger } from "@/platform/observability/logger";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 import { scoreAssetAssertionMatch } from "./assertion-scoring";
 import {
@@ -38,6 +39,7 @@ const SEARCHABLE_AI_VISIBILITY = ["allow"] as const;
 const SUMMARY_ONLY_AI_VISIBILITY = ["summary_only"] as const;
 const FILTERED_VECTOR_FETCH_MULTIPLIERS = [1, 3, 6, 12] as const;
 const MAX_FILTERED_VECTOR_TOP_K = 240;
+const searchLogger = createLogger("search");
 
 const getSearchFilters = (input: AssetSearchFilters): AssetSearchFilters => {
   return {
@@ -58,6 +60,13 @@ const hasHardSearchFilters = (filters: AssetSearchFilters): boolean => {
   return Object.values(getSearchFilters(filters)).some(
     (value) => value !== undefined
   );
+};
+
+const getAppliedFilterKeys = (filters: AssetSearchFilters): string[] => {
+  return Object.entries(getSearchFilters(filters))
+    .filter(([, value]) => value !== undefined)
+    .map(([key]) => key)
+    .sort();
 };
 
 interface SearchServiceDependencies {
@@ -362,106 +371,163 @@ export const createSearchService = (
     input: AssetSearchInput,
     contextPolicy?: ContextRetrievalPolicy
   ): Promise<SearchResult> => {
+    const startedAt = Date.now();
     const query = input.query.trim();
-
-    if (!query) {
-      return {
-        items: [],
-        evidence: buildEvidencePacket([]),
-        groupedEvidence: [],
-        pagination: {
-          page: 1,
-          pageSize: input.pageSize ?? 20,
-          total: 0,
-          totalPages: 0,
-        },
-      };
-    }
-
     const page = input.page ?? 1;
     const pageSize = input.pageSize ?? 20;
-    const offset = (page - 1) * pageSize;
-    const overfetchMultiplier = Math.max(
-      contextPolicy?.overfetchMultiplier ?? 1,
-      1
-    );
-    const topK = (offset + pageSize) * overfetchMultiplier;
-    const [repository, vectorStore, aiProvider] = await Promise.all([
-      dependencies.getAssetRepository(bindings),
-      dependencies.getVectorStore(bindings),
-      dependencies.getAIProvider(bindings),
-    ]);
-    const embeddingResult = await aiProvider.createEmbeddings({
-      texts: [query],
-      purpose: "query",
-    });
-    const queryVector = embeddingResult.embeddings[0];
-    const [summaryMatches, assertionMatches, termMatches] = await Promise.all([
-      getSummaryMatches(repository, input, topK, contextPolicy),
-      getAssertionMatches(repository, input, topK, contextPolicy),
-      dependencies.searchAssetsByTerms(bindings, {
-        query,
-        filters: getSearchFilters(input),
-        topK,
-        page: 1,
-        pageSize: topK,
-      }),
-    ]);
+    const appliedFilterKeys = getAppliedFilterKeys(input);
 
-    let orderedEvidence: EvidenceItem[];
+    try {
+      if (!query) {
+        const emptyResult = {
+          items: [],
+          evidence: buildEvidencePacket([]),
+          groupedEvidence: [],
+          pagination: {
+            page: 1,
+            pageSize,
+            total: 0,
+            totalPages: 0,
+          },
+        };
 
-    if (!queryVector) {
-      orderedEvidence = buildLexicalEvidence(
-        query,
-        summaryMatches,
-        assertionMatches,
-        termMatches,
+        searchLogger.info("search_completed", {
+          durationMs: Date.now() - startedAt,
+          queryLength: 0,
+          page: 1,
+          pageSize,
+          appliedFilterKeys,
+          resultCount: 0,
+          groupedEvidenceCount: 0,
+          totalGroups: 0,
+          resultScope: null,
+          contextProfile: contextPolicy?.profile ?? null,
+          allowFallback: contextPolicy?.allowFallback ?? false,
+        });
+
+        return emptyResult;
+      }
+
+      const offset = (page - 1) * pageSize;
+      const overfetchMultiplier = Math.max(
+        contextPolicy?.overfetchMultiplier ?? 1,
+        1
+      );
+      const topK = (offset + pageSize) * overfetchMultiplier;
+      const [repository, vectorStore, aiProvider] = await Promise.all([
+        dependencies.getAssetRepository(bindings),
+        dependencies.getVectorStore(bindings),
+        dependencies.getAIProvider(bindings),
+      ]);
+      const embeddingResult = await aiProvider.createEmbeddings({
+        texts: [query],
+        purpose: "query",
+      });
+      const queryVector = embeddingResult.embeddings[0];
+      const [summaryMatches, assertionMatches, termMatches] = await Promise.all(
+        [
+          getSummaryMatches(repository, input, topK, contextPolicy),
+          getAssertionMatches(repository, input, topK, contextPolicy),
+          dependencies.searchAssetsByTerms(bindings, {
+            query,
+            filters: getSearchFilters(input),
+            topK,
+            page: 1,
+            pageSize: topK,
+          }),
+        ]
+      );
+
+      let orderedEvidence: EvidenceItem[];
+
+      if (!queryVector) {
+        orderedEvidence = buildLexicalEvidence(
+          query,
+          summaryMatches,
+          assertionMatches,
+          termMatches,
+          contextPolicy
+        );
+      } else {
+        const { vectorMatches, chunkMatches } =
+          await getFilteredSemanticMatches(
+            vectorStore,
+            repository,
+            queryVector,
+            topK,
+            input
+          );
+
+        orderedEvidence = buildSemanticEvidence(
+          query,
+          vectorMatches,
+          chunkMatches,
+          summaryMatches,
+          assertionMatches,
+          termMatches,
+          contextPolicy
+        );
+      }
+      const orderedGroups = buildGroupedEvidence(orderedEvidence);
+      const pageGroups = orderedGroups.slice(offset, offset + pageSize);
+      const pageItems = flattenGroupedEvidence(pageGroups);
+      const resultScope = getContextResultScope(
+        pageGroups.map((group) => group.asset),
         contextPolicy
       );
-    } else {
-      const { vectorMatches, chunkMatches } = await getFilteredSemanticMatches(
-        vectorStore,
-        repository,
-        queryVector,
+
+      const result = withOptionalResultScope(
+        {
+          items: pageItems.map(toSearchResultItem),
+          evidence: buildEvidencePacket(pageItems),
+          groupedEvidence: pageGroups,
+          pagination: {
+            page,
+            pageSize,
+            total: orderedGroups.length,
+            totalPages:
+              orderedGroups.length === 0
+                ? 0
+                : Math.ceil(orderedGroups.length / pageSize),
+          },
+        },
+        resultScope
+      );
+
+      searchLogger.info("search_completed", {
+        durationMs: Date.now() - startedAt,
+        queryLength: query.length,
+        page,
+        pageSize,
         topK,
-        input
-      );
+        appliedFilterKeys,
+        hasQueryVector: Boolean(queryVector),
+        resultCount: result.items.length,
+        groupedEvidenceCount: result.groupedEvidence.length,
+        totalGroups: result.pagination.total,
+        resultScope: resultScope ?? null,
+        contextProfile: contextPolicy?.profile ?? null,
+        allowFallback: contextPolicy?.allowFallback ?? false,
+      });
 
-      orderedEvidence = buildSemanticEvidence(
-        query,
-        vectorMatches,
-        chunkMatches,
-        summaryMatches,
-        assertionMatches,
-        termMatches,
-        contextPolicy
-      );
-    }
-    const orderedGroups = buildGroupedEvidence(orderedEvidence);
-    const pageGroups = orderedGroups.slice(offset, offset + pageSize);
-    const pageItems = flattenGroupedEvidence(pageGroups);
-    const resultScope = getContextResultScope(
-      pageGroups.map((group) => group.asset),
-      contextPolicy
-    );
-
-    return withOptionalResultScope(
-      {
-        items: pageItems.map(toSearchResultItem),
-        evidence: buildEvidencePacket(pageItems),
-        groupedEvidence: pageGroups,
-        pagination: {
+      return result;
+    } catch (error) {
+      searchLogger.error(
+        "search_failed",
+        {
+          durationMs: Date.now() - startedAt,
+          queryLength: query.length,
           page,
           pageSize,
-          total: orderedGroups.length,
-          totalPages:
-            orderedGroups.length === 0
-              ? 0
-              : Math.ceil(orderedGroups.length / pageSize),
+          appliedFilterKeys,
+          contextProfile: contextPolicy?.profile ?? null,
+          allowFallback: contextPolicy?.allowFallback ?? false,
         },
-      },
-      resultScope
-    );
+        { error }
+      );
+
+      throw error;
+    }
   };
 
   return {

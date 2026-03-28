@@ -22,6 +22,7 @@ import {
 import { scoreAssetSummaryMatch } from "@/features/search/server/summary-scoring";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
+import { createLogger } from "@/platform/observability/logger";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 import type {
   AskLibraryIndexingSummary,
@@ -47,6 +48,7 @@ const defaultDependencies: ChatServiceDependencies = {
   getVectorStore: getVectorStoreFromBindings,
   getAiProvider: getAIProviderFromBindings,
 };
+const chatLogger = createLogger("chat");
 
 const createFallbackAnswer = (): string => {
   return (
@@ -974,6 +976,32 @@ const withOptionalResultScope = <T extends AskLibraryResult>(
   };
 };
 
+const logAskCompleted = (
+  startedAt: number,
+  question: string,
+  topK: number,
+  retrievalLimit: number,
+  contextPolicy: ContextRetrievalPolicy | undefined,
+  result: AskLibraryResult,
+  fields?: Record<string, unknown>
+): AskLibraryResult => {
+  chatLogger.info("ask_completed", {
+    durationMs: Date.now() - startedAt,
+    questionLength: question.length,
+    topK,
+    retrievalLimit,
+    sourceCount: result.sources.length,
+    groupedEvidenceCount: result.groupedEvidence.length,
+    resultScope: result.resultScope ?? null,
+    contextProfile: contextPolicy?.profile ?? null,
+    allowFallback: contextPolicy?.allowFallback ?? false,
+    answered: result.answer !== createFallbackAnswer(),
+    ...fields,
+  });
+
+  return result;
+};
+
 // 这里实现最小问答链路：query embedding -> Vectorize 召回 -> D1 回填 -> AI 生成答案。
 export const createChatService = (
   dependencies: ChatServiceDependencies = defaultDependencies
@@ -983,6 +1011,7 @@ export const createChatService = (
     input: AskLibraryInput,
     contextPolicy?: ContextRetrievalPolicy
   ): Promise<AskLibraryResult> => {
+    const startedAt = Date.now();
     const question = input.question.trim();
 
     if (!question) {
@@ -995,197 +1024,290 @@ export const createChatService = (
       1
     );
     const retrievalLimit = topK * overfetchMultiplier;
-    const [repository, vectorStore, aiProvider] = await Promise.all([
-      dependencies.getAssetRepository(bindings),
-      dependencies.getVectorStore(bindings),
-      dependencies.getAiProvider(bindings),
-    ]);
-    const embeddingResult = await aiProvider.createEmbeddings({
-      texts: [question],
-      purpose: "query",
-    });
-    const queryVector = embeddingResult.embeddings[0];
-    const summaryContexts = await getSummaryGroundingContexts(
-      repository,
-      question,
-      retrievalLimit,
-      contextPolicy
-    );
-    const assertionContexts = await getAssertionGroundingContexts(
-      repository,
-      question,
-      retrievalLimit,
-      contextPolicy
-    );
-
-    if (!queryVector) {
-      const lexicalContexts = [...assertionContexts, ...summaryContexts].sort(
-        (left, right) => compareGroundingContexts(question, left, right)
-      );
-      const selectedLexicalContexts = selectGroundingContexts(
+    try {
+      const [repository, vectorStore, aiProvider] = await Promise.all([
+        dependencies.getAssetRepository(bindings),
+        dependencies.getVectorStore(bindings),
+        dependencies.getAiProvider(bindings),
+      ]);
+      const embeddingResult = await aiProvider.createEmbeddings({
+        texts: [question],
+        purpose: "query",
+      });
+      const queryVector = embeddingResult.embeddings[0];
+      const summaryContexts = await getSummaryGroundingContexts(
+        repository,
         question,
-        lexicalContexts,
+        retrievalLimit,
+        contextPolicy
+      );
+      const assertionContexts = await getAssertionGroundingContexts(
+        repository,
+        question,
+        retrievalLimit,
+        contextPolicy
+      );
+
+      if (!queryVector) {
+        const lexicalContexts = [...assertionContexts, ...summaryContexts].sort(
+          (left, right) => compareGroundingContexts(question, left, right)
+        );
+        const selectedLexicalContexts = selectGroundingContexts(
+          question,
+          lexicalContexts,
+          topK,
+          {
+            allowLowRelevanceSecondary: Boolean(contextPolicy?.allowFallback),
+          }
+        );
+
+        if (selectedLexicalContexts.length === 0) {
+          return logAskCompleted(
+            startedAt,
+            question,
+            topK,
+            retrievalLimit,
+            contextPolicy,
+            withOptionalResultScope(
+              {
+                answer: createFallbackAnswer(),
+                sources: [],
+                evidence: buildEvidencePacket([]),
+                groupedEvidence: [],
+              },
+              getContextResultScope([], contextPolicy)
+            ),
+            {
+              hasQueryVector: false,
+              selectedContextCount: 0,
+              answerMode: "no_context",
+            }
+          );
+        }
+
+        const resultScope = getContextResultScope(
+          selectedLexicalContexts.map((context) => context.asset),
+          contextPolicy
+        );
+
+        if (
+          shouldRejectContextAnswer(
+            question,
+            selectedLexicalContexts,
+            contextPolicy
+          )
+        ) {
+          return logAskCompleted(
+            startedAt,
+            question,
+            topK,
+            retrievalLimit,
+            contextPolicy,
+            withOptionalResultScope(
+              {
+                answer: createFallbackAnswer(),
+                sources: [],
+                evidence: buildEvidencePacket([]),
+                groupedEvidence: [],
+              },
+              resultScope
+            ),
+            {
+              hasQueryVector: false,
+              selectedContextCount: selectedLexicalContexts.length,
+              answerMode: "rejected_context",
+            }
+          );
+        }
+
+        const sanitizedAnswer = await generateGroundedAnswer(
+          aiProvider,
+          question,
+          selectedLexicalContexts
+        );
+
+        return logAskCompleted(
+          startedAt,
+          question,
+          topK,
+          retrievalLimit,
+          contextPolicy,
+          withOptionalResultScope(
+            {
+              answer:
+                sanitizedAnswer.length > 0
+                  ? sanitizedAnswer
+                  : createFallbackAnswer(),
+              sources: selectedLexicalContexts.map(buildChatSource),
+              evidence: buildEvidencePacket(selectedLexicalContexts),
+              groupedEvidence: buildGroupedEvidence(selectedLexicalContexts),
+              indexingSummary: buildIndexingSummary(selectedLexicalContexts),
+            },
+            resultScope
+          ),
+          {
+            hasQueryVector: false,
+            selectedContextCount: selectedLexicalContexts.length,
+            answerMode:
+              sanitizedAnswer.length > 0 ? "grounded_answer" : "fallback",
+          }
+        );
+      }
+
+      const vectorMatches = await vectorStore.search({
+        values: queryVector,
+        topK: retrievalLimit,
+      });
+
+      const chunkMatches =
+        vectorMatches.length > 0
+          ? await repository.getChunkMatchesByVectorIds(
+              vectorMatches.map((match) => match.id),
+              {
+                aiVisibility: [...CHAT_ALLOWED_AI_VISIBILITY],
+              }
+            )
+          : [];
+      const groundingContexts = buildGroundingContexts(
+        vectorMatches,
+        chunkMatches
+      )
+        .map((context) => ({
+          ...context,
+          score: applyContextPolicyScore(
+            context.score,
+            context.asset,
+            contextPolicy
+          ),
+        }))
+        .map((context) =>
+          annotateEvidenceMatchReasons(context, {
+            profileBoosted: isProfileBoosted(context, contextPolicy),
+          })
+        )
+        .filter((context) =>
+          matchesContextPolicyAsset(context.asset, contextPolicy)
+        );
+      const allGroundingContexts = [
+        ...groundingContexts,
+        ...assertionContexts,
+        ...summaryContexts,
+      ].sort((left, right) => compareGroundingContexts(question, left, right));
+      const selectedGroundingContexts = selectGroundingContexts(
+        question,
+        allGroundingContexts,
         topK,
         {
           allowLowRelevanceSecondary: Boolean(contextPolicy?.allowFallback),
         }
       );
-
-      if (selectedLexicalContexts.length === 0) {
-        return withOptionalResultScope(
-          {
-            answer: createFallbackAnswer(),
-            sources: [],
-            evidence: buildEvidencePacket([]),
-            groupedEvidence: [],
-          },
-          getContextResultScope([], contextPolicy)
-        );
-      }
-
       const resultScope = getContextResultScope(
-        selectedLexicalContexts.map((context) => context.asset),
+        selectedGroundingContexts.map((context) => context.asset),
         contextPolicy
       );
+
+      if (selectedGroundingContexts.length === 0) {
+        return logAskCompleted(
+          startedAt,
+          question,
+          topK,
+          retrievalLimit,
+          contextPolicy,
+          withOptionalResultScope(
+            {
+              answer: createFallbackAnswer(),
+              sources: [],
+              evidence: buildEvidencePacket([]),
+              groupedEvidence: [],
+            },
+            resultScope
+          ),
+          {
+            hasQueryVector: true,
+            selectedContextCount: 0,
+            answerMode: "no_context",
+          }
+        );
+      }
 
       if (
         shouldRejectContextAnswer(
           question,
-          selectedLexicalContexts,
+          selectedGroundingContexts,
           contextPolicy
         )
       ) {
-        return withOptionalResultScope(
+        return logAskCompleted(
+          startedAt,
+          question,
+          topK,
+          retrievalLimit,
+          contextPolicy,
+          withOptionalResultScope(
+            {
+              answer: createFallbackAnswer(),
+              sources: [],
+              evidence: buildEvidencePacket([]),
+              groupedEvidence: [],
+            },
+            resultScope
+          ),
           {
-            answer: createFallbackAnswer(),
-            sources: [],
-            evidence: buildEvidencePacket([]),
-            groupedEvidence: [],
-          },
-          resultScope
+            hasQueryVector: true,
+            selectedContextCount: selectedGroundingContexts.length,
+            answerMode: "rejected_context",
+          }
         );
       }
 
       const sanitizedAnswer = await generateGroundedAnswer(
         aiProvider,
         question,
-        selectedLexicalContexts
+        selectedGroundingContexts
       );
 
-      return withOptionalResultScope(
-        {
-          answer:
-            sanitizedAnswer.length > 0
-              ? sanitizedAnswer
-              : createFallbackAnswer(),
-          sources: selectedLexicalContexts.map(buildChatSource),
-          evidence: buildEvidencePacket(selectedLexicalContexts),
-          groupedEvidence: buildGroupedEvidence(selectedLexicalContexts),
-          indexingSummary: buildIndexingSummary(selectedLexicalContexts),
-        },
-        resultScope
-      );
-    }
-
-    const vectorMatches = await vectorStore.search({
-      values: queryVector,
-      topK: retrievalLimit,
-    });
-
-    const chunkMatches =
-      vectorMatches.length > 0
-        ? await repository.getChunkMatchesByVectorIds(
-            vectorMatches.map((match) => match.id),
-            {
-              aiVisibility: [...CHAT_ALLOWED_AI_VISIBILITY],
-            }
-          )
-        : [];
-    const groundingContexts = buildGroundingContexts(
-      vectorMatches,
-      chunkMatches
-    )
-      .map((context) => ({
-        ...context,
-        score: applyContextPolicyScore(
-          context.score,
-          context.asset,
-          contextPolicy
-        ),
-      }))
-      .map((context) =>
-        annotateEvidenceMatchReasons(context, {
-          profileBoosted: isProfileBoosted(context, contextPolicy),
-        })
-      )
-      .filter((context) =>
-        matchesContextPolicyAsset(context.asset, contextPolicy)
-      );
-    const allGroundingContexts = [
-      ...groundingContexts,
-      ...assertionContexts,
-      ...summaryContexts,
-    ].sort((left, right) => compareGroundingContexts(question, left, right));
-    const selectedGroundingContexts = selectGroundingContexts(
-      question,
-      allGroundingContexts,
-      topK,
-      {
-        allowLowRelevanceSecondary: Boolean(contextPolicy?.allowFallback),
-      }
-    );
-    const resultScope = getContextResultScope(
-      selectedGroundingContexts.map((context) => context.asset),
-      contextPolicy
-    );
-
-    if (selectedGroundingContexts.length === 0) {
-      return withOptionalResultScope(
-        {
-          answer: createFallbackAnswer(),
-          sources: [],
-          evidence: buildEvidencePacket([]),
-          groupedEvidence: [],
-        },
-        resultScope
-      );
-    }
-
-    if (
-      shouldRejectContextAnswer(
+      return logAskCompleted(
+        startedAt,
         question,
-        selectedGroundingContexts,
-        contextPolicy
-      )
-    ) {
-      return withOptionalResultScope(
+        topK,
+        retrievalLimit,
+        contextPolicy,
+        withOptionalResultScope(
+          {
+            answer:
+              sanitizedAnswer.length > 0
+                ? sanitizedAnswer
+                : createFallbackAnswer(),
+            sources: selectedGroundingContexts.map(buildChatSource),
+            evidence: buildEvidencePacket(selectedGroundingContexts),
+            groupedEvidence: buildGroupedEvidence(selectedGroundingContexts),
+            indexingSummary: buildIndexingSummary(selectedGroundingContexts),
+          },
+          resultScope
+        ),
         {
-          answer: createFallbackAnswer(),
-          sources: [],
-          evidence: buildEvidencePacket([]),
-          groupedEvidence: [],
-        },
-        resultScope
+          hasQueryVector: true,
+          selectedContextCount: selectedGroundingContexts.length,
+          answerMode:
+            sanitizedAnswer.length > 0 ? "grounded_answer" : "fallback",
+        }
       );
+    } catch (error) {
+      chatLogger.error(
+        "ask_failed",
+        {
+          durationMs: Date.now() - startedAt,
+          questionLength: question.length,
+          topK,
+          retrievalLimit,
+          contextProfile: contextPolicy?.profile ?? null,
+          allowFallback: contextPolicy?.allowFallback ?? false,
+        },
+        { error }
+      );
+
+      throw error;
     }
-
-    const sanitizedAnswer = await generateGroundedAnswer(
-      aiProvider,
-      question,
-      selectedGroundingContexts
-    );
-
-    return withOptionalResultScope(
-      {
-        answer:
-          sanitizedAnswer.length > 0 ? sanitizedAnswer : createFallbackAnswer(),
-        sources: selectedGroundingContexts.map(buildChatSource),
-        evidence: buildEvidencePacket(selectedGroundingContexts),
-        groupedEvidence: buildGroupedEvidence(selectedGroundingContexts),
-        indexingSummary: buildIndexingSummary(selectedGroundingContexts),
-      },
-      resultScope
-    );
   };
 
   return {
