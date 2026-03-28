@@ -65,9 +65,7 @@ const enrichmentDescriptorSchema = z.object({
 const enrichmentFacetSchema = z.object({
   facetKey: z
     .enum(assetFacetKeyValues)
-    .describe(
-      `Allowed facet keys: ${assetFacetKeyValues.join(", ")}.`
-    ),
+    .describe(`Allowed facet keys: ${assetFacetKeyValues.join(", ")}.`),
   facetValue: z.string().trim().min(1).max(120),
   facetLabel: z.string().trim().min(1).max(120),
   sortOrder: z.number().int().min(0).max(999).optional(),
@@ -105,4 +103,6 @@ export const textAssetEnrichmentSchema = z.object({
     ),
 });
 
-export type TextAssetEnrichmentInput = z.infer<typeof textAssetEnrichmentSchema>;
+export type TextAssetEnrichmentInput = z.infer<
+  typeof textAssetEnrichmentSchema
+>;

@@ -223,9 +223,9 @@ export const assetListQuerySchema = assetListRawQuerySchema
   }));
 
 export {
+  normalizeDateOnlyFilter,
   rawCreatedAtFilterSchema as createdAtFilterInputSchema,
   validateCreatedAtFilter,
-  normalizeDateOnlyFilter,
 };
 
 const nullableSummarySchema = z.preprocess(

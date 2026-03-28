@@ -786,7 +786,7 @@ describe("search service", () => {
               )
             : item.kind === "term"
               ? ["allow", "summary_only"].includes(item.asset.aiVisibility)
-            : item.asset.aiVisibility === "summary_only"
+              : item.asset.aiVisibility === "summary_only"
       )
     ).toBe(true);
   });
@@ -976,7 +976,7 @@ describe("search service", () => {
             ? item.assertion.asset.domain
             : item.kind === "term"
               ? item.asset.domain
-            : item.asset.domain
+              : item.asset.domain
       )
     ).toEqual(["engineering", "personal"]);
     expect(result.resultScope).toBe("fallback_expanded");

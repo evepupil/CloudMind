@@ -13,8 +13,8 @@ import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AppBindings } from "@/env";
 import type { AssetDetail } from "@/features/assets/model/types";
 import {
-  textAssetEnrichmentSchema,
   type TextAssetEnrichmentInput,
+  textAssetEnrichmentSchema,
 } from "@/features/ingest/model/enrichment";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getBlobStoreFromBindings } from "@/platform/blob/r2/get-blob-store";
@@ -23,13 +23,12 @@ import { getWorkflowRepositoryFromBindings } from "@/platform/db/d1/repositories
 import { getJobQueueFromBindings } from "@/platform/queue/cloudflare/get-job-queue";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 import { getWebPageFetcherFromBindings } from "@/platform/web/jina/get-web-page-fetcher";
-
+import { generateAutoTextEnrichment } from "./auto-enrichment";
 import {
   processPdfAsset,
   processTextAsset,
   processUrlAsset,
 } from "./processor";
-import { generateAutoTextEnrichment } from "./auto-enrichment";
 
 interface BackfillChunkContentInput {
   dryRun?: boolean | undefined;

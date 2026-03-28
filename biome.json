@@ -2,7 +2,13 @@
   "$schema": "https://biomejs.dev/schemas/2.4.8/schema.json",
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!dist", "!.wrangler"]
+    "includes": [
+      "**",
+      "!dist",
+      "!.wrangler",
+      "!public/styles.css",
+      "!drizzle/meta"
+    ]
   },
   "formatter": {
     "enabled": true,

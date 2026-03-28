@@ -5,6 +5,12 @@ import { AssetNotFoundError } from "@/core/assets/errors";
 import { WorkflowRunNotFoundError } from "@/core/workflows/errors";
 import type { AppBindings } from "@/env";
 import {
+  createdAtFilterInputSchema,
+  normalizeDateOnlyFilter,
+  timezoneOffsetMinutesSchema,
+  validateCreatedAtFilter,
+} from "@/features/assets/server/schemas";
+import {
   deleteAsset,
   getAssetById,
   listAssets,
@@ -22,12 +28,6 @@ import {
   textAssetEnrichmentSchema,
 } from "@/features/ingest/model/enrichment";
 import {
-  createdAtFilterInputSchema,
-  normalizeDateOnlyFilter,
-  timezoneOffsetMinutesSchema,
-  validateCreatedAtFilter,
-} from "@/features/assets/server/schemas";
-import {
   ingestTextAsset,
   ingestUrlAsset,
   reprocessAsset,
@@ -38,11 +38,11 @@ import {
   getContextProfileSummary,
   resolveContextRetrievalPolicy,
 } from "@/features/mcp/server/context-profiles";
+import { assetSearchPayloadSchema } from "@/features/search/server/schemas";
 import {
   searchAssets,
   searchAssetsForContext,
 } from "@/features/search/server/service";
-import { assetSearchPayloadSchema } from "@/features/search/server/schemas";
 import { searchAssetsByTerms } from "@/features/search/server/term-asset-service";
 import { searchTerms } from "@/features/search/server/term-service";
 import {
@@ -127,57 +127,57 @@ const getAssetInputSchema = z.object({
   id: z.string().trim().min(1),
 });
 
-const listAssetsInputSchema = z.object({
-  deleted: z.enum(["exclude", "only", "include"]).optional(),
-  status: z.enum(["pending", "processing", "ready", "failed"]).optional(),
-  type: z.enum(["url", "pdf", "note", "image", "chat"]).optional(),
-  domain: z
-    .enum([
-      "engineering",
-      "product",
-      "research",
-      "personal",
-      "finance",
-      "health",
-      "archive",
-      "general",
-    ])
-    .optional(),
-  documentClass: z
-    .enum([
-      "reference_doc",
-      "design_doc",
-      "bug_note",
-      "paper",
-      "journal_entry",
-      "meeting_note",
-      "spec",
-      "howto",
-      "general_note",
-    ])
-    .optional(),
-  sourceKind: z
-    .enum(["manual", "browser_extension", "upload", "mcp", "import"])
-    .optional(),
-  aiVisibility: z.enum(["allow", "summary_only", "deny"]).optional(),
-  timezoneOffsetMinutes: timezoneOffsetMinutesSchema
-    .describe(
+const listAssetsInputSchema = z
+  .object({
+    deleted: z.enum(["exclude", "only", "include"]).optional(),
+    status: z.enum(["pending", "processing", "ready", "failed"]).optional(),
+    type: z.enum(["url", "pdf", "note", "image", "chat"]).optional(),
+    domain: z
+      .enum([
+        "engineering",
+        "product",
+        "research",
+        "personal",
+        "finance",
+        "health",
+        "archive",
+        "general",
+      ])
+      .optional(),
+    documentClass: z
+      .enum([
+        "reference_doc",
+        "design_doc",
+        "bug_note",
+        "paper",
+        "journal_entry",
+        "meeting_note",
+        "spec",
+        "howto",
+        "general_note",
+      ])
+      .optional(),
+    sourceKind: z
+      .enum(["manual", "browser_extension", "upload", "mcp", "import"])
+      .optional(),
+    aiVisibility: z.enum(["allow", "summary_only", "deny"]).optional(),
+    timezoneOffsetMinutes: timezoneOffsetMinutesSchema.describe(
       "Browser-style timezone offset in minutes. Required when using YYYY-MM-DD date filters."
     ),
-  createdAtFrom: createdAtFilterInputSchema.describe(
-    "Inclusive asset creation lower bound. Use ISO datetime with offset, or YYYY-MM-DD together with timezoneOffsetMinutes."
-  ),
-  createdAtTo: createdAtFilterInputSchema.describe(
-    "Inclusive asset creation upper bound. Use ISO datetime with offset, or YYYY-MM-DD together with timezoneOffsetMinutes."
-  ),
-  sourceHost: z.string().trim().min(1).max(200).optional(),
-  topic: z.string().trim().min(1).max(120).optional(),
-  tag: z.string().trim().min(1).max(120).optional(),
-  collection: z.string().trim().min(1).max(120).optional(),
-  query: z.string().trim().min(1).optional(),
-  page: z.number().int().positive().optional(),
-  pageSize: z.number().int().positive().max(50).optional(),
-})
+    createdAtFrom: createdAtFilterInputSchema.describe(
+      "Inclusive asset creation lower bound. Use ISO datetime with offset, or YYYY-MM-DD together with timezoneOffsetMinutes."
+    ),
+    createdAtTo: createdAtFilterInputSchema.describe(
+      "Inclusive asset creation upper bound. Use ISO datetime with offset, or YYYY-MM-DD together with timezoneOffsetMinutes."
+    ),
+    sourceHost: z.string().trim().min(1).max(200).optional(),
+    topic: z.string().trim().min(1).max(120).optional(),
+    tag: z.string().trim().min(1).max(120).optional(),
+    collection: z.string().trim().min(1).max(120).optional(),
+    query: z.string().trim().min(1).optional(),
+    page: z.number().int().positive().optional(),
+    pageSize: z.number().int().positive().max(50).optional(),
+  })
   .superRefine((value, context) => {
     validateCreatedAtFilter(
       value.createdAtFrom,

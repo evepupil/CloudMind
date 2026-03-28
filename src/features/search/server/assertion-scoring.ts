@@ -47,11 +47,7 @@ export const scoreAssetAssertionMatch = (
   const termScore = matchedTerms / terms.length;
   const titleScore = matchedInTitle / terms.length;
   const confidenceScore = clamp(match.confidence ?? 0.7, 0, 1) * 0.12;
-  const priorityScore = clamp(
-    (match.asset.retrievalPriority + 20) / 100,
-    0,
-    1
-  );
+  const priorityScore = clamp((match.asset.retrievalPriority + 20) / 100, 0, 1);
 
   return clamp(
     0.38 +

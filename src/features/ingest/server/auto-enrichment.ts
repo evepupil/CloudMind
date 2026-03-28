@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { AIProvider } from "@/core/ai/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import {
@@ -6,7 +7,6 @@ import {
   type TextAssetEnrichmentInput,
   textAssetEnrichmentSchema,
 } from "@/features/ingest/model/enrichment";
-import { z } from "zod";
 
 import { searchMetadataTerms } from "./metadata-terms";
 
@@ -170,7 +170,8 @@ const pickFallbackValues = (
   const picked: string[] = [];
 
   for (const candidate of candidates) {
-    const matches = hints.find((item) => item.candidate === candidate)?.matches ?? [];
+    const matches =
+      hints.find((item) => item.candidate === candidate)?.matches ?? [];
     const best = matches[0];
 
     if (best && best.score >= HIGH_CONFIDENCE_THRESHOLD) {
@@ -248,7 +249,13 @@ const buildTermHints = async (
   const hints: TermCandidateWithMatches[] = [];
 
   for (const term of uniqueTerms) {
-    const matches = await searchMetadataTerms(vectorStore, aiProvider, kind, term, 6);
+    const matches = await searchMetadataTerms(
+      vectorStore,
+      aiProvider,
+      kind,
+      term,
+      6
+    );
 
     hints.push({
       candidate: term,
@@ -319,11 +326,5 @@ export const generateAutoTextEnrichment = async (
     finalized = null;
   }
 
-  return toEnrichment(
-    candidate,
-    finalized,
-    topicHints,
-    tagHints,
-    catalogHints
-  );
+  return toEnrichment(candidate, finalized, topicHints, tagHints, catalogHints);
 };

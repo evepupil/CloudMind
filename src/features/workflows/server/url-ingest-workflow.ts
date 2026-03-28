@@ -76,9 +76,8 @@ export const createUrlIngestWorkflowDefinition = (): WorkflowDefinition => {
             throw new Error("Asset URL is empty and cannot be processed.");
           }
 
-          const fetchedPage = await getWebPageFetcher(context).fetchUrl(
-            sourceUrl
-          );
+          const fetchedPage =
+            await getWebPageFetcher(context).fetchUrl(sourceUrl);
           const rawR2Key = createRawAssetBlobKey(context.asset.id, "source.md");
 
           await context.services.blobStore.put({
@@ -350,10 +349,8 @@ export const createUrlIngestWorkflowDefinition = (): WorkflowDefinition => {
                 metadataJson: JSON.stringify({
                   preview: persistedContent.contentText,
                   chunkCount: persistedContent.chunks.length,
-                  sourceUrl:
-                    typeof sourceUrl === "string" ? sourceUrl : null,
-                  fetchedAt:
-                    typeof fetchedAt === "string" ? fetchedAt : null,
+                  sourceUrl: typeof sourceUrl === "string" ? sourceUrl : null,
+                  fetchedAt: typeof fetchedAt === "string" ? fetchedAt : null,
                 }),
               },
             ],

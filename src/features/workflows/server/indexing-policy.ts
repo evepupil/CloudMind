@@ -430,10 +430,7 @@ const deriveDocumentClass = (
     return "spec";
   }
 
-  if (
-    domain === "engineering" &&
-    hasKeyword(corpus, DESIGN_KEYWORDS)
-  ) {
+  if (domain === "engineering" && hasKeyword(corpus, DESIGN_KEYWORDS)) {
     return "design_doc";
   }
 
@@ -635,9 +632,7 @@ const classifyAssertionKind = (text: string): AssetAssertionKind => {
   }
 
   if (
-    ASSERTION_DECISION_KEYWORDS.some((keyword) =>
-      normalized.includes(keyword)
-    )
+    ASSERTION_DECISION_KEYWORDS.some((keyword) => normalized.includes(keyword))
   ) {
     return "decision";
   }
@@ -781,13 +776,7 @@ export const deriveFacets = (
     policy.aiVisibility,
     7
   );
-  pushFacet(
-    facets,
-    "sensitivity",
-    policy.sensitivity,
-    policy.sensitivity,
-    8
-  );
+  pushFacet(facets, "sensitivity", policy.sensitivity, policy.sensitivity, 8);
 
   descriptor.topics.forEach((topic, index) => {
     pushFacet(facets, "topic", topic, topic, 20 + index);

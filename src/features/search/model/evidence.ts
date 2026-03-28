@@ -1,7 +1,7 @@
 import type {
   AssetAssertionKind,
-  FacetTermRef,
   AssetSummary,
+  FacetTermRef,
 } from "@/features/assets/model/types";
 
 export type EvidenceLayer = "chunk" | "assertion" | "term" | "summary";

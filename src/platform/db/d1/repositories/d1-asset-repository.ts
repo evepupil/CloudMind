@@ -299,9 +299,7 @@ const buildAssetListWhereClause = (query?: AssetListQuery) => {
   return conditions.length > 0 ? and(...conditions) : undefined;
 };
 
-const buildAssetSearchFilterConditions = (
-  filters?: AssetSearchFilters
-) => {
+const buildAssetSearchFilterConditions = (filters?: AssetSearchFilters) => {
   const conditions = [isNull(assets.deletedAt), eq(assets.status, "ready")];
 
   if (filters?.type) {
@@ -526,24 +524,24 @@ export class D1AssetRepository implements AssetRepository {
     }
 
     // 先查匹配的 asset_id + facet 信息（不过分页，用于构建 matchedTerms）
-      const allFacetRows = await this.db
-        .select({
-          assetId: assetFacets.assetId,
-          facetKey: assetFacets.facetKey,
+    const allFacetRows = await this.db
+      .select({
+        assetId: assetFacets.assetId,
+        facetKey: assetFacets.facetKey,
         facetValue: assetFacets.facetValue,
         assetCreatedAt: assets.createdAt,
       })
       .from(assetFacets)
       .innerJoin(assets, eq(assetFacets.assetId, assets.id))
-        .where(
-          and(
-            facetOr,
-            ...buildAssetSearchFilterConditions(input.filters),
-            input.aiVisibility?.length
-              ? inArray(assets.aiVisibility, input.aiVisibility)
-              : undefined
-          )
-        );
+      .where(
+        and(
+          facetOr,
+          ...buildAssetSearchFilterConditions(input.filters),
+          input.aiVisibility?.length
+            ? inArray(assets.aiVisibility, input.aiVisibility)
+            : undefined
+        )
+      );
 
     // 按 asset 分组收集匹配的 terms
     const assetTermMap = new Map<string, FacetTermRef[]>();
@@ -611,10 +609,10 @@ export class D1AssetRepository implements AssetRepository {
     const assetRecords: Array<typeof assets.$inferSelect> = [];
 
     for (const batch of splitIntoBatches(pagedIds, 80)) {
-        const records = await this.db
-          .select()
-          .from(assets)
-          .where(
+      const records = await this.db
+        .select()
+        .from(assets)
+        .where(
           and(
             ...buildAssetSearchFilterConditions(input.filters),
             inArray(assets.id, batch)
@@ -625,15 +623,21 @@ export class D1AssetRepository implements AssetRepository {
     }
 
     // 保持 pagedIds 顺序
-    const assetMap = new Map(
-      assetRecords.map((record) => [record.id, record])
-    );
-    const items: AssetTermMatchItem[] = pagedIds
-      .filter((id) => assetMap.has(id))
-      .map((id) => ({
-        asset: mapAssetSummary(assetMap.get(id)!),
-        matchedTerms: assetTermMap.get(id) ?? [],
-      }));
+    const assetMap = new Map(assetRecords.map((record) => [record.id, record]));
+    const items: AssetTermMatchItem[] = pagedIds.flatMap((id) => {
+      const assetRecord = assetMap.get(id);
+
+      if (!assetRecord) {
+        return [];
+      }
+
+      return [
+        {
+          asset: mapAssetSummary(assetRecord),
+          matchedTerms: assetTermMap.get(id) ?? [],
+        },
+      ];
+    });
 
     return {
       items,
@@ -657,11 +661,11 @@ export class D1AssetRepository implements AssetRepository {
     const records = [];
 
     // 这里按批读取 vectorId，避免 inArray 参数过多时触发 D1 绑定上限。
-      for (const batch of splitIntoBatches(vectorIds, 80)) {
-        const conditions = [
-          inArray(assetChunks.vectorId, batch),
-          ...buildAssetSearchFilterConditions(query),
-        ];
+    for (const batch of splitIntoBatches(vectorIds, 80)) {
+      const conditions = [
+        inArray(assetChunks.vectorId, batch),
+        ...buildAssetSearchFilterConditions(query),
+      ];
 
       if (query?.aiVisibility?.length) {
         conditions.push(inArray(assets.aiVisibility, query.aiVisibility));
@@ -713,11 +717,11 @@ export class D1AssetRepository implements AssetRepository {
           .select()
           .from(assets)
           .where(
-              and(
-                ...buildAssetSearchFilterConditions(input),
-                isNotNull(assets.summary),
-                inArray(assets.aiVisibility, input.aiVisibility),
-                searchCondition
+            and(
+              ...buildAssetSearchFilterConditions(input),
+              isNotNull(assets.summary),
+              inArray(assets.aiVisibility, input.aiVisibility),
+              searchCondition
             )
           )
           .orderBy(desc(assets.retrievalPriority), desc(assets.updatedAt))
@@ -776,11 +780,11 @@ export class D1AssetRepository implements AssetRepository {
           .from(assetAssertions)
           .innerJoin(assets, eq(assetAssertions.assetId, assets.id))
           .where(
-              and(
-                ...buildAssetSearchFilterConditions(input),
-                inArray(assets.aiVisibility, input.aiVisibility),
-                searchCondition
-              )
+            and(
+              ...buildAssetSearchFilterConditions(input),
+              inArray(assets.aiVisibility, input.aiVisibility),
+              searchCondition
+            )
           )
           .orderBy(
             desc(assetAssertions.confidence),

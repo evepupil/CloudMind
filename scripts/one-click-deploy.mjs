@@ -207,12 +207,7 @@ const main = () => {
     "ASSET_VECTORS",
   ]);
 
-  runCommand("创建 Queue", NPX, [
-    "wrangler",
-    "queues",
-    "create",
-    queueName,
-  ]);
+  runCommand("创建 Queue", NPX, ["wrangler", "queues", "create", queueName]);
 
   ensureFinalConfig(queueName);
 

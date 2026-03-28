@@ -9,9 +9,9 @@ import type { VectorStore } from "@/core/vector/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
 import {
-  type TextAssetEnrichmentInput,
-  assetDocumentClassValues,
+  type assetDocumentClassValues,
   assetDomainValues,
+  type TextAssetEnrichmentInput,
   textAssetEnrichmentSchema,
 } from "@/features/ingest/model/enrichment";
 import {

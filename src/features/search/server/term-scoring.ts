@@ -29,11 +29,7 @@ export const scoreAssetTermMatch = (
   const topScore = matchedScores[0] ?? 0.35;
   const secondScore = matchedScores[1] ?? 0;
   const coverageBonus = Math.min(item.matchedTerms.length, 3) * 0.03;
-  const priorityScore = clamp(
-    (item.asset.retrievalPriority + 20) / 100,
-    0,
-    1
-  );
+  const priorityScore = clamp((item.asset.retrievalPriority + 20) / 100, 0, 1);
 
   return clamp(
     0.18 +

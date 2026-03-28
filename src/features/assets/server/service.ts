@@ -107,5 +107,10 @@ export const createAssetService = (
 
 const assetService = createAssetService();
 
-export const { listAssets, getAssetById, updateAsset, deleteAsset, restoreAsset } =
-  assetService;
+export const {
+  listAssets,
+  getAssetById,
+  updateAsset,
+  deleteAsset,
+  restoreAsset,
+} = assetService;

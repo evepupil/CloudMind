@@ -300,9 +300,9 @@ describe("ingest service", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(workflowRepositoryMock.listWorkflowRunsByAssetId).mockResolvedValue(
-      []
-    );
+    vi.mocked(
+      workflowRepositoryMock.listWorkflowRunsByAssetId
+    ).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -878,7 +878,9 @@ describe("ingest service", () => {
       summary: "Reprocessed summary with persisted enrichment",
     });
 
-    vi.mocked(workflowRepositoryMock.listWorkflowRunsByAssetId).mockResolvedValue([
+    vi.mocked(
+      workflowRepositoryMock.listWorkflowRunsByAssetId
+    ).mockResolvedValue([
       {
         id: "run-1",
         assetId: "asset-note-enrichment-1",
@@ -928,9 +930,9 @@ describe("ingest service", () => {
 
     const result = await service.reprocessAsset(env, "asset-note-enrichment-1");
 
-    expect(workflowRepositoryMock.listWorkflowRunsByAssetId).toHaveBeenCalledWith(
-      "asset-note-enrichment-1"
-    );
+    expect(
+      workflowRepositoryMock.listWorkflowRunsByAssetId
+    ).toHaveBeenCalledWith("asset-note-enrichment-1");
     expect(processTextAssetForcedMock).toHaveBeenCalledWith(
       repository,
       workflowRepositoryMock,

@@ -4,8 +4,8 @@ import type {
   AssetFacetTermQuery,
   AssetFacetTermResult,
 } from "@/features/assets/model/types";
-import type { SearchTermsInput, SearchTermItem } from "./term-service";
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
+import type { SearchTermItem, SearchTermsInput } from "./term-service";
 import { searchTerms } from "./term-service";
 
 export interface SearchAssetsByTermsInput {
@@ -55,7 +55,12 @@ export const createTermAssetService = (
         return {
           terms: [],
           items: [],
-          pagination: { page: 1, pageSize: input.pageSize ?? 20, total: 0, totalPages: 0 },
+          pagination: {
+            page: 1,
+            pageSize: input.pageSize ?? 20,
+            total: 0,
+            totalPages: 0,
+          },
         };
       }
 
@@ -70,7 +75,12 @@ export const createTermAssetService = (
         return {
           terms: [],
           items: [],
-          pagination: { page: 1, pageSize: input.pageSize ?? 20, total: 0, totalPages: 0 },
+          pagination: {
+            page: 1,
+            pageSize: input.pageSize ?? 20,
+            total: 0,
+            totalPages: 0,
+          },
         };
       }
 
@@ -81,7 +91,12 @@ export const createTermAssetService = (
         return {
           terms: termsResult.items,
           items: [],
-          pagination: { page: 1, pageSize: input.pageSize ?? 20, total: 0, totalPages: 0 },
+          pagination: {
+            page: 1,
+            pageSize: input.pageSize ?? 20,
+            total: 0,
+            totalPages: 0,
+          },
         };
       }
 

@@ -1,4 +1,4 @@
-import type { WebPageFetchResult, WebPageFetcher } from "@/core/web/ports";
+import type { WebPageFetcher, WebPageFetchResult } from "@/core/web/ports";
 
 const JINA_READER_BASE_URL = "https://r.jina.ai";
 
@@ -13,9 +13,7 @@ const extractMetadataValue = (
   rawContent: string,
   label: "Title" | "URL Source"
 ): string | null => {
-  const match = rawContent.match(
-    new RegExp(`^${label}:\\s*(.+)$`, "im")
-  );
+  const match = rawContent.match(new RegExp(`^${label}:\\s*(.+)$`, "im"));
 
   return match?.[1]?.trim() || null;
 };

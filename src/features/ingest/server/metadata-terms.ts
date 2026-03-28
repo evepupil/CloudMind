@@ -221,4 +221,3 @@ export const searchMetadataTerms = async (
 
   return results;
 };
-

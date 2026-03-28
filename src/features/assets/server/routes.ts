@@ -14,7 +14,13 @@ import {
   assetListQuerySchema,
   assetUpdatePayloadSchema,
 } from "./schemas";
-import { deleteAsset, getAssetById, listAssets, restoreAsset, updateAsset } from "./service";
+import {
+  deleteAsset,
+  getAssetById,
+  listAssets,
+  restoreAsset,
+  updateAsset,
+} from "./service";
 
 const getValidationErrorBody = (error: z.ZodError) => {
   return {
@@ -295,9 +301,7 @@ export const registerAssetRoutes = (app: Hono<AppEnv>): void => {
       const message =
         error instanceof Error ? error.message : "Failed to restore asset.";
 
-      return context.redirect(
-        `/assets?error=${encodeURIComponent(message)}`
-      );
+      return context.redirect(`/assets?error=${encodeURIComponent(message)}`);
     }
   });
 
