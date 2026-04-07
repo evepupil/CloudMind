@@ -5,6 +5,7 @@ export type NavigationKey =
   | "library"
   | "capture"
   | "ask"
+  | "mcp"
   | "search";
 
 const navigationItems: Array<{
@@ -16,6 +17,7 @@ const navigationItems: Array<{
   { key: "library", label: "Library", href: "/assets" },
   { key: "capture", label: "Capture", href: "/capture" },
   { key: "ask", label: "Ask", href: "/ask" },
+  { key: "mcp", label: "MCP", href: "/mcp-tokens" },
   { key: "search", label: "Search", href: "/search" },
 ];
 

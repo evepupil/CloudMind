@@ -5,5 +5,6 @@ export { assetFacets } from "./asset-facets";
 export { assetSources } from "./asset-sources";
 export { assets } from "./assets";
 export { ingestJobs } from "./ingest-jobs";
+export { mcpTokens } from "./mcp-tokens";
 export { workflowRuns } from "./workflow-runs";
 export { workflowSteps } from "./workflow-steps";

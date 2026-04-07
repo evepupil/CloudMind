@@ -7,6 +7,7 @@ import { registerChatRoutes } from "@/features/chat/server/routes";
 import { registerHealthRoutes } from "@/features/health/server/routes";
 import { registerIngestRoutes } from "@/features/ingest/server/routes";
 import { registerMcpRoutes } from "@/features/mcp/server/routes";
+import { registerMcpTokenRoutes } from "@/features/mcp-tokens/server/routes";
 import { registerSearchRoutes } from "@/features/search/server/routes";
 import { consumeWorkflowQueueMessage } from "@/features/workflows/server/queue-consumer";
 
@@ -18,6 +19,7 @@ registerAssetRoutes(app);
 registerChatRoutes(app);
 registerIngestRoutes(app);
 registerMcpRoutes(app);
+registerMcpTokenRoutes(app);
 registerSearchRoutes(app);
 
 export default {
