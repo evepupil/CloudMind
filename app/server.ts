@@ -16,8 +16,8 @@ import { consumeWorkflowQueueMessage } from "@/features/workflows/server/queue-c
 // 这里创建单个 HonoX 全栈应用，并挂载所有 API 路由。
 const app = createApp<AppEnv>({
   init: (server) => {
-    registerAuthRoutes(server);
     server.use("*", authMiddleware);
+    registerAuthRoutes(server);
     registerHealthRoutes(server);
     registerAssetRoutes(server);
     registerChatRoutes(server);
