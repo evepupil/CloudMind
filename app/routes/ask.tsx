@@ -1,16 +1,7 @@
 import { createRoute } from "honox/factory";
 import { AskPage } from "@/features/chat/components/ask-page";
 import type { AskLibraryResult } from "@/features/chat/model/types";
-
-const parseChatError = async (response: Response): Promise<string> => {
-  const payload = (await response.json().catch(() => null)) as {
-    error?: {
-      message?: string | undefined;
-    };
-  } | null;
-
-  return payload?.error?.message ?? "Ask request failed.";
-};
+import { askLibrary } from "@/features/chat/server/service";
 
 // 这里让 Ask 页通过真实 /api/chat 入口渲染结果，先保持最小闭环。
 export default createRoute(async (context) => {
@@ -19,21 +10,14 @@ export default createRoute(async (context) => {
   let errorMessage: string | null = null;
 
   if (question.length > 0) {
-    const response = await fetch(new URL("/api/chat", context.req.url), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    try {
+      result = await askLibrary(context.env, {
         question,
         topK: 5,
-      }),
-    });
-
-    if (response.ok) {
-      result = (await response.json()) as AskLibraryResult;
-    } else {
-      errorMessage = await parseChatError(response);
+      });
+    } catch (error) {
+      errorMessage =
+        error instanceof Error ? error.message : "Ask request failed.";
     }
   }
 

@@ -4,6 +4,7 @@ export { assetChunks } from "./asset-chunks";
 export { assetFacets } from "./asset-facets";
 export { assetSources } from "./asset-sources";
 export { assets } from "./assets";
+export { authAccounts } from "./auth-accounts";
 export { ingestJobs } from "./ingest-jobs";
 export { mcpTokens } from "./mcp-tokens";
 export { workflowRuns } from "./workflow-runs";

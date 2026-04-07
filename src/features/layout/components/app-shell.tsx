@@ -25,6 +25,8 @@ const quickActions = [
   { label: "Save URL", href: "/capture?mode=url" },
   { label: "Paste text", href: "/capture?mode=text" },
   { label: "Upload PDF", href: "/capture?mode=pdf" },
+  { label: "Change Password", href: "/change-password" },
+  { label: "Logout", href: "/auth/logout" },
 ];
 
 // 这里统一定义 Notion 风格工作台外壳：白色窄 sidebar + 米色主内容区。

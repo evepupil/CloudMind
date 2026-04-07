@@ -51,5 +51,8 @@
   },
   "ai": {
     "binding": "AI"
+  },
+  "vars": {
+    "JWT_SECRET": "change-me-before-production"
   }
 }

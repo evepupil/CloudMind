@@ -1,3 +1,7 @@
+import type { JwtVariables } from "hono/jwt";
+
+import type { AuthSessionPayload } from "@/core/auth/types";
+
 // 这里集中定义 Cloudflare Pages Functions 可用的绑定类型。
 export interface AppBindings {
   APP_NAME?: string;
@@ -7,9 +11,13 @@ export interface AppBindings {
   AI?: Ai;
   WORKFLOW_QUEUE?: Queue;
   JINA_API_KEY?: string;
+  JWT_SECRET?: string;
 }
 
 // 这里导出全局环境类型，供 Hono 与 feature 路由复用。
 export interface AppEnv {
   Bindings: AppBindings;
+  Variables: JwtVariables<AuthSessionPayload> & {
+    authSession: AuthSessionPayload;
+  };
 }
