@@ -1,7 +1,8 @@
 const PASSWORD_HASH_ALGORITHM = "PBKDF2";
 const PASSWORD_HASH_DIGEST = "SHA-256";
 const PASSWORD_HASH_DERIVED_BITS = 256;
-const PASSWORD_HASH_ITERATIONS = 210000;
+// Cloudflare Workers 目前限制 PBKDF2 iteration 不能超过 100000。
+const PASSWORD_HASH_ITERATIONS = 100000;
 const PASSWORD_SALT_BYTES = 16;
 
 const bytesToHex = (bytes: Uint8Array): string => {
