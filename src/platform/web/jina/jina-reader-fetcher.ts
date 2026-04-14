@@ -4,9 +4,9 @@ const JINA_READER_BASE_URL = "https://r.jina.ai";
 
 const buildReaderUrl = (url: string): string => {
   const normalizedUrl = new URL(url);
-  const targetPath = `${normalizedUrl.host}${normalizedUrl.pathname}${normalizedUrl.search}`;
+  const targetUrl = `${normalizedUrl.protocol}//${normalizedUrl.host}${normalizedUrl.pathname}${normalizedUrl.search}`;
 
-  return `${JINA_READER_BASE_URL}/http://${targetPath}`;
+  return `${JINA_READER_BASE_URL}/${targetUrl}`;
 };
 
 const extractMetadataValue = (
