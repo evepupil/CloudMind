@@ -938,7 +938,7 @@ describe("processTextAsset", () => {
     const result = await repository.getAssetById("asset-1");
 
     expect(result.summary).toBe("AI summary for the CloudMind note.");
-    expect(aiProvider.generateTextCalls).toHaveLength(1);
+    expect(aiProvider.generateTextCalls).toHaveLength(2);
   });
 
   it("fails the workflow when AI summary generation returns empty text", async () => {
@@ -1266,6 +1266,141 @@ describe("processTextAsset", () => {
       topics: ["agent-memory"],
       tags: ["reuse-first"],
     });
+  });
+
+  it("uses AI assertions when extraction succeeds", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        contentText:
+          "CloudMind will adopt queue-first ingest. The system must preserve raw assets. Retrieval quality improved after chunk tuning.",
+      })
+    );
+    const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new ScriptedAIProvider([
+      "AI summary for assertion extraction.",
+      JSON.stringify({
+        assertions: [
+          {
+            kind: "decision",
+            text: "CloudMind will adopt queue-first ingest.",
+            confidence: 0.93,
+          },
+          {
+            kind: "constraint",
+            text: "The system must preserve raw assets.",
+            confidence: 0.91,
+          },
+        ],
+      }),
+    ]);
+    const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
+
+    const enqueued = await processTextAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      "asset-1"
+    );
+
+    expect(enqueued.status).toBe("processing");
+
+    await drainWorkflowQueue(
+      jobQueue,
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider
+    );
+
+    const result = await repository.getAssetById("asset-1");
+
+    expect(result.assertions).toEqual([
+      expect.objectContaining({
+        assertionIndex: 0,
+        kind: "decision",
+        text: "CloudMind will adopt queue-first ingest.",
+        confidence: 0.93,
+      }),
+      expect.objectContaining({
+        assertionIndex: 1,
+        kind: "constraint",
+        text: "The system must preserve raw assets.",
+        confidence: 0.91,
+      }),
+    ]);
+  });
+
+  it("falls back to heuristic assertions when AI extraction fails", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        contentText:
+          "CloudMind will adopt queue-first ingest. The system must preserve raw assets. Retrieval quality improved after chunk tuning.",
+      })
+    );
+    const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new ScriptedAIProvider([
+      "AI summary for assertion extraction.",
+      new Error("Assertion extraction unavailable"),
+    ]);
+    const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
+
+    const enqueued = await processTextAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      "asset-1"
+    );
+
+    expect(enqueued.status).toBe("processing");
+
+    await drainWorkflowQueue(
+      jobQueue,
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider
+    );
+
+    const result = await repository.getAssetById("asset-1");
+
+    expect(result.assertions).toEqual([
+      expect.objectContaining({
+        assertionIndex: 0,
+        kind: "summary_point",
+        text: "AI summary for assertion extraction.",
+        confidence: 0.92,
+      }),
+      expect.objectContaining({
+        assertionIndex: 1,
+        kind: "decision",
+        text: "CloudMind will adopt queue-first ingest.",
+        confidence: 0.78,
+      }),
+      expect.objectContaining({
+        assertionIndex: 2,
+        kind: "constraint",
+        text: "The system must preserve raw assets.",
+        confidence: 0.78,
+      }),
+      expect.objectContaining({
+        assertionIndex: 3,
+        kind: "fact",
+        text: "Retrieval quality improved after chunk tuning.",
+        confidence: 0.78,
+      }),
+    ]);
   });
 
   it("marks the asset and job as failed when content is empty", async () => {

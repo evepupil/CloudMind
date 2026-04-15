@@ -19,12 +19,11 @@ import {
 } from "@/features/ingest/server/content-processing";
 import { upsertMetadataTermVectors } from "@/features/ingest/server/metadata-terms";
 import { extractPdfText } from "@/features/ingest/server/pdf-extractor";
-
+import { deriveAssertionsWithAIFallback } from "./assertion-extraction";
 import {
   type AssetAccessPolicy,
   type AssetDescriptor,
   deriveAccessPolicy,
-  deriveAssertions,
   deriveDescriptor,
   deriveFacets,
 } from "./indexing-policy";
@@ -312,12 +311,17 @@ export const createPdfIngestWorkflowDefinition = (): WorkflowDefinition => {
         execute: async (context) => {
           const normalizedContent = context.state.normalizedContent;
           const summary = context.state.summary;
-          const assertions = deriveAssertions({
-            asset: context.asset,
-            normalizedContent:
-              typeof normalizedContent === "string" ? normalizedContent : null,
-            summary: typeof summary === "string" ? summary : null,
-          });
+          const assertions = await deriveAssertionsWithAIFallback(
+            context.services.aiProvider,
+            {
+              asset: context.asset,
+              normalizedContent:
+                typeof normalizedContent === "string"
+                  ? normalizedContent
+                  : null,
+              summary: typeof summary === "string" ? summary : null,
+            }
+          );
 
           await context.services.assetRepository.replaceAssetAssertions?.(
             context.asset.id,
