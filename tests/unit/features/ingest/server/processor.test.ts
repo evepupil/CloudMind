@@ -899,6 +899,60 @@ const getArtifactContent = (
 };
 
 describe("processTextAsset", () => {
+  it("updates the note title from AI after summary generation", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        title: "Untitled Note",
+        contentText:
+          "CloudMind 正在把 ingest、metadata enrichment 和 retrieval 串成一条完整链路。",
+      })
+    );
+    const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new ScriptedAIProvider([
+      "AI summary for the CloudMind note.",
+      "CloudMind 入库链路改造",
+      JSON.stringify({
+        assertions: [
+          {
+            kind: "summary_point",
+            text: "CloudMind is connecting ingest and retrieval into one flow.",
+            confidence: 0.92,
+          },
+        ],
+      }),
+    ]);
+    const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
+
+    const enqueued = await processTextAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      "asset-1"
+    );
+
+    expect(enqueued.status).toBe("processing");
+
+    await drainWorkflowQueue(
+      jobQueue,
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider
+    );
+
+    const result = await repository.getAssetById("asset-1");
+
+    expect(result.summary).toBe("AI summary for the CloudMind note.");
+    expect(result.title).toBe("CloudMind 入库链路改造");
+    expect(aiProvider.generateTextCalls).toHaveLength(3);
+  });
+
   it("uses AI summary when text assets do not provide enrichment summary", async () => {
     const repository = new InMemoryAssetRepository(
       createAsset({
@@ -938,7 +992,7 @@ describe("processTextAsset", () => {
     const result = await repository.getAssetById("asset-1");
 
     expect(result.summary).toBe("AI summary for the CloudMind note.");
-    expect(aiProvider.generateTextCalls).toHaveLength(2);
+    expect(aiProvider.generateTextCalls).toHaveLength(3);
   });
 
   it("fails the workflow when AI summary generation returns empty text", async () => {
@@ -1279,6 +1333,7 @@ describe("processTextAsset", () => {
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new ScriptedAIProvider([
       "AI summary for assertion extraction.",
+      "AI summary for assertion extraction.",
       JSON.stringify({
         assertions: [
           {
@@ -1346,6 +1401,7 @@ describe("processTextAsset", () => {
     const blobStore = new InMemoryBlobStore();
     const vectorStore = new InMemoryVectorStore();
     const aiProvider = new ScriptedAIProvider([
+      "AI summary for assertion extraction.",
       "AI summary for assertion extraction.",
       new Error("Assertion extraction unavailable"),
     ]);

@@ -17,6 +17,8 @@ export interface PreparedChunk {
 }
 
 const MAX_SUMMARY_SOURCE_CHARS = 12000;
+const MAX_TITLE_SOURCE_CHARS = 6000;
+const MAX_GENERATED_TITLE_CHARS = 120;
 const ingestAiLogger = createLogger("ingest_ai");
 
 export const normalizeContent = (content: string): string => {
@@ -52,6 +54,49 @@ const buildSummaryPrompt = (input: {
     "正文：",
     clippedContent,
   ].join("\n");
+};
+
+const buildTitlePrompt = (input: {
+  currentTitle?: string | null | undefined;
+  summary: string;
+  content: string;
+}): string => {
+  const clippedContent = normalizeContent(input.content).slice(
+    0,
+    MAX_TITLE_SOURCE_CHARS
+  );
+
+  return [
+    "请为 CloudMind 资产生成一个简洁准确的标题。",
+    "要求：",
+    "- 只输出标题正文，不要解释，不要 Markdown，不要引号。",
+    "- 尽量保留原文语言。",
+    "- 标题要像文档名、网页名或笔记名，不要写成摘要句子。",
+    "- 尽量保留关键主题、实体、产品名。",
+    `- 控制在 ${MAX_GENERATED_TITLE_CHARS} 个字符以内。`,
+    "当前标题：",
+    input.currentTitle?.trim() || "(none)",
+    "已有摘要：",
+    input.summary,
+    "正文：",
+    clippedContent,
+  ].join("\n");
+};
+
+const normalizeGeneratedTitle = (value: string): string => {
+  return value
+    .trim()
+    .replace(/^["'`“”‘’#\-\s]+/, "")
+    .replace(/["'`“”‘’\s]+$/, "")
+    .replace(/\s+/g, " ");
+};
+
+const isGeneratedTitleValid = (title: string): boolean => {
+  if (!title || title.length > MAX_GENERATED_TITLE_CHARS) {
+    return false;
+  }
+
+  return true;
 };
 
 export const generateAssetSummary = async (
@@ -104,6 +149,58 @@ export const generateAssetSummary = async (
       {
         ...buildAIInvocationFields(aiProvider, result),
         titleProvided: Boolean(input.title?.trim()),
+        contentLength: normalizeContent(input.content).length,
+      },
+      { error }
+    );
+
+    throw error;
+  }
+};
+
+export const generateAssetTitle = async (
+  aiProvider: AIProvider,
+  input: {
+    currentTitle?: string | null | undefined;
+    summary: string;
+    content: string;
+  }
+): Promise<string> => {
+  let result:
+    | {
+        text: string;
+        provider?: string | undefined;
+        model?: string | undefined;
+      }
+    | undefined;
+
+  try {
+    result = await aiProvider.generateText({
+      prompt: buildTitlePrompt(input),
+      temperature: 0.2,
+      maxOutputTokens: 120,
+    });
+    const title = normalizeGeneratedTitle(result.text);
+
+    if (!isGeneratedTitleValid(title)) {
+      throw new Error("AI title generation returned invalid text.");
+    }
+
+    ingestAiLogger.info("title_generation_succeeded", {
+      ...buildAIInvocationFields(aiProvider, result),
+      currentTitleProvided: Boolean(input.currentTitle?.trim()),
+      summaryLength: normalizeContent(input.summary).length,
+      contentLength: normalizeContent(input.content).length,
+    });
+
+    return title;
+  } catch (error) {
+    ingestAiLogger.error(
+      "title_generation_failed",
+      {
+        ...buildAIInvocationFields(aiProvider, result),
+        currentTitleProvided: Boolean(input.currentTitle?.trim()),
+        summaryLength: normalizeContent(input.summary).length,
         contentLength: normalizeContent(input.content).length,
       },
       { error }

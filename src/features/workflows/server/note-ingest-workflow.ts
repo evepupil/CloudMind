@@ -15,6 +15,7 @@ import {
 import {
   createChunkEmbeddings,
   generateAssetSummary,
+  generateAssetTitle,
   indexPreparedChunks,
   normalizeContent,
   type PreparedChunk,
@@ -89,6 +90,26 @@ export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => {
               enrichmentSummary: enrichment?.summary,
             }
           );
+
+          try {
+            const generatedTitle = await generateAssetTitle(
+              context.services.aiProvider,
+              {
+                currentTitle: context.asset.title,
+                summary,
+                content: normalizedContent,
+              }
+            );
+
+            if (generatedTitle !== context.asset.title) {
+              await context.services.assetRepository.updateAssetMetadata(
+                context.asset.id,
+                {
+                  title: generatedTitle,
+                }
+              );
+            }
+          } catch {}
 
           return {
             output: {
