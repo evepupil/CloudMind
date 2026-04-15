@@ -10,7 +10,7 @@ import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
 import {
   createChunkEmbeddings,
-  createTextSummary,
+  generateAssetSummary,
   indexPreparedChunks,
   normalizeContent,
   type PreparedChunk,
@@ -117,14 +117,20 @@ export const createPdfIngestWorkflowDefinition = (): WorkflowDefinition => {
       {
         key: "summarize",
         type: "summarize",
-        execute: (context) => {
+        execute: async (context) => {
           const normalizedContent = context.state.normalizedContent;
 
           if (typeof normalizedContent !== "string") {
             throw new Error("Workflow state is missing normalized content.");
           }
 
-          const summary = createTextSummary(normalizedContent);
+          const summary = await generateAssetSummary(
+            context.services.aiProvider,
+            {
+              title: context.asset.title,
+              content: normalizedContent,
+            }
+          );
 
           return {
             output: {

@@ -14,6 +14,8 @@ export interface PreparedChunk {
   textPreview: string;
 }
 
+const MAX_SUMMARY_SOURCE_CHARS = 12000;
+
 export const normalizeContent = (content: string): string => {
   return content.replace(/\s+/g, " ").trim();
 };
@@ -26,6 +28,58 @@ export const createTextSummary = (content: string): string => {
   }
 
   return `${normalized.slice(0, 177)}...`;
+};
+
+const buildSummaryPrompt = (input: {
+  title?: string | null | undefined;
+  content: string;
+}): string => {
+  const normalizedContent = normalizeContent(input.content);
+  const clippedContent = normalizedContent.slice(0, MAX_SUMMARY_SOURCE_CHARS);
+
+  return [
+    "请为 CloudMind 资产生成一个高质量摘要。",
+    "要求：",
+    "- 只输出摘要正文，不要解释，不要列表，不要 Markdown。",
+    "- 尽量保留原文语言。",
+    "- 摘要应简洁、准确，适合资产列表和检索结果展示。",
+    "- 控制在 1 到 3 句。",
+    "标题：",
+    input.title?.trim() || "(none)",
+    "正文：",
+    clippedContent,
+  ].join("\n");
+};
+
+export const generateAssetSummary = async (
+  aiProvider: AIProvider,
+  input: {
+    title?: string | null | undefined;
+    content: string;
+    enrichmentSummary?: string | null | undefined;
+  }
+): Promise<string> => {
+  const providedSummary = input.enrichmentSummary?.trim();
+
+  if (providedSummary) {
+    return providedSummary;
+  }
+
+  const result = await aiProvider.generateText({
+    prompt: buildSummaryPrompt({
+      title: input.title,
+      content: input.content,
+    }),
+    temperature: 0.2,
+    maxOutputTokens: 220,
+  });
+  const summary = normalizeContent(result.text);
+
+  if (!summary) {
+    throw new Error("AI summary generation returned empty text.");
+  }
+
+  return summary;
 };
 
 export const createContentPreview = (content: string): string => {

@@ -16,7 +16,7 @@ import {
 } from "@/features/ingest/model/enrichment";
 import {
   createChunkEmbeddings,
-  createTextSummary,
+  generateAssetSummary,
   indexPreparedChunks,
   normalizeContent,
   type PreparedChunk,
@@ -136,7 +136,7 @@ export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => {
       {
         key: "summarize",
         type: "summarize",
-        execute: (context) => {
+        execute: async (context) => {
           const normalizedContent = context.state.normalizedContent;
           const enrichment = getTextAssetEnrichment(context.state);
 
@@ -144,8 +144,14 @@ export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => {
             throw new Error("Workflow state is missing normalized content.");
           }
 
-          const summary =
-            enrichment?.summary ?? createTextSummary(normalizedContent);
+          const summary = await generateAssetSummary(
+            context.services.aiProvider,
+            {
+              title: context.asset.title,
+              content: normalizedContent,
+              enrichmentSummary: enrichment?.summary,
+            }
+          );
 
           return {
             output: {

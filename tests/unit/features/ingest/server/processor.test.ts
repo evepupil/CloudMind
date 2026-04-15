@@ -79,13 +79,11 @@ const currentDir = dirname(fileURLToPath(import.meta.url));
 
 const loadPdfFixture = async (name: string): Promise<ArrayBuffer> => {
   const file = await readFile(
-    resolve(currentDir, "../../../../fixtures/ingest", name)
+    resolve(currentDir, "../../../../fixtures/ingest", name),
+    "utf8"
   );
 
-  return file.buffer.slice(
-    file.byteOffset,
-    file.byteOffset + file.byteLength
-  ) as ArrayBuffer;
+  return encodeArrayBuffer(file);
 };
 
 const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
@@ -508,6 +506,45 @@ class InMemoryAIProvider implements AIProvider {
   }
 }
 
+class ConfigurableAIProvider implements AIProvider {
+  public constructor(
+    private readonly summaryText: string,
+    private readonly embeddingDimensions = 2
+  ) {}
+
+  public readonly generateTextCalls: Array<{
+    prompt: string;
+    systemPrompt?: string | undefined;
+    temperature?: number | undefined;
+    maxOutputTokens?: number | undefined;
+  }> = [];
+
+  public async generateText(input: {
+    prompt: string;
+    systemPrompt?: string | undefined;
+    temperature?: number | undefined;
+    maxOutputTokens?: number | undefined;
+  }): Promise<{ text: string }> {
+    this.generateTextCalls.push(input);
+
+    return {
+      text: this.summaryText,
+    };
+  }
+
+  public async createEmbeddings(input: {
+    texts: string[];
+  }): Promise<{ embeddings: number[][] }> {
+    return {
+      embeddings: input.texts.map((_, index) =>
+        Array.from({ length: this.embeddingDimensions }, (_, dimension) => {
+          return index + dimension + 0.1;
+        })
+      ),
+    };
+  }
+}
+
 class InMemoryWebPageFetcher implements WebPageFetcher {
   public constructor(
     private readonly fetchUrlResult: WebPageFetchResult | Error
@@ -767,7 +804,7 @@ const drainWorkflowQueue = async (
   workflowRepository: InMemoryWorkflowRepository,
   blobStore: InMemoryBlobStore,
   vectorStore: InMemoryVectorStore,
-  aiProvider: InMemoryAIProvider,
+  aiProvider: AIProvider,
   webPageFetcher?: WebPageFetcher
 ): Promise<void> => {
   while (jobQueue.messages.length > 0) {
@@ -814,6 +851,92 @@ const getArtifactContent = (
 };
 
 describe("processTextAsset", () => {
+  it("uses AI summary when text assets do not provide enrichment summary", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        contentText:
+          "CloudMind should summarize this note with AI instead of using a preview string.",
+      })
+    );
+    const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new ConfigurableAIProvider(
+      "AI summary for the CloudMind note."
+    );
+    const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
+
+    const enqueued = await processTextAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      "asset-1"
+    );
+
+    expect(enqueued.status).toBe("processing");
+
+    await drainWorkflowQueue(
+      jobQueue,
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider
+    );
+
+    const result = await repository.getAssetById("asset-1");
+
+    expect(result.summary).toBe("AI summary for the CloudMind note.");
+    expect(aiProvider.generateTextCalls).toHaveLength(1);
+  });
+
+  it("fails the workflow when AI summary generation returns empty text", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        contentText:
+          "CloudMind should fail this ingest when AI cannot generate a summary.",
+      })
+    );
+    const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new ConfigurableAIProvider("   ");
+    const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
+
+    const enqueued = await processTextAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      "asset-1"
+    );
+
+    expect(enqueued.status).toBe("processing");
+
+    await expect(
+      drainWorkflowQueue(
+        jobQueue,
+        repository,
+        workflowRepository,
+        blobStore,
+        vectorStore,
+        aiProvider
+      )
+    ).rejects.toThrow("AI summary generation returned empty text.");
+
+    const result = await repository.getAssetById("asset-1");
+
+    expect(result.status).toBe("failed");
+    expect(result.errorMessage).toBe(
+      "AI summary generation returned empty text."
+    );
+  });
+
   it("promotes a pending text asset to ready and completes the latest job", async () => {
     const repository = new InMemoryAssetRepository(
       createAsset({
@@ -823,7 +946,9 @@ describe("processTextAsset", () => {
     );
     const blobStore = new InMemoryBlobStore();
     const vectorStore = new InMemoryVectorStore();
-    const aiProvider = new InMemoryAIProvider();
+    const aiProvider = new ConfigurableAIProvider(
+      "AI summary for the original CloudMind content."
+    );
     const workflowRepository = new InMemoryWorkflowRepository();
     const jobQueue = new InMemoryJobQueue();
 
@@ -854,7 +979,7 @@ describe("processTextAsset", () => {
 
     expect(result.status).toBe("ready");
     expect(result.summary).toBe(
-      "CloudMind keeps the original content and generates a concise summary."
+      "AI summary for the original CloudMind content."
     );
     expect(result.contentR2Key).toBe("assets/asset-1/content/content.txt");
     expect(result.contentText).toBe(
@@ -952,7 +1077,9 @@ describe("processTextAsset", () => {
     );
     const blobStore = new InMemoryBlobStore();
     const vectorStore = new InMemoryVectorStore();
-    const aiProvider = new InMemoryAIProvider();
+    const aiProvider = new ConfigurableAIProvider(
+      "AI summary for the architecture note."
+    );
     const workflowRepository = new InMemoryWorkflowRepository();
     const jobQueue = new InMemoryJobQueue();
 
@@ -1042,7 +1169,9 @@ describe("processTextAsset", () => {
     );
     const blobStore = new InMemoryBlobStore();
     const vectorStore = new InMemoryVectorStore();
-    const aiProvider = new InMemoryAIProvider();
+    const aiProvider = new ConfigurableAIProvider(
+      "AI summary for the architecture note."
+    );
     const workflowRepository = new InMemoryWorkflowRepository();
     const jobQueue = new InMemoryJobQueue();
 
@@ -1080,6 +1209,7 @@ describe("processTextAsset", () => {
     const descriptor = getArtifactContent(workflowRepository, "descriptor");
 
     expect(result.status).toBe("ready");
+    expect(result.summary).toBe("AI summary for the architecture note.");
     expect(result.domain).toBe("general");
     expect(result.documentClass).toBe("general_note");
     expect(descriptor).toMatchObject({
@@ -1098,7 +1228,9 @@ describe("processTextAsset", () => {
     );
     const blobStore = new InMemoryBlobStore();
     const vectorStore = new InMemoryVectorStore();
-    const aiProvider = new InMemoryAIProvider();
+    const aiProvider = new ConfigurableAIProvider(
+      "AI summary for the Cloudflare Workers page."
+    );
     const workflowRepository = new InMemoryWorkflowRepository();
     const jobQueue = new InMemoryJobQueue();
 
@@ -1155,7 +1287,9 @@ describe("processTextAsset", () => {
     );
     const blobStore = new InMemoryBlobStore();
     const vectorStore = new InMemoryVectorStore();
-    const aiProvider = new InMemoryAIProvider();
+    const aiProvider = new ConfigurableAIProvider(
+      "AI summary for the Cloudflare Workers page."
+    );
     const workflowRepository = new InMemoryWorkflowRepository();
     const jobQueue = new InMemoryJobQueue();
 
@@ -1190,7 +1324,9 @@ describe("processUrlAsset", () => {
     );
     const blobStore = new InMemoryBlobStore();
     const vectorStore = new InMemoryVectorStore();
-    const aiProvider = new InMemoryAIProvider();
+    const aiProvider = new ConfigurableAIProvider(
+      "AI summary for the Cloudflare Workers page."
+    );
     const webPageFetcher = new InMemoryWebPageFetcher({
       title: "Cloudflare Developers",
       sourceUrl: "https://developers.cloudflare.com/workers/",
@@ -1235,9 +1371,7 @@ describe("processUrlAsset", () => {
     const result = await repository.getAssetById("asset-url-1");
 
     expect(result.status).toBe("ready");
-    expect(result.summary).toBe(
-      "Cloudflare Workers runtime guide for building APIs with D1 and R2."
-    );
+    expect(result.summary).toBe("AI summary for the Cloudflare Workers page.");
     expect(result.rawR2Key).toBe("assets/asset-url-1/raw/source.md");
     expect(result.contentR2Key).toBe("assets/asset-url-1/content/content.txt");
     expect(result.contentText).toBe(
@@ -1287,8 +1421,7 @@ describe("processUrlAsset", () => {
       expect.objectContaining({
         artifactType: "summary",
         storageKind: "inline",
-        contentText:
-          "Cloudflare Workers runtime guide for building APIs with D1 and R2.",
+        contentText: "AI summary for the Cloudflare Workers page.",
       }),
       expect.objectContaining({
         artifactType: "descriptor",
@@ -1330,7 +1463,9 @@ describe("processUrlAsset", () => {
     );
     const blobStore = new InMemoryBlobStore();
     const vectorStore = new InMemoryVectorStore();
-    const aiProvider = new InMemoryAIProvider();
+    const aiProvider = new ConfigurableAIProvider(
+      "AI summary for the CloudMind PDF."
+    );
     const webPageFetcher = new InMemoryWebPageFetcher(
       new Error("unused fetcher")
     );
@@ -1391,7 +1526,9 @@ describe("processUrlAsset", () => {
     );
     const blobStore = new InMemoryBlobStore();
     const vectorStore = new InMemoryVectorStore();
-    const aiProvider = new InMemoryAIProvider();
+    const aiProvider = new ConfigurableAIProvider(
+      "AI summary for the CloudMind PDF."
+    );
     const webPageFetcher = new InMemoryWebPageFetcher(
       new Error("Jina Reader request failed with status 429.")
     );
@@ -1462,7 +1599,9 @@ describe("processPdfAsset", () => {
       },
     ]);
     const vectorStore = new InMemoryVectorStore();
-    const aiProvider = new InMemoryAIProvider();
+    const aiProvider = new ConfigurableAIProvider(
+      "AI summary for the CloudMind PDF."
+    );
     const workflowRepository = new InMemoryWorkflowRepository();
     const jobQueue = new InMemoryJobQueue();
 
@@ -1491,7 +1630,7 @@ describe("processPdfAsset", () => {
     const result = await repository.getAssetById("asset-pdf-1");
 
     expect(result.status).toBe("ready");
-    expect(result.summary).toBe("Hello CloudMind PDF");
+    expect(result.summary).toBe("AI summary for the CloudMind PDF.");
     expect(result.contentText).toBe("Hello CloudMind PDF");
     expect(result.contentR2Key).toBe("assets/asset-pdf-1/content/content.txt");
     expect(result.domain).toBe("research");
