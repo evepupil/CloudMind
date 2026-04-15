@@ -260,8 +260,38 @@ const ASSERTION_CONSTRAINT_KEYWORDS = [
   "必须",
 ] as const;
 
+const SEMANTIC_FACET_KEYS = new Set<AssetFacetKey>([
+  "collection",
+  "topic",
+  "tag",
+]);
+
+const GENERIC_SEMANTIC_FACET_VALUES = new Set([
+  "document",
+  "documents",
+  "doc",
+  "docs",
+  "note",
+  "notes",
+  "summary",
+  "general",
+]);
+
+type FacetCandidate = Pick<
+  CreateAssetFacetInput,
+  "facetKey" | "facetValue" | "facetLabel" | "sortOrder"
+>;
+
 const normalizeText = (value: string | null | undefined): string => {
   return value?.trim().toLowerCase() ?? "";
+};
+
+const normalizeFacetText = (value: string | null | undefined): string => {
+  return value?.trim().replace(/\s+/g, " ") ?? "";
+};
+
+const normalizeFacetLookupKey = (value: string | null | undefined): string => {
+  return normalizeFacetText(value).toLowerCase();
 };
 
 const getSourceKind = (asset: AssetDetail): AssetDetail["sourceKind"] => {
@@ -613,6 +643,44 @@ const pushFacet = (
   });
 };
 
+const sanitizeSemanticFacet = (
+  facet: FacetCandidate
+): FacetCandidate | null => {
+  if (!SEMANTIC_FACET_KEYS.has(facet.facetKey)) {
+    return null;
+  }
+
+  const facetValue = normalizeFacetText(facet.facetValue);
+  const facetLabel = normalizeFacetText(facet.facetLabel) || facetValue;
+
+  if (!facetValue || !facetLabel) {
+    return null;
+  }
+
+  if (
+    facet.facetKey !== "collection" &&
+    GENERIC_SEMANTIC_FACET_VALUES.has(normalizeFacetLookupKey(facetValue))
+  ) {
+    return null;
+  }
+
+  return {
+    facetKey: facet.facetKey,
+    facetValue,
+    facetLabel,
+    sortOrder: facet.sortOrder,
+  };
+};
+
+const reindexFacets = (
+  facets: CreateAssetFacetInput[]
+): CreateAssetFacetInput[] => {
+  return facets.map((facet, index) => ({
+    ...facet,
+    sortOrder: index,
+  }));
+};
+
 const splitIntoStatements = (content: string): string[] => {
   return content
     .split(/(?<=[.!?。！？；;])\s+/)
@@ -724,8 +792,7 @@ export const deriveAccessPolicy = (
   };
 };
 
-// 这里将 descriptor 和 access policy 展开为稳定 facet，供筛选与浏览聚合复用。
-export const deriveFacets = (
+export const deriveSystemFacets = (
   descriptor: AssetDescriptor,
   policy: AssetAccessPolicy
 ): CreateAssetFacetInput[] => {
@@ -756,37 +823,109 @@ export const deriveFacets = (
   );
   pushFacet(
     facets,
-    "collection",
-    descriptor.collectionKey,
-    descriptor.collectionKey,
-    4
-  );
-  pushFacet(
-    facets,
     "source_host",
     descriptor.sourceHost,
     descriptor.sourceHost,
-    5
+    4
   );
-  pushFacet(facets, "year", capturedYear, capturedYear, 6);
+  pushFacet(facets, "year", capturedYear, capturedYear, 5);
   pushFacet(
     facets,
     "ai_visibility",
     policy.aiVisibility,
     policy.aiVisibility,
-    7
+    6
   );
-  pushFacet(facets, "sensitivity", policy.sensitivity, policy.sensitivity, 8);
+  pushFacet(facets, "sensitivity", policy.sensitivity, policy.sensitivity, 7);
+
+  return facets;
+};
+
+export const deriveSemanticFacets = (
+  descriptor: AssetDescriptor
+): CreateAssetFacetInput[] => {
+  const facets: CreateAssetFacetInput[] = [];
+
+  pushFacet(
+    facets,
+    "collection",
+    descriptor.collectionKey,
+    descriptor.collectionKey,
+    20
+  );
 
   descriptor.topics.forEach((topic, index) => {
-    pushFacet(facets, "topic", topic, topic, 20 + index);
+    pushFacet(facets, "topic", topic, topic, 30 + index);
   });
 
   descriptor.tags.forEach((tag, index) => {
-    pushFacet(facets, "tag", tag, tag, 40 + index);
+    pushFacet(facets, "tag", tag, tag, 50 + index);
   });
 
   return facets;
+};
+
+const mergeSemanticFacets = (
+  baseFacets: CreateAssetFacetInput[],
+  clientFacets: ReadonlyArray<FacetCandidate> | null | undefined
+): CreateAssetFacetInput[] => {
+  const merged: CreateAssetFacetInput[] = [];
+  const deduped = new Set<string>();
+  let hasCollection = false;
+
+  const tryPush = (facet: FacetCandidate | null) => {
+    const sanitized = facet ? sanitizeSemanticFacet(facet) : null;
+
+    if (!sanitized) {
+      return;
+    }
+
+    if (sanitized.facetKey === "collection") {
+      if (hasCollection) {
+        return;
+      }
+
+      hasCollection = true;
+    }
+
+    const dedupeKey = `${sanitized.facetKey}:${normalizeFacetLookupKey(
+      sanitized.facetValue
+    )}`;
+
+    if (deduped.has(dedupeKey)) {
+      return;
+    }
+
+    deduped.add(dedupeKey);
+    merged.push({
+      facetKey: sanitized.facetKey,
+      facetValue: sanitized.facetValue,
+      facetLabel: sanitized.facetLabel,
+      sortOrder: sanitized.sortOrder,
+    });
+  };
+
+  for (const facet of baseFacets) {
+    tryPush(facet);
+  }
+
+  for (const facet of clientFacets ?? []) {
+    tryPush(facet);
+  }
+
+  return merged;
+};
+
+// 这里把最终 descriptor / policy 投影成 facets，并只允许客户端补充语义类 facet。
+export const deriveFacets = (
+  descriptor: AssetDescriptor,
+  policy: AssetAccessPolicy,
+  clientFacets?: ReadonlyArray<FacetCandidate> | null | undefined
+): CreateAssetFacetInput[] => {
+  return reindexFacets([
+    ...deriveSystemFacets(descriptor, policy),
+    ...mergeSemanticFacets(deriveSemanticFacets(descriptor), clientFacets),
+  ]);
 };
 
 // 这里提取少量高价值断言，先服务结构化召回，不追求完整信息抽取。

@@ -1170,7 +1170,7 @@ describe("processTextAsset", () => {
     });
   });
 
-  it("accepts validated enrichment for summary, descriptor, and facets", async () => {
+  it("accepts validated enrichment and preserves system facets while merging semantic facets", async () => {
     const repository = new InMemoryAssetRepository(
       createAsset({
         contentText:
@@ -1205,9 +1205,15 @@ describe("processTextAsset", () => {
           },
           facets: [
             {
+              facetKey: "domain",
+              facetValue: "product",
+              facetLabel: "product",
+              sortOrder: 1,
+            },
+            {
               facetKey: "topic",
-              facetValue: "workflow",
-              facetLabel: "workflow",
+              facetValue: " workflow ",
+              facetLabel: " workflow ",
               sortOrder: 10,
             },
             {
@@ -1215,6 +1221,18 @@ describe("processTextAsset", () => {
               facetValue: "project/cloudmind",
               facetLabel: "project/cloudmind",
               sortOrder: 11,
+            },
+            {
+              facetKey: "tag",
+              facetValue: "manual-review",
+              facetLabel: "manual-review",
+              sortOrder: 12,
+            },
+            {
+              facetKey: "topic",
+              facetValue: "document",
+              facetLabel: "document",
+              sortOrder: 13,
             },
           ],
         },
@@ -1234,6 +1252,22 @@ describe("processTextAsset", () => {
 
     const result = await repository.getAssetById("asset-1");
     const descriptor = getArtifactContent(workflowRepository, "descriptor");
+    const domainFacets =
+      result.facets?.filter((facet) => facet.facetKey === "domain") ?? [];
+    const workflowTopics =
+      result.facets?.filter(
+        (facet) => facet.facetKey === "topic" && facet.facetValue === "workflow"
+      ) ?? [];
+    const collectionFacets =
+      result.facets?.filter(
+        (facet) =>
+          facet.facetKey === "collection" &&
+          facet.facetValue === "project/cloudmind"
+      ) ?? [];
+    const genericTopics =
+      result.facets?.filter(
+        (facet) => facet.facetKey === "topic" && facet.facetValue === "document"
+      ) ?? [];
 
     expect(result.summary).toBe(
       "Client-authored summary for CloudMind workflow design."
@@ -1241,18 +1275,70 @@ describe("processTextAsset", () => {
     expect(result.domain).toBe("engineering");
     expect(result.documentClass).toBe("design_doc");
     expect(result.collectionKey).toBe("project/cloudmind");
-    expect(result.facets).toEqual([
-      expect.objectContaining({
-        facetKey: "topic",
-        facetValue: "workflow",
-        sortOrder: 10,
-      }),
-      expect.objectContaining({
-        facetKey: "collection",
-        facetValue: "project/cloudmind",
-        sortOrder: 11,
-      }),
-    ]);
+    expect(result.facets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          facetKey: "domain",
+          facetValue: "engineering",
+        }),
+        expect.objectContaining({
+          facetKey: "document_class",
+          facetValue: "design_doc",
+        }),
+        expect.objectContaining({
+          facetKey: "asset_type",
+          facetValue: "note",
+        }),
+        expect.objectContaining({
+          facetKey: "source_kind",
+          facetValue: "manual",
+        }),
+        expect.objectContaining({
+          facetKey: "ai_visibility",
+          facetValue: "allow",
+        }),
+        expect.objectContaining({
+          facetKey: "sensitivity",
+          facetValue: "internal",
+        }),
+        expect.objectContaining({
+          facetKey: "year",
+          facetValue: "2026",
+        }),
+        expect.objectContaining({
+          facetKey: "topic",
+          facetValue: "workflow",
+        }),
+        expect.objectContaining({
+          facetKey: "topic",
+          facetValue: "mcp",
+        }),
+        expect.objectContaining({
+          facetKey: "topic",
+          facetValue: "search",
+        }),
+        expect.objectContaining({
+          facetKey: "collection",
+          facetValue: "project/cloudmind",
+        }),
+        expect.objectContaining({
+          facetKey: "tag",
+          facetValue: "manual-review",
+        }),
+      ])
+    );
+    expect(domainFacets).toHaveLength(1);
+    expect(workflowTopics).toHaveLength(1);
+    expect(collectionFacets).toHaveLength(1);
+    expect(genericTopics).toHaveLength(0);
+    expect(result.facets).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          facetKey: "domain",
+          facetValue: "product",
+        }),
+      ])
+    );
     expect(descriptor).toMatchObject({
       domain: "engineering",
       documentClass: "design_doc",

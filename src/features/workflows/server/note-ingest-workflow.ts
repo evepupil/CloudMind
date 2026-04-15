@@ -251,18 +251,11 @@ export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => {
             throw new Error("Workflow state is missing access policy.");
           }
 
-          const facets =
-            enrichment?.facets && enrichment.facets.length > 0
-              ? enrichment.facets.map((facet, index) => ({
-                  facetKey: facet.facetKey,
-                  facetValue: facet.facetValue,
-                  facetLabel: facet.facetLabel,
-                  sortOrder: facet.sortOrder ?? index,
-                }))
-              : deriveFacets(
-                  descriptor as AssetDescriptor,
-                  accessPolicy as AssetAccessPolicy
-                );
+          const facets = deriveFacets(
+            descriptor as AssetDescriptor,
+            accessPolicy as AssetAccessPolicy,
+            enrichment?.facets
+          );
 
           await context.services.assetRepository.replaceAssetFacets?.(
             context.asset.id,
