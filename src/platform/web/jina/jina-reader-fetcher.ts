@@ -36,10 +36,15 @@ const extractHeadingTitle = (content: string): string | null => {
 
 // 这里封装 Jina Reader 抓取实现；优先复用其网页转 Markdown 能力，而不是自己维护爬虫。
 export class JinaReaderWebPageFetcher implements WebPageFetcher {
+  private readonly fetchImpl: typeof fetch;
+
   public constructor(
     private readonly apiKey?: string,
-    private readonly fetchImpl: typeof fetch = fetch
-  ) {}
+    fetchImpl: typeof fetch = fetch
+  ) {
+    // Cloudflare Workers 的原生 fetch 不能被当成实例方法直接调用。
+    this.fetchImpl = (input, init) => fetchImpl(input, init);
+  }
 
   public async fetchUrl(url: string): Promise<WebPageFetchResult> {
     const response = await this.fetchImpl(buildReaderUrl(url), {
