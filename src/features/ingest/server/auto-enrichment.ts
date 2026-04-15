@@ -35,6 +35,15 @@ const candidateSchema = z.object({
   signals: z.array(z.string().trim().min(1).max(80)).max(8).optional(),
 });
 
+const descriptorCandidateSchema = z.object({
+  domain: z.enum(assetDomainValues).optional(),
+  documentClass: z.enum(assetDocumentClassValues).optional(),
+  topics: z.array(z.string().trim().min(1).max(80)).max(MAX_TOPICS).optional(),
+  tags: z.array(z.string().trim().min(1).max(80)).max(MAX_TAGS).optional(),
+  catalog: z.string().trim().min(1).max(120).optional(),
+  signals: z.array(z.string().trim().min(1).max(80)).max(8).optional(),
+});
+
 const classificationSchema = z.object({
   domain: z.enum(assetDomainValues).optional(),
   documentClass: z.enum(assetDocumentClassValues).optional(),
@@ -58,6 +67,11 @@ const finalizedSchema = z.object({
 interface AutoEnrichmentInput {
   title?: string | undefined;
   content: string;
+}
+
+interface WorkflowDescriptorEnrichmentInput extends AutoEnrichmentInput {
+  summary?: string | undefined;
+  sourceKind?: AssetSourceKind | undefined;
 }
 
 interface StandardizeProvidedEnrichmentInput extends AutoEnrichmentInput {
@@ -167,6 +181,35 @@ const buildClassificationPrompt = (
     }),
     "输入标题:",
     input.title?.trim() || "(none)",
+    "输入正文:",
+    input.content,
+  ].join("\n");
+};
+
+const buildWorkflowDescriptorPrompt = (
+  input: WorkflowDescriptorEnrichmentInput
+): string => {
+  return [
+    "请为 CloudMind 资产生成 descriptor enrichment，返回 JSON。",
+    "要求：",
+    `- domain 必须从: ${assetDomainValues.join(", ")}`,
+    `- documentClass 必须从: ${assetDocumentClassValues.join(", ")}`,
+    "- topics/tags 请尽量具体，便于后续复用",
+    "- catalog 对应 collectionKey，推荐稳定、可复用命名",
+    "- 不要输出 summary，不要输出解释文字，只输出 JSON",
+    "JSON schema:",
+    "{",
+    '  "domain": "enum?",',
+    '  "documentClass": "enum?",',
+    '  "topics": ["string"],',
+    '  "tags": ["string"],',
+    '  "catalog": "string?",',
+    '  "signals": ["string"]',
+    "}",
+    "输入标题:",
+    input.title?.trim() || "(none)",
+    "已有摘要:",
+    input.summary?.trim() || "(none)",
     "输入正文:",
     input.content,
   ].join("\n");
@@ -558,6 +601,102 @@ export const standardizeProvidedTextEnrichment = async (
   });
 
   return standardized.success ? standardized.data : enrichment;
+};
+
+// 这里给 workflow 生成 descriptor enrichment，让 URL/PDF 也能复用 AI descriptor 与 term 归一。
+export const generateWorkflowDescriptorEnrichment = async (
+  aiProvider: AIProvider,
+  vectorStore: VectorStore,
+  input: WorkflowDescriptorEnrichmentInput
+): Promise<TextAssetEnrichmentInput | undefined> => {
+  let result:
+    | {
+        text: string;
+        provider?: string | undefined;
+        model?: string | undefined;
+      }
+    | undefined;
+
+  try {
+    result = await aiProvider.generateText({
+      prompt: buildWorkflowDescriptorPrompt(input),
+      temperature: 0.2,
+      maxOutputTokens: 900,
+    });
+  } catch (error) {
+    enrichmentLogger.warn(
+      "workflow_descriptor_generation_failed",
+      {
+        ...buildAIInvocationFields(aiProvider),
+        fallbackStrategy: "heuristic_descriptor",
+      },
+      { error }
+    );
+
+    return undefined;
+  }
+
+  let parsed: z.SafeParseReturnType<
+    z.infer<typeof descriptorCandidateSchema>,
+    z.infer<typeof descriptorCandidateSchema>
+  >;
+
+  try {
+    parsed = descriptorCandidateSchema.safeParse(parseJsonObject(result.text));
+  } catch (error) {
+    enrichmentLogger.warn(
+      "workflow_descriptor_generation_invalid",
+      {
+        ...buildAIInvocationFields(aiProvider, result),
+        fallbackStrategy: "heuristic_descriptor",
+      },
+      { error }
+    );
+
+    return undefined;
+  }
+
+  if (!parsed.success) {
+    enrichmentLogger.warn("workflow_descriptor_generation_invalid", {
+      ...buildAIInvocationFields(aiProvider, result),
+      fallbackStrategy: "heuristic_descriptor",
+    });
+
+    return undefined;
+  }
+
+  enrichmentLogger.info("workflow_descriptor_generation_succeeded", {
+    ...buildAIInvocationFields(aiProvider, result),
+  });
+
+  try {
+    return await standardizeProvidedTextEnrichment(aiProvider, vectorStore, {
+      title: input.title,
+      content: input.content,
+      sourceKind: input.sourceKind,
+      enrichment: {
+        domain: parsed.data.domain,
+        documentClass: parsed.data.documentClass,
+        descriptor: {
+          topics: parsed.data.topics,
+          tags: parsed.data.tags,
+          collectionKey: parsed.data.catalog,
+          signals: parsed.data.signals,
+        },
+      },
+    });
+  } catch (error) {
+    enrichmentLogger.warn(
+      "workflow_descriptor_standardization_skipped",
+      {
+        ...buildAIInvocationFields(aiProvider, result),
+        fallbackStrategy: "heuristic_descriptor",
+      },
+      { error }
+    );
+
+    return undefined;
+  }
 };
 
 // 这里在保存前生成 enrichment，优先复用已有词项向量，减少 topic/tag/catalog 膨胀。

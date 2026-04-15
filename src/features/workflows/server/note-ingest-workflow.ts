@@ -9,8 +9,6 @@ import type { VectorStore } from "@/core/vector/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
 import {
-  type assetDocumentClassValues,
-  assetDomainValues,
   type TextAssetEnrichmentInput,
   textAssetEnrichmentSchema,
 } from "@/features/ingest/model/enrichment";
@@ -33,19 +31,7 @@ import {
   deriveFacets,
 } from "./indexing-policy";
 import { enqueueWorkflow, type WorkflowDefinition } from "./runtime";
-
-const defaultDocumentClassByAssetType: Record<
-  AssetDetail["type"],
-  (typeof assetDocumentClassValues)[number]
-> = {
-  note: "general_note",
-  chat: "general_note",
-  url: "reference_doc",
-  pdf: "reference_doc",
-  image: "reference_doc",
-};
-
-const defaultDomain = assetDomainValues.at(-1) ?? "general";
+import { mergeDescriptorWithEnrichment } from "./text-enrichment";
 
 const getNormalizedContent = (asset: AssetDetail): string => {
   const content = asset.contentText?.trim();
@@ -63,54 +49,6 @@ const getTextAssetEnrichment = (
   const parsed = textAssetEnrichmentSchema.safeParse(state.enrichment);
 
   return parsed.success ? parsed.data : null;
-};
-
-const normalizeUniqueStrings = (values: string[] | undefined): string[] => {
-  if (!values?.length) {
-    return [];
-  }
-
-  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
-};
-
-const mergeDescriptorWithEnrichment = (
-  descriptor: AssetDescriptor,
-  enrichment: TextAssetEnrichmentInput | null
-): AssetDescriptor => {
-  if (!enrichment) {
-    return descriptor;
-  }
-
-  const topics = normalizeUniqueStrings(enrichment.descriptor?.topics);
-  const tags = normalizeUniqueStrings(enrichment.descriptor?.tags);
-  const signals = normalizeUniqueStrings(enrichment.descriptor?.signals);
-  const hasSemanticHints =
-    enrichment.domain !== undefined ||
-    enrichment.documentClass !== undefined ||
-    topics.length > 0 ||
-    tags.length > 0;
-
-  if (!hasSemanticHints) {
-    return {
-      ...descriptor,
-      collectionKey:
-        enrichment.descriptor?.collectionKey ?? descriptor.collectionKey,
-      signals: signals.length > 0 ? signals : descriptor.signals,
-    };
-  }
-
-  return {
-    ...descriptor,
-    domain: enrichment.domain ?? defaultDomain,
-    documentClass:
-      enrichment.documentClass ??
-      defaultDocumentClassByAssetType[descriptor.assetType],
-    topics,
-    tags,
-    collectionKey:
-      enrichment.descriptor?.collectionKey ?? descriptor.collectionKey,
-    signals: signals.length > 0 ? signals : ["ai_metadata_selected"],
-  };
 };
 
 export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => {

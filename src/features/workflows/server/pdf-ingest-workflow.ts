@@ -8,6 +8,7 @@ import type { JobQueue } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
+import { generateWorkflowDescriptorEnrichment } from "@/features/ingest/server/auto-enrichment";
 import {
   createChunkEmbeddings,
   generateAssetSummary,
@@ -28,6 +29,7 @@ import {
   deriveFacets,
 } from "./indexing-policy";
 import { enqueueWorkflow, type WorkflowDefinition } from "./runtime";
+import { mergeDescriptorWithEnrichment } from "./text-enrichment";
 
 const decodePdfSignature = (body: ArrayBuffer): string => {
   const signatureBytes = body.slice(0, 4);
@@ -158,33 +160,58 @@ export const createPdfIngestWorkflowDefinition = (): WorkflowDefinition => {
         execute: async (context) => {
           const summary = context.state.summary;
           const normalizedContent = context.state.normalizedContent;
+          const enrichment =
+            typeof normalizedContent === "string"
+              ? await generateWorkflowDescriptorEnrichment(
+                  context.services.aiProvider,
+                  context.services.vectorStore,
+                  {
+                    title: context.asset.title,
+                    content: normalizedContent,
+                    summary: typeof summary === "string" ? summary : undefined,
+                    sourceKind: context.asset.sourceKind ?? undefined,
+                  }
+                )
+              : undefined;
           const derived = deriveDescriptor({
             asset: context.asset,
             normalizedContent:
               typeof normalizedContent === "string" ? normalizedContent : null,
             summary: typeof summary === "string" ? summary : null,
           });
+          const descriptor = mergeDescriptorWithEnrichment(
+            derived.descriptor,
+            enrichment ?? null
+          );
 
           await context.services.assetRepository.updateAssetIndexing(
             context.asset.id,
-            derived.indexing
+            {
+              sourceKind: descriptor.sourceKind,
+              domain: descriptor.domain,
+              documentClass: descriptor.documentClass,
+              sourceHost: descriptor.sourceHost,
+              collectionKey: descriptor.collectionKey,
+              capturedAt: descriptor.capturedAt,
+              descriptorJson: JSON.stringify(descriptor),
+            }
           );
 
           return {
             output: {
-              domain: derived.descriptor.domain,
-              collectionKey: derived.descriptor.collectionKey,
+              domain: descriptor.domain,
+              collectionKey: descriptor.collectionKey,
             },
             state: {
-              descriptor: derived.descriptor,
+              descriptor,
             },
             artifacts: [
               {
                 artifactType: "descriptor",
                 storageKind: "inline",
-                contentText: JSON.stringify(derived.descriptor),
+                contentText: JSON.stringify(descriptor),
                 metadataJson: JSON.stringify({
-                  strategy: derived.descriptor.strategy,
+                  strategy: descriptor.strategy,
                 }),
               },
             ],

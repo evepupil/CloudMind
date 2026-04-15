@@ -479,12 +479,16 @@ class InMemoryVectorStore implements VectorStore {
 
   public readonly deletedIds: string[][] = [];
 
+  public constructor(
+    private readonly searchResults: VectorSearchMatch[] = []
+  ) {}
+
   public async upsert(records: VectorRecord[]): Promise<void> {
     this.upsertCalls.push(records);
   }
 
   public async search(_input: VectorSearchInput): Promise<VectorSearchMatch[]> {
-    return [];
+    return this.searchResults;
   }
 
   public async deleteByIds(ids: string[]): Promise<void> {
@@ -529,6 +533,50 @@ class ConfigurableAIProvider implements AIProvider {
 
     return {
       text: this.summaryText,
+    };
+  }
+
+  public async createEmbeddings(input: {
+    texts: string[];
+  }): Promise<{ embeddings: number[][] }> {
+    return {
+      embeddings: input.texts.map((_, index) =>
+        Array.from({ length: this.embeddingDimensions }, (_, dimension) => {
+          return index + dimension + 0.1;
+        })
+      ),
+    };
+  }
+}
+
+class ScriptedAIProvider implements AIProvider {
+  public constructor(
+    private readonly textResults: Array<string | Error>,
+    private readonly embeddingDimensions = 2
+  ) {}
+
+  public readonly generateTextCalls: Array<{
+    prompt: string;
+    systemPrompt?: string | undefined;
+    temperature?: number | undefined;
+    maxOutputTokens?: number | undefined;
+  }> = [];
+
+  public async generateText(input: {
+    prompt: string;
+    systemPrompt?: string | undefined;
+    temperature?: number | undefined;
+    maxOutputTokens?: number | undefined;
+  }): Promise<{ text: string }> {
+    this.generateTextCalls.push(input);
+    const next = this.textResults.shift();
+
+    if (next instanceof Error) {
+      throw next;
+    }
+
+    return {
+      text: next ?? "",
     };
   }
 
@@ -1312,6 +1360,110 @@ describe("processTextAsset", () => {
 });
 
 describe("processUrlAsset", () => {
+  it("uses AI descriptor enrichment for URL assets before heuristic fallback", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-url-ai-descriptor",
+        type: "url",
+        title: "CloudMind roadmap",
+        contentText: null,
+        sourceUrl: "https://example.com/cloudmind-roadmap",
+      })
+    );
+    const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        id: "term:topic:retrieval",
+        score: 0.93,
+        metadataJson: JSON.stringify({
+          kind: "topic",
+          term: "retrieval",
+          normalized: "retrieval",
+        }),
+      },
+      {
+        id: "term:tag:memory-layer",
+        score: 0.91,
+        metadataJson: JSON.stringify({
+          kind: "tag",
+          term: "memory-layer",
+          normalized: "memory-layer",
+        }),
+      },
+      {
+        id: "term:catalog:product/roadmap",
+        score: 0.9,
+        metadataJson: JSON.stringify({
+          kind: "catalog",
+          term: "product/roadmap",
+          normalized: "product/roadmap",
+        }),
+      },
+    ]);
+    const aiProvider = new ScriptedAIProvider([
+      "AI summary for the CloudMind roadmap page.",
+      JSON.stringify({
+        domain: "product",
+        documentClass: "spec",
+        topics: ["semantic retrieval"],
+        tags: ["memory layer"],
+        catalog: "product roadmap",
+        signals: ["ai_descriptor_generated"],
+      }),
+    ]);
+    const webPageFetcher = new InMemoryWebPageFetcher({
+      title: "CloudMind Roadmap",
+      sourceUrl: "https://example.com/cloudmind-roadmap",
+      rawContent:
+        "Title: CloudMind Roadmap\n" +
+        "Markdown Content:\n" +
+        "CloudMind roadmap for semantic retrieval, MCP memory, and launch planning.",
+      content:
+        "CloudMind roadmap for semantic retrieval, MCP memory, and launch planning.",
+      fetchedAt: "2026-03-19T00:00:30.000Z",
+      provider: "jina_reader",
+    });
+    const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
+
+    const enqueued = await processUrlAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      webPageFetcher,
+      "asset-url-ai-descriptor"
+    );
+
+    expect(enqueued.status).toBe("processing");
+
+    await drainWorkflowQueue(
+      jobQueue,
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      webPageFetcher
+    );
+
+    const result = await repository.getAssetById("asset-url-ai-descriptor");
+
+    expect(result.domain).toBe("product");
+    expect(result.documentClass).toBe("spec");
+    expect(result.collectionKey).toBe("product/roadmap");
+    expect(getArtifactContent(workflowRepository, "descriptor")).toMatchObject({
+      domain: "product",
+      documentClass: "spec",
+      collectionKey: "product/roadmap",
+      topics: ["retrieval"],
+      tags: ["memory-layer"],
+      signals: ["ai_descriptor_generated"],
+    });
+  });
+
   it("fetches URL content, stores blobs, and promotes the asset to ready", async () => {
     const repository = new InMemoryAssetRepository(
       createAsset({
@@ -1578,6 +1730,68 @@ describe("processUrlAsset", () => {
 });
 
 describe("processPdfAsset", () => {
+  it("keeps heuristic descriptor fallback when PDF AI enrichment generation fails", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-pdf-ai-fallback",
+        type: "pdf",
+        title: "CloudMind Whitepaper",
+        contentText: null,
+        rawR2Key: "assets/asset-pdf-ai-fallback/raw/cloudmind.pdf",
+        mimeType: "application/pdf",
+      })
+    );
+    const pdfBody = await loadPdfFixture("hello-cloudmind.pdf");
+    const blobStore = new InMemoryBlobStore([
+      {
+        key: "assets/asset-pdf-ai-fallback/raw/cloudmind.pdf",
+        body: pdfBody,
+        size: pdfBody.byteLength,
+        contentType: "application/pdf",
+      },
+    ]);
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new ScriptedAIProvider([
+      "AI summary for the CloudMind PDF.",
+      new Error("AI descriptor unavailable"),
+    ]);
+    const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
+
+    const enqueued = await processPdfAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      "asset-pdf-ai-fallback"
+    );
+
+    expect(enqueued.status).toBe("processing");
+
+    await drainWorkflowQueue(
+      jobQueue,
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider
+    );
+
+    const result = await repository.getAssetById("asset-pdf-ai-fallback");
+
+    expect(result.domain).toBe("research");
+    expect(result.documentClass).toBe("paper");
+    expect(result.collectionKey).toBe("library:pdf");
+    expect(getArtifactContent(workflowRepository, "descriptor")).toMatchObject({
+      domain: "research",
+      documentClass: "paper",
+      collectionKey: "library:pdf",
+      strategy: "heuristic_v2",
+    });
+  });
+
   it("extracts real text from the PDF in R2 and promotes the asset to ready", async () => {
     const repository = new InMemoryAssetRepository(
       createAsset({
