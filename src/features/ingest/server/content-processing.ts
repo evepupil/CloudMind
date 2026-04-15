@@ -5,7 +5,9 @@ import type { BlobStore } from "@/core/blob/ports";
 import { createChunkVectorId } from "@/core/vector/keys";
 import type { VectorStore } from "@/core/vector/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
+import { createLogger } from "@/platform/observability/logger";
 
+import { buildAIInvocationFields } from "./ai-observability";
 import { chunkAssetContent } from "./chunking";
 
 export interface PreparedChunk {
@@ -15,6 +17,7 @@ export interface PreparedChunk {
 }
 
 const MAX_SUMMARY_SOURCE_CHARS = 12000;
+const ingestAiLogger = createLogger("ingest_ai");
 
 export const normalizeContent = (content: string): string => {
   return content.replace(/\s+/g, " ").trim();
@@ -65,21 +68,49 @@ export const generateAssetSummary = async (
     return providedSummary;
   }
 
-  const result = await aiProvider.generateText({
-    prompt: buildSummaryPrompt({
-      title: input.title,
-      content: input.content,
-    }),
-    temperature: 0.2,
-    maxOutputTokens: 220,
-  });
-  const summary = normalizeContent(result.text);
+  let result:
+    | {
+        text: string;
+        provider?: string | undefined;
+        model?: string | undefined;
+      }
+    | undefined;
 
-  if (!summary) {
-    throw new Error("AI summary generation returned empty text.");
+  try {
+    result = await aiProvider.generateText({
+      prompt: buildSummaryPrompt({
+        title: input.title,
+        content: input.content,
+      }),
+      temperature: 0.2,
+      maxOutputTokens: 220,
+    });
+    const summary = normalizeContent(result.text);
+
+    if (!summary) {
+      throw new Error("AI summary generation returned empty text.");
+    }
+
+    ingestAiLogger.info("summary_generation_succeeded", {
+      ...buildAIInvocationFields(aiProvider, result),
+      titleProvided: Boolean(input.title?.trim()),
+      contentLength: normalizeContent(input.content).length,
+    });
+
+    return summary;
+  } catch (error) {
+    ingestAiLogger.error(
+      "summary_generation_failed",
+      {
+        ...buildAIInvocationFields(aiProvider, result),
+        titleProvided: Boolean(input.title?.trim()),
+        contentLength: normalizeContent(input.content).length,
+      },
+      { error }
+    );
+
+    throw error;
   }
-
-  return summary;
 };
 
 export const createContentPreview = (content: string): string => {

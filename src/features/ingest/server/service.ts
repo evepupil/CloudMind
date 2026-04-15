@@ -24,6 +24,7 @@ import { createLogger } from "@/platform/observability/logger";
 import { getJobQueueFromBindings } from "@/platform/queue/cloudflare/get-job-queue";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 import { getWebPageFetcherFromBindings } from "@/platform/web/jina/get-web-page-fetcher";
+import { inferAIProviderName } from "./ai-observability";
 import {
   generateAutoTextEnrichment,
   standardizeProvidedTextEnrichment,
@@ -389,7 +390,19 @@ export const createIngestService = (
               sourceKind: input.sourceKind,
               enrichment: resolvedEnrichment,
             }
-          ).catch(() => resolvedEnrichment);
+          ).catch((error) => {
+            ingestLogger.warn(
+              "provided_enrichment_standardization_skipped",
+              {
+                aiProvider: inferAIProviderName(aiProvider),
+                sourceKind: input.sourceKind ?? "manual",
+                fallbackStrategy: "keep_original",
+              },
+              { error }
+            );
+
+            return resolvedEnrichment;
+          });
         } else {
           resolvedEnrichment = await generateAutoTextEnrichment(
             aiProvider,

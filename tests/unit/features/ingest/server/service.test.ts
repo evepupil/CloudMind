@@ -75,6 +75,15 @@ const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
   };
 };
 
+const parseLogPayload = (
+  call: unknown[] | undefined
+): Record<string, unknown> => {
+  return JSON.parse((call?.[0] as string | undefined) ?? "{}") as Record<
+    string,
+    unknown
+  >;
+};
+
 class InMemoryAssetRepository implements AssetRepository {
   private asset: AssetDetail;
   private readonly missingChunkContentIds: string[];
@@ -662,6 +671,9 @@ describe("ingest service", () => {
   });
 
   it("ingestTextAsset falls back to heuristic classification when client enrichment AI classification fails", async () => {
+    const warnSpy = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
     const repository = new InMemoryAssetRepository(
       createAsset({
         id: "asset-text-enrichment-fallback-1",
@@ -736,6 +748,29 @@ describe("ingest service", () => {
         },
       }
     );
+
+    const failedPayload = parseLogPayload(
+      warnSpy.mock.calls.find((call) => {
+        return String(call[0]).includes(
+          '"event":"classification_generation_failed"'
+        );
+      })
+    );
+    const fallbackPayload = parseLogPayload(
+      warnSpy.mock.calls.find((call) => {
+        return String(call[0]).includes(
+          '"event":"classification_fallback_to_heuristic"'
+        );
+      })
+    );
+
+    expect(failedPayload.scope).toBe("ingest_enrichment");
+    expect(failedPayload.aiProvider).toBe("unknown");
+    expect(failedPayload.errorMessage).toBe("Workers AI unavailable");
+    expect(fallbackPayload.scope).toBe("ingest_enrichment");
+    expect(fallbackPayload.fallbackReason).toBe("ai_failed");
+    expect(fallbackPayload.resolvedDomain).toBe("engineering");
+    expect(fallbackPayload.resolvedDocumentClass).toBe("design_doc");
   });
 
   it("ingestTextAsset can auto-generate enrichment before processing", async () => {

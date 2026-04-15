@@ -7,6 +7,7 @@ export interface GenerateTextInput {
 
 export interface GenerateTextResult {
   text: string;
+  provider?: string | undefined;
   model?: string | undefined;
 }
 
@@ -19,6 +20,7 @@ export interface CreateEmbeddingsInput {
 
 export interface CreateEmbeddingsResult {
   embeddings: number[][];
+  provider?: string | undefined;
   model?: string | undefined;
   dimensions?: number | undefined;
 }

@@ -13,7 +13,9 @@ import {
 } from "@/features/ingest/model/enrichment";
 import { normalizeContent } from "@/features/ingest/server/content-processing";
 import { deriveDescriptor } from "@/features/workflows/server/indexing-policy";
+import { createLogger } from "@/platform/observability/logger";
 
+import { buildAIInvocationFields } from "./ai-observability";
 import { searchMetadataTerms } from "./metadata-terms";
 
 const HIGH_CONFIDENCE_THRESHOLD = 0.86;
@@ -21,6 +23,7 @@ const LOW_CONFIDENCE_THRESHOLD = 0.72;
 
 const MAX_TOPICS = 6;
 const MAX_TAGS = 6;
+const enrichmentLogger = createLogger("ingest_enrichment");
 
 const candidateSchema = z.object({
   summary: z.string().trim().min(1).max(2000).optional(),
@@ -398,6 +401,7 @@ const resolveClassification = async (
 ): Promise<z.infer<typeof classificationSchema>> => {
   let domain = input.enrichment.domain;
   let documentClass = input.enrichment.documentClass;
+  let fallbackReason: "ai_failed" | "ai_invalid" | null = null;
 
   if (!domain || !documentClass) {
     try {
@@ -411,10 +415,33 @@ const resolveClassification = async (
       );
 
       if (parsed.success) {
+        enrichmentLogger.info("classification_generation_succeeded", {
+          ...buildAIInvocationFields(aiProvider, result),
+          missingDomain: !input.enrichment.domain,
+          missingDocumentClass: !input.enrichment.documentClass,
+        });
         domain ??= parsed.data.domain;
         documentClass ??= parsed.data.documentClass;
+      } else {
+        fallbackReason = "ai_invalid";
+        enrichmentLogger.warn("classification_generation_invalid", {
+          ...buildAIInvocationFields(aiProvider, result),
+          missingDomain: !input.enrichment.domain,
+          missingDocumentClass: !input.enrichment.documentClass,
+        });
       }
-    } catch {}
+    } catch (error) {
+      fallbackReason = "ai_failed";
+      enrichmentLogger.warn(
+        "classification_generation_failed",
+        {
+          ...buildAIInvocationFields(aiProvider),
+          missingDomain: !input.enrichment.domain,
+          missingDocumentClass: !input.enrichment.documentClass,
+        },
+        { error }
+      );
+    }
   }
 
   if (!domain || !documentClass) {
@@ -422,6 +449,11 @@ const resolveClassification = async (
 
     domain ??= fallback.domain;
     documentClass ??= fallback.documentClass;
+    enrichmentLogger.warn("classification_fallback_to_heuristic", {
+      fallbackReason: fallbackReason ?? "missing_fields",
+      resolvedDomain: domain,
+      resolvedDocumentClass: documentClass,
+    });
   }
 
   return {
@@ -438,7 +470,18 @@ const buildTermHintsSafely = async (
 ): Promise<TermCandidateWithMatches[]> => {
   try {
     return await buildTermHints(vectorStore, aiProvider, kind, terms);
-  } catch {
+  } catch (error) {
+    enrichmentLogger.warn(
+      "provided_enrichment_term_normalization_fallback",
+      {
+        ...buildAIInvocationFields(aiProvider),
+        kind,
+        candidateCount: normalizeUnique(terms).length,
+        fallbackStrategy: "keep_original",
+      },
+      { error }
+    );
+
     return [];
   }
 };

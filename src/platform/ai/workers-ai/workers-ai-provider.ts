@@ -8,6 +8,7 @@ import type {
 
 const EMBEDDING_MODEL = "@cf/baai/bge-m3";
 const TEXT_GENERATION_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
+const PROVIDER_NAME = "workers_ai";
 
 interface WorkersAITextGenerationChoice {
   message?:
@@ -91,6 +92,7 @@ export class WorkersAIProvider implements AIProvider {
 
     return {
       text: extractGeneratedText(output),
+      provider: PROVIDER_NAME,
       model: TEXT_GENERATION_MODEL,
     };
   }
@@ -101,6 +103,7 @@ export class WorkersAIProvider implements AIProvider {
     if (input.texts.length === 0) {
       return {
         embeddings: [],
+        provider: PROVIDER_NAME,
         model: EMBEDDING_MODEL,
       };
     }
@@ -114,6 +117,7 @@ export class WorkersAIProvider implements AIProvider {
 
     return {
       embeddings,
+      provider: PROVIDER_NAME,
       model: EMBEDDING_MODEL,
       dimensions: output.shape?.[1] ?? embeddings[0]?.length,
     };
