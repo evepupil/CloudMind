@@ -24,7 +24,10 @@ import { createLogger } from "@/platform/observability/logger";
 import { getJobQueueFromBindings } from "@/platform/queue/cloudflare/get-job-queue";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 import { getWebPageFetcherFromBindings } from "@/platform/web/jina/get-web-page-fetcher";
-import { generateAutoTextEnrichment } from "./auto-enrichment";
+import {
+  generateAutoTextEnrichment,
+  standardizeProvidedTextEnrichment,
+} from "./auto-enrichment";
 import {
   processPdfAsset,
   processTextAsset,
@@ -376,7 +379,18 @@ export const createIngestService = (
         const aiProvider = await dependencies.getAIProvider(bindings);
         let resolvedEnrichment = input.enrichment;
 
-        if (!resolvedEnrichment) {
+        if (resolvedEnrichment) {
+          resolvedEnrichment = await standardizeProvidedTextEnrichment(
+            aiProvider,
+            vectorStore,
+            {
+              title: input.title,
+              content: input.content,
+              sourceKind: input.sourceKind,
+              enrichment: resolvedEnrichment,
+            }
+          ).catch(() => resolvedEnrichment);
+        } else {
           resolvedEnrichment = await generateAutoTextEnrichment(
             aiProvider,
             vectorStore,

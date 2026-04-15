@@ -1,12 +1,18 @@
 import { z } from "zod";
 import type { AIProvider } from "@/core/ai/ports";
 import type { VectorStore } from "@/core/vector/ports";
+import type {
+  AssetDetail,
+  AssetSourceKind,
+} from "@/features/assets/model/types";
 import {
   assetDocumentClassValues,
   assetDomainValues,
   type TextAssetEnrichmentInput,
   textAssetEnrichmentSchema,
 } from "@/features/ingest/model/enrichment";
+import { normalizeContent } from "@/features/ingest/server/content-processing";
+import { deriveDescriptor } from "@/features/workflows/server/indexing-policy";
 
 import { searchMetadataTerms } from "./metadata-terms";
 
@@ -24,6 +30,11 @@ const candidateSchema = z.object({
   tags: z.array(z.string().trim().min(1).max(80)).max(MAX_TAGS).optional(),
   catalog: z.string().trim().min(1).max(120).optional(),
   signals: z.array(z.string().trim().min(1).max(80)).max(8).optional(),
+});
+
+const classificationSchema = z.object({
+  domain: z.enum(assetDomainValues).optional(),
+  documentClass: z.enum(assetDocumentClassValues).optional(),
 });
 
 const decisionItemSchema = z.object({
@@ -44,6 +55,11 @@ const finalizedSchema = z.object({
 interface AutoEnrichmentInput {
   title?: string | undefined;
   content: string;
+}
+
+interface StandardizeProvidedEnrichmentInput extends AutoEnrichmentInput {
+  sourceKind?: AssetSourceKind | undefined;
+  enrichment: TextAssetEnrichmentInput;
 }
 
 interface TermCandidateMatch {
@@ -123,6 +139,36 @@ const buildCandidatePrompt = (input: AutoEnrichmentInput): string => {
   ].join("\n");
 };
 
+const buildClassificationPrompt = (
+  input: AutoEnrichmentInput,
+  enrichment: TextAssetEnrichmentInput
+): string => {
+  return [
+    "请为 CloudMind 文本资产补齐 classification，返回 JSON。",
+    "要求：",
+    `- domain 必须从: ${assetDomainValues.join(", ")}`,
+    `- documentClass 必须从: ${assetDocumentClassValues.join(", ")}`,
+    "- 如果已有值合法，可保留；如果缺失，请根据标题、摘要、正文补齐",
+    "- 不要输出解释文字，只输出 JSON",
+    "JSON schema:",
+    "{",
+    '  "domain": "enum?",',
+    '  "documentClass": "enum?"',
+    "}",
+    "已有 enrichment:",
+    JSON.stringify({
+      summary: enrichment.summary,
+      domain: enrichment.domain,
+      documentClass: enrichment.documentClass,
+      descriptor: enrichment.descriptor,
+    }),
+    "输入标题:",
+    input.title?.trim() || "(none)",
+    "输入正文:",
+    input.content,
+  ].join("\n");
+};
+
 const buildSelectionPrompt = (
   input: AutoEnrichmentInput,
   candidate: z.infer<typeof candidateSchema>,
@@ -188,6 +234,24 @@ const pickFallbackValues = (
   }
 
   return normalizeUnique(picked);
+};
+
+const pickProvidedValues = (
+  candidates: string[],
+  hints: TermCandidateWithMatches[]
+): string[] => {
+  return normalizeUnique(
+    candidates.map((candidate) => {
+      const best =
+        hints.find((item) => item.candidate === candidate)?.matches[0] ?? null;
+
+      if (best && best.score >= HIGH_CONFIDENCE_THRESHOLD) {
+        return best.term;
+      }
+
+      return candidate;
+    })
+  );
 };
 
 const toEnrichment = (
@@ -267,6 +331,190 @@ const buildTermHints = async (
   }
 
   return hints;
+};
+
+const buildSyntheticTextAsset = (
+  input: StandardizeProvidedEnrichmentInput
+): AssetDetail => {
+  const now = new Date().toISOString();
+  const sourceKind = input.sourceKind ?? "manual";
+
+  return {
+    id: "synthetic-text-enrichment",
+    type: "note",
+    title: input.title?.trim() || "Untitled Note",
+    summary: input.enrichment.summary ?? null,
+    sourceUrl: null,
+    sourceKind,
+    status: "pending",
+    domain: "general",
+    sensitivity: "internal",
+    aiVisibility: "allow",
+    retrievalPriority: 0,
+    documentClass: "general_note",
+    sourceHost: null,
+    collectionKey: input.enrichment.descriptor?.collectionKey?.trim() || null,
+    capturedAt: now,
+    descriptorJson: null,
+    createdAt: now,
+    updatedAt: now,
+    contentText: input.content,
+    rawR2Key: null,
+    contentR2Key: null,
+    mimeType: "text/plain",
+    language: null,
+    errorMessage: null,
+    processedAt: null,
+    failedAt: null,
+    source: {
+      kind: sourceKind,
+      sourceUrl: null,
+      metadataJson: null,
+      createdAt: now,
+    },
+    jobs: [],
+    chunks: [],
+  };
+};
+
+const deriveHeuristicClassification = (
+  input: StandardizeProvidedEnrichmentInput
+): z.infer<typeof classificationSchema> => {
+  const { descriptor } = deriveDescriptor({
+    asset: buildSyntheticTextAsset(input),
+    normalizedContent: normalizeContent(input.content),
+    summary: input.enrichment.summary ?? null,
+  });
+
+  return {
+    domain: descriptor.domain,
+    documentClass: descriptor.documentClass,
+  };
+};
+
+const resolveClassification = async (
+  aiProvider: AIProvider,
+  input: StandardizeProvidedEnrichmentInput
+): Promise<z.infer<typeof classificationSchema>> => {
+  let domain = input.enrichment.domain;
+  let documentClass = input.enrichment.documentClass;
+
+  if (!domain || !documentClass) {
+    try {
+      const result = await aiProvider.generateText({
+        prompt: buildClassificationPrompt(input, input.enrichment),
+        temperature: 0.1,
+        maxOutputTokens: 400,
+      });
+      const parsed = classificationSchema.safeParse(
+        parseJsonObject(result.text)
+      );
+
+      if (parsed.success) {
+        domain ??= parsed.data.domain;
+        documentClass ??= parsed.data.documentClass;
+      }
+    } catch {}
+  }
+
+  if (!domain || !documentClass) {
+    const fallback = deriveHeuristicClassification(input);
+
+    domain ??= fallback.domain;
+    documentClass ??= fallback.documentClass;
+  }
+
+  return {
+    domain,
+    documentClass,
+  };
+};
+
+const buildTermHintsSafely = async (
+  vectorStore: VectorStore,
+  aiProvider: AIProvider,
+  kind: "topic" | "tag" | "catalog",
+  terms: string[]
+): Promise<TermCandidateWithMatches[]> => {
+  try {
+    return await buildTermHints(vectorStore, aiProvider, kind, terms);
+  } catch {
+    return [];
+  }
+};
+
+// 这里对客户端传入的 enrichment 再做一次标准化，优先复用已有词项并补齐缺失分类。
+export const standardizeProvidedTextEnrichment = async (
+  aiProvider: AIProvider,
+  vectorStore: VectorStore,
+  input: StandardizeProvidedEnrichmentInput
+): Promise<TextAssetEnrichmentInput> => {
+  const parsedInput = textAssetEnrichmentSchema.safeParse(input.enrichment);
+
+  if (!parsedInput.success) {
+    return input.enrichment;
+  }
+
+  const enrichment = parsedInput.data;
+  const [classification, topicHints, tagHints, catalogHintsWrapped] =
+    await Promise.all([
+      resolveClassification(aiProvider, {
+        ...input,
+        enrichment,
+      }),
+      buildTermHintsSafely(
+        vectorStore,
+        aiProvider,
+        "topic",
+        enrichment.descriptor?.topics ?? []
+      ),
+      buildTermHintsSafely(
+        vectorStore,
+        aiProvider,
+        "tag",
+        enrichment.descriptor?.tags ?? []
+      ),
+      buildTermHintsSafely(
+        vectorStore,
+        aiProvider,
+        "catalog",
+        enrichment.descriptor?.collectionKey
+          ? [enrichment.descriptor.collectionKey]
+          : []
+      ),
+    ]);
+  const catalogBest = catalogHintsWrapped[0]?.matches[0] ?? null;
+  const topics = pickProvidedValues(
+    enrichment.descriptor?.topics ?? [],
+    topicHints
+  );
+  const tags = pickProvidedValues(enrichment.descriptor?.tags ?? [], tagHints);
+  const collectionKey =
+    catalogBest && catalogBest.score >= HIGH_CONFIDENCE_THRESHOLD
+      ? catalogBest.term
+      : enrichment.descriptor?.collectionKey?.trim() || undefined;
+  const signals = normalizeUnique(enrichment.descriptor?.signals);
+  const hasDescriptor =
+    topics.length > 0 ||
+    tags.length > 0 ||
+    Boolean(collectionKey) ||
+    signals.length > 0;
+  const standardized = textAssetEnrichmentSchema.safeParse({
+    summary: enrichment.summary,
+    domain: classification.domain,
+    documentClass: classification.documentClass,
+    descriptor: hasDescriptor
+      ? {
+          topics: topics.length > 0 ? topics : undefined,
+          tags: tags.length > 0 ? tags : undefined,
+          collectionKey,
+          signals: signals.length > 0 ? signals : undefined,
+        }
+      : undefined,
+    facets: enrichment.facets,
+  });
+
+  return standardized.success ? standardized.data : enrichment;
 };
 
 // 这里在保存前生成 enrichment，优先复用已有词项向量，减少 topic/tag/catalog 膨胀。

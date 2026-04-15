@@ -299,10 +299,17 @@ describe("ingest service", () => {
   const processPdfAssetForcedMock = vi.fn();
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     vi.mocked(
       workflowRepositoryMock.listWorkflowRunsByAssetId
     ).mockResolvedValue([]);
+    vi.mocked(aiProviderMock.generateText).mockResolvedValue({
+      text: "",
+    });
+    vi.mocked(aiProviderMock.createEmbeddings).mockResolvedValue({
+      embeddings: [[0.11, 0.22]],
+    });
+    vi.mocked(vectorStoreMock.search).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -546,6 +553,184 @@ describe("ingest service", () => {
           descriptor: {
             topics: ["workflow"],
             collectionKey: "project/cloudmind",
+            signals: ["seeded_by_client"],
+          },
+        },
+      }
+    );
+  });
+
+  it("ingestTextAsset normalizes client enrichment terms before processing", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-text-enrichment-normalized-1",
+      })
+    );
+    const processedAsset = createAsset({
+      id: "asset-text-enrichment-normalized-1",
+      status: "ready",
+      summary: "Accepted summary",
+    });
+
+    vi.mocked(vectorStoreMock.search).mockResolvedValue([
+      {
+        id: "term:topic:retrieval",
+        score: 0.93,
+        metadataJson: JSON.stringify({
+          kind: "topic",
+          term: "retrieval",
+          normalized: "retrieval",
+        }),
+      },
+      {
+        id: "term:tag:memory-layer",
+        score: 0.91,
+        metadataJson: JSON.stringify({
+          kind: "tag",
+          term: "memory-layer",
+          normalized: "memory-layer",
+        }),
+      },
+      {
+        id: "term:catalog:product/principles",
+        score: 0.9,
+        metadataJson: JSON.stringify({
+          kind: "catalog",
+          term: "product/principles",
+          normalized: "product/principles",
+        }),
+      },
+    ]);
+
+    const service = createIngestService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
+      processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
+      processUrlAsset: processUrlAssetMock,
+      processPdfAsset: processPdfAssetMock,
+      getProcessTextAssetForced: processTextAssetForcedMock,
+      getProcessUrlAssetForced: processUrlAssetForcedMock,
+      getProcessPdfAssetForced: processPdfAssetForcedMock,
+    });
+
+    await service.ingestTextAsset(env, {
+      title: "Enriched note",
+      content: "User supplied indexing hints.",
+      enrichment: {
+        summary: "Accepted summary",
+        domain: "engineering",
+        documentClass: "design_doc",
+        descriptor: {
+          topics: ["semantic retrieval"],
+          tags: ["memory layer"],
+          collectionKey: "product principles",
+          signals: ["seeded_by_client"],
+        },
+      },
+    });
+
+    expect(processTextAssetMock).toHaveBeenCalledWith(
+      repository,
+      workflowRepositoryMock,
+      blobStoreMock,
+      vectorStoreMock,
+      aiProviderMock,
+      jobQueueMock,
+      "asset-text-enrichment-normalized-1",
+      {
+        enrichment: {
+          summary: "Accepted summary",
+          domain: "engineering",
+          documentClass: "design_doc",
+          descriptor: {
+            topics: ["retrieval"],
+            tags: ["memory-layer"],
+            collectionKey: "product/principles",
+            signals: ["seeded_by_client"],
+          },
+        },
+      }
+    );
+  });
+
+  it("ingestTextAsset falls back to heuristic classification when client enrichment AI classification fails", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-text-enrichment-fallback-1",
+      })
+    );
+    const processedAsset = createAsset({
+      id: "asset-text-enrichment-fallback-1",
+      status: "ready",
+      summary: "Accepted summary",
+    });
+
+    vi.mocked(aiProviderMock.generateText).mockRejectedValueOnce(
+      new Error("Workers AI unavailable")
+    );
+    vi.mocked(aiProviderMock.createEmbeddings).mockRejectedValue(
+      new Error("Embeddings unavailable")
+    );
+
+    const service = createIngestService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
+      processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
+      processUrlAsset: processUrlAssetMock,
+      processPdfAsset: processPdfAssetMock,
+      getProcessTextAssetForced: processTextAssetForcedMock,
+      getProcessUrlAssetForced: processUrlAssetForcedMock,
+      getProcessPdfAssetForced: processPdfAssetForcedMock,
+    });
+
+    await service.ingestTextAsset(env, {
+      title: "CloudMind queue design",
+      content:
+        "We should document the worker queue architecture for CloudMind.",
+      enrichment: {
+        summary: "Accepted summary",
+        descriptor: {
+          topics: ["queue design"],
+          tags: ["workers"],
+          collectionKey: "cloudmind docs",
+          signals: ["seeded_by_client"],
+        },
+      },
+    });
+
+    expect(processTextAssetMock).toHaveBeenCalledWith(
+      repository,
+      workflowRepositoryMock,
+      blobStoreMock,
+      vectorStoreMock,
+      aiProviderMock,
+      jobQueueMock,
+      "asset-text-enrichment-fallback-1",
+      {
+        enrichment: {
+          summary: "Accepted summary",
+          domain: "engineering",
+          documentClass: "design_doc",
+          descriptor: {
+            topics: ["queue design"],
+            tags: ["workers"],
+            collectionKey: "cloudmind docs",
             signals: ["seeded_by_client"],
           },
         },
