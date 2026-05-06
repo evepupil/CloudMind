@@ -2,6 +2,10 @@ import { z } from "zod";
 import type { AIProvider } from "@/core/ai/ports";
 import type { CreateAssetAssertionInput } from "@/core/assets/ports";
 import { buildAIInvocationFields } from "@/features/ingest/server/ai-observability";
+import {
+  ingestPromptRegistry,
+  parseJsonObject,
+} from "@/features/ingest/server/prompts";
 import { createLogger } from "@/platform/observability/logger";
 import { deriveAssertions } from "./indexing-policy";
 
@@ -24,63 +28,6 @@ const aiAssertionSchema = z.object({
     )
     .max(5),
 });
-
-const extractJsonPayload = (text: string): string | null => {
-  const trimmed = text.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
-  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-
-  if (fencedMatch?.[1]) {
-    return fencedMatch[1].trim();
-  }
-
-  const firstBrace = trimmed.indexOf("{");
-  const lastBrace = trimmed.lastIndexOf("}");
-
-  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
-    return null;
-  }
-
-  return trimmed.slice(firstBrace, lastBrace + 1);
-};
-
-const parseJsonObject = (text: string): unknown => {
-  const payload = extractJsonPayload(text);
-
-  if (!payload) {
-    throw new Error("AI response does not contain a JSON payload.");
-  }
-
-  return JSON.parse(payload);
-};
-
-const buildAssertionPrompt = (context: AssertionExtractionContext): string => {
-  return [
-    "请为 CloudMind 资产抽取 3 到 5 条高价值 assertions，返回 JSON。",
-    "要求：",
-    "- kind 只能是 fact、decision、constraint、summary_point 之一",
-    "- text 要简洁、完整、可独立理解",
-    "- 优先抽取能帮助检索和问答的关键结论、约束、决定",
-    "- 没有足够高价值 assertion 时可以少于 5 条",
-    "- 不要输出解释文字，只输出 JSON",
-    "JSON schema:",
-    "{",
-    '  "assertions": [',
-    '    {"kind":"fact|decision|constraint|summary_point","text":"string","confidence":0.0}',
-    "  ]",
-    "}",
-    "资产标题:",
-    context.asset.title?.trim() || "(none)",
-    "已有摘要:",
-    context.summary?.trim() || "(none)",
-    "正文:",
-    context.normalizedContent?.trim() || "(none)",
-  ].join("\n");
-};
 
 const toAssertions = (
   parsed: z.infer<typeof aiAssertionSchema>
@@ -124,7 +71,7 @@ export const deriveAssertionsWithAIFallback = async (
 
   try {
     result = await aiProvider.generateText({
-      prompt: buildAssertionPrompt(context),
+      ...ingestPromptRegistry.get("assertion").build(context),
       temperature: 0.1,
       maxOutputTokens: 900,
     });
@@ -141,10 +88,7 @@ export const deriveAssertionsWithAIFallback = async (
     return deriveAssertions(context);
   }
 
-  let parsed: z.SafeParseReturnType<
-    z.infer<typeof aiAssertionSchema>,
-    z.infer<typeof aiAssertionSchema>
-  >;
+  let parsed: ReturnType<typeof aiAssertionSchema.safeParse>;
 
   try {
     parsed = aiAssertionSchema.safeParse(parseJsonObject(result.text));

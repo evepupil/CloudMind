@@ -30,6 +30,7 @@ import type {
   AskLibraryResult,
   ChatSource,
 } from "../model/types";
+import { chatPromptRegistry } from "./prompts";
 
 interface ChatServiceDependencies {
   getAssetRepository: (
@@ -59,16 +60,6 @@ const createFallbackAnswer = (): string => {
 
 const CHAT_ALLOWED_AI_VISIBILITY = ["allow"] as const;
 const CHAT_SUMMARY_ONLY_AI_VISIBILITY = ["summary_only"] as const;
-const BASE_CHAT_SYSTEM_PROMPT =
-  "You are a source-aware knowledge base assistant. " +
-  "Keep answers concise and grounded in the provided sources. " +
-  "Do not repeat the source list. Do not output labels such as " +
-  "'Asset ID', 'Source Type', 'Source URL', or 'Snippet'.";
-const RETRY_CHAT_SYSTEM_PROMPT =
-  `${BASE_CHAT_SYSTEM_PROMPT} ` +
-  "Return a complete standalone answer. " +
-  "Do not say 'same as above', 'same as v2', or refer to an unseen " +
-  "previous answer. Preserve bullet formatting when using lists.";
 const SOURCE_TYPE_PRIORITY: Record<ChatSource["sourceType"], number> = {
   chunk: 4,
   assertion: 3,
@@ -85,33 +76,6 @@ const isProfileBoosted = (
   contextPolicy: ContextRetrievalPolicy | undefined
 ): boolean => {
   return Boolean(contextPolicy?.boostedDomains.includes(context.asset.domain));
-};
-
-const buildPrompt = (question: string, sources: ChatSource[]): string => {
-  const sourceBlocks = sources
-    .map((source, index) => {
-      return [
-        `[S${index + 1}] ${source.title}`,
-        `Asset ID: ${source.assetId}`,
-        `Source Type: ${source.sourceType}`,
-        source.sourceUrl ? `Source URL: ${source.sourceUrl}` : null,
-        `Snippet: ${source.snippet}`,
-      ]
-        .filter((value): value is string => value !== null)
-        .join("\n");
-    })
-    .join("\n\n");
-
-  return [
-    "Answer the user's question using only the provided library sources.",
-    "If the sources are insufficient, say so plainly.",
-    "When making a claim, cite the relevant source labels like [S1].",
-    "",
-    `Question: ${question}`,
-    "",
-    "Sources:",
-    sourceBlocks,
-  ].join("\n");
 };
 
 const collectUniqueLimited = (
@@ -500,18 +464,6 @@ const buildSummaryGroundingContexts = (
       buildSummaryEvidenceItem(match, scoreAssetSummaryMatch(question, match))
     )
     .sort((left, right) => right.score - left.score);
-};
-
-const buildChatPrompt = (
-  question: string,
-  contexts: GroundingContext[]
-): string => {
-  const promptSources = contexts.map((context) => ({
-    ...buildChatSource(context),
-    snippet: context.text,
-  }));
-
-  return buildPrompt(question, promptSources);
 };
 
 const compareGroundingContexts = (
@@ -917,10 +869,19 @@ const generateGroundedAnswer = async (
   question: string,
   contexts: GroundingContext[]
 ): Promise<string> => {
-  const prompt = buildChatPrompt(question, contexts);
+  const promptSources = contexts.map((context) => ({
+    ...buildChatSource(context),
+    snippet: context.text,
+  }));
+  const promptTemplate = chatPromptRegistry.get("rag-user").build({
+    question,
+    sources: promptSources,
+  });
   const initialAnswer = await aiProvider.generateText({
-    systemPrompt: BASE_CHAT_SYSTEM_PROMPT,
-    prompt,
+    systemPrompt: chatPromptRegistry
+      .get("rag-system")
+      .build({ variant: "base" }).systemPrompt,
+    prompt: promptTemplate.prompt,
     temperature: 0.2,
     maxOutputTokens: 700,
   });
@@ -937,8 +898,10 @@ const generateGroundedAnswer = async (
   }
 
   const retryAnswer = await aiProvider.generateText({
-    systemPrompt: RETRY_CHAT_SYSTEM_PROMPT,
-    prompt,
+    systemPrompt: chatPromptRegistry.get("rag-system").build({
+      variant: "retry",
+    }).systemPrompt,
+    prompt: promptTemplate.prompt,
     temperature: 0.1,
     maxOutputTokens: 700,
   });

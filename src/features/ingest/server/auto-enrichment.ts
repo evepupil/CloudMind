@@ -17,6 +17,7 @@ import { createLogger } from "@/platform/observability/logger";
 
 import { buildAIInvocationFields } from "./ai-observability";
 import { searchMetadataTerms } from "./metadata-terms";
+import { ingestPromptRegistry, parseJsonObject } from "./prompts";
 
 const HIGH_CONFIDENCE_THRESHOLD = 0.86;
 const LOW_CONFIDENCE_THRESHOLD = 0.72;
@@ -95,164 +96,6 @@ const normalizeUnique = (values: string[] | undefined): string[] => {
   }
 
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
-};
-
-const extractJsonPayload = (text: string): string | null => {
-  const trimmed = text.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
-  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-
-  if (fencedMatch?.[1]) {
-    return fencedMatch[1].trim();
-  }
-
-  const firstBrace = trimmed.indexOf("{");
-  const lastBrace = trimmed.lastIndexOf("}");
-
-  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
-    return null;
-  }
-
-  return trimmed.slice(firstBrace, lastBrace + 1);
-};
-
-const parseJsonObject = (text: string): unknown => {
-  const payload = extractJsonPayload(text);
-
-  if (!payload) {
-    throw new Error("AI response does not contain a JSON payload.");
-  }
-
-  return JSON.parse(payload);
-};
-
-const buildCandidatePrompt = (input: AutoEnrichmentInput): string => {
-  return [
-    "请为 CloudMind 文本资产生成 metadata 候选，返回 JSON。",
-    "要求：",
-    `- domain 必须从: ${assetDomainValues.join(", ")}`,
-    `- documentClass 必须从: ${assetDocumentClassValues.join(", ")}`,
-    "- topics/tags 请给多个候选，避免过于宽泛",
-    "- catalog 对应 collectionKey，推荐稳定可复用命名",
-    "- 不要输出解释文字，只输出 JSON",
-    "JSON schema:",
-    "{",
-    '  "summary": "string?",',
-    '  "domain": "enum?",',
-    '  "documentClass": "enum?",',
-    '  "topics": ["string"],',
-    '  "tags": ["string"],',
-    '  "catalog": "string?",',
-    '  "signals": ["string"]',
-    "}",
-    "输入标题:",
-    input.title?.trim() || "(none)",
-    "输入正文:",
-    input.content,
-  ].join("\n");
-};
-
-const buildClassificationPrompt = (
-  input: AutoEnrichmentInput,
-  enrichment: TextAssetEnrichmentInput
-): string => {
-  return [
-    "请为 CloudMind 文本资产补齐 classification，返回 JSON。",
-    "要求：",
-    `- domain 必须从: ${assetDomainValues.join(", ")}`,
-    `- documentClass 必须从: ${assetDocumentClassValues.join(", ")}`,
-    "- 如果已有值合法，可保留；如果缺失，请根据标题、摘要、正文补齐",
-    "- 不要输出解释文字，只输出 JSON",
-    "JSON schema:",
-    "{",
-    '  "domain": "enum?",',
-    '  "documentClass": "enum?"',
-    "}",
-    "已有 enrichment:",
-    JSON.stringify({
-      summary: enrichment.summary,
-      domain: enrichment.domain,
-      documentClass: enrichment.documentClass,
-      descriptor: enrichment.descriptor,
-    }),
-    "输入标题:",
-    input.title?.trim() || "(none)",
-    "输入正文:",
-    input.content,
-  ].join("\n");
-};
-
-const buildWorkflowDescriptorPrompt = (
-  input: WorkflowDescriptorEnrichmentInput
-): string => {
-  return [
-    "请为 CloudMind 资产生成 descriptor enrichment，返回 JSON。",
-    "要求：",
-    `- domain 必须从: ${assetDomainValues.join(", ")}`,
-    `- documentClass 必须从: ${assetDocumentClassValues.join(", ")}`,
-    "- topics/tags 请尽量具体，便于后续复用",
-    "- catalog 对应 collectionKey，推荐稳定、可复用命名",
-    "- 不要输出 summary，不要输出解释文字，只输出 JSON",
-    "JSON schema:",
-    "{",
-    '  "domain": "enum?",',
-    '  "documentClass": "enum?",',
-    '  "topics": ["string"],',
-    '  "tags": ["string"],',
-    '  "catalog": "string?",',
-    '  "signals": ["string"]',
-    "}",
-    "输入标题:",
-    input.title?.trim() || "(none)",
-    "已有摘要:",
-    input.summary?.trim() || "(none)",
-    "输入正文:",
-    input.content,
-  ].join("\n");
-};
-
-const buildSelectionPrompt = (
-  input: AutoEnrichmentInput,
-  candidate: z.infer<typeof candidateSchema>,
-  topicHints: TermCandidateWithMatches[],
-  tagHints: TermCandidateWithMatches[],
-  catalogHints: TermCandidateMatch[]
-): string => {
-  return [
-    "请根据候选 metadata 与已有词项近邻，给出最终选择 JSON。",
-    "规则：",
-    `- 分数 >= ${HIGH_CONFIDENCE_THRESHOLD.toFixed(2)} 优先复用已有词项`,
-    `- 分数 < ${LOW_CONFIDENCE_THRESHOLD.toFixed(2)} 可新建`,
-    "- 中间分数区间由你判断最合理方案",
-    "- domain/documentClass 只能保留候选中的合法值",
-    "- 不要输出解释，只输出 JSON",
-    "JSON schema:",
-    "{",
-    '  "summary": "string?",',
-    '  "domain": "enum?",',
-    '  "documentClass": "enum?",',
-    '  "topics": [{"mode":"reuse|new","value":"string"}],',
-    '  "tags": [{"mode":"reuse|new","value":"string"}],',
-    '  "catalog": {"mode":"reuse|new","value":"string"},',
-    '  "signals": ["string"]',
-    "}",
-    "候选 metadata:",
-    JSON.stringify(candidate),
-    "topics 近邻：",
-    JSON.stringify(topicHints),
-    "tags 近邻：",
-    JSON.stringify(tagHints),
-    "catalog 近邻：",
-    JSON.stringify(catalogHints),
-    "输入标题:",
-    input.title?.trim() || "(none)",
-    "输入正文:",
-    input.content,
-  ].join("\n");
 };
 
 const pickFallbackValues = (
@@ -449,7 +292,11 @@ const resolveClassification = async (
   if (!domain || !documentClass) {
     try {
       const result = await aiProvider.generateText({
-        prompt: buildClassificationPrompt(input, input.enrichment),
+        ...ingestPromptRegistry.get("enrichment-classification").build({
+          title: input.title,
+          content: input.content,
+          enrichment: input.enrichment,
+        }),
         temperature: 0.1,
         maxOutputTokens: 400,
       });
@@ -619,7 +466,7 @@ export const generateWorkflowDescriptorEnrichment = async (
 
   try {
     result = await aiProvider.generateText({
-      prompt: buildWorkflowDescriptorPrompt(input),
+      ...ingestPromptRegistry.get("enrichment-descriptor").build(input),
       temperature: 0.2,
       maxOutputTokens: 900,
     });
@@ -636,10 +483,7 @@ export const generateWorkflowDescriptorEnrichment = async (
     return undefined;
   }
 
-  let parsed: z.SafeParseReturnType<
-    z.infer<typeof descriptorCandidateSchema>,
-    z.infer<typeof descriptorCandidateSchema>
-  >;
+  let parsed: ReturnType<typeof descriptorCandidateSchema.safeParse>;
 
   try {
     parsed = descriptorCandidateSchema.safeParse(parseJsonObject(result.text));
@@ -706,7 +550,7 @@ export const generateAutoTextEnrichment = async (
   input: AutoEnrichmentInput
 ): Promise<TextAssetEnrichmentInput | undefined> => {
   const candidateResult = await aiProvider.generateText({
-    prompt: buildCandidatePrompt(input),
+    ...ingestPromptRegistry.get("enrichment-candidate").build(input),
     temperature: 0.2,
     maxOutputTokens: 1200,
   });
@@ -735,13 +579,14 @@ export const generateAutoTextEnrichment = async (
 
   try {
     const finalizedResult = await aiProvider.generateText({
-      prompt: buildSelectionPrompt(
-        input,
+      ...ingestPromptRegistry.get("enrichment-selection").build({
+        title: input.title,
+        content: input.content,
         candidate,
         topicHints,
         tagHints,
-        catalogHints
-      ),
+        catalogHints,
+      }),
       temperature: 0.1,
       maxOutputTokens: 1200,
     });

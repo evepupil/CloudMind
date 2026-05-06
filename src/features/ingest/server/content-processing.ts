@@ -9,6 +9,7 @@ import { createLogger } from "@/platform/observability/logger";
 
 import { buildAIInvocationFields } from "./ai-observability";
 import { chunkAssetContent } from "./chunking";
+import { ingestPromptRegistry } from "./prompts";
 
 export interface PreparedChunk {
   chunkIndex: number;
@@ -16,8 +17,6 @@ export interface PreparedChunk {
   textPreview: string;
 }
 
-const MAX_SUMMARY_SOURCE_CHARS = 12000;
-const MAX_TITLE_SOURCE_CHARS = 6000;
 const MAX_GENERATED_TITLE_CHARS = 120;
 const ingestAiLogger = createLogger("ingest_ai");
 
@@ -33,54 +32,6 @@ export const createTextSummary = (content: string): string => {
   }
 
   return `${normalized.slice(0, 177)}...`;
-};
-
-const buildSummaryPrompt = (input: {
-  title?: string | null | undefined;
-  content: string;
-}): string => {
-  const normalizedContent = normalizeContent(input.content);
-  const clippedContent = normalizedContent.slice(0, MAX_SUMMARY_SOURCE_CHARS);
-
-  return [
-    "请为 CloudMind 资产生成一个高质量摘要。",
-    "要求：",
-    "- 只输出摘要正文，不要解释，不要列表，不要 Markdown。",
-    "- 尽量保留原文语言。",
-    "- 摘要应简洁、准确，适合资产列表和检索结果展示。",
-    "- 控制在 1 到 3 句。",
-    "标题：",
-    input.title?.trim() || "(none)",
-    "正文：",
-    clippedContent,
-  ].join("\n");
-};
-
-const buildTitlePrompt = (input: {
-  currentTitle?: string | null | undefined;
-  summary: string;
-  content: string;
-}): string => {
-  const clippedContent = normalizeContent(input.content).slice(
-    0,
-    MAX_TITLE_SOURCE_CHARS
-  );
-
-  return [
-    "请为 CloudMind 资产生成一个简洁准确的标题。",
-    "要求：",
-    "- 只输出标题正文，不要解释，不要 Markdown，不要引号。",
-    "- 尽量保留原文语言。",
-    "- 标题要像文档名、网页名或笔记名，不要写成摘要句子。",
-    "- 尽量保留关键主题、实体、产品名。",
-    `- 控制在 ${MAX_GENERATED_TITLE_CHARS} 个字符以内。`,
-    "当前标题：",
-    input.currentTitle?.trim() || "(none)",
-    "已有摘要：",
-    input.summary,
-    "正文：",
-    clippedContent,
-  ].join("\n");
 };
 
 const normalizeGeneratedTitle = (value: string): string => {
@@ -123,7 +74,7 @@ export const generateAssetSummary = async (
 
   try {
     result = await aiProvider.generateText({
-      prompt: buildSummaryPrompt({
+      ...ingestPromptRegistry.get("summary").build({
         title: input.title,
         content: input.content,
       }),
@@ -176,7 +127,7 @@ export const generateAssetTitle = async (
 
   try {
     result = await aiProvider.generateText({
-      prompt: buildTitlePrompt(input),
+      ...ingestPromptRegistry.get("title").build(input),
       temperature: 0.2,
       maxOutputTokens: 120,
     });
