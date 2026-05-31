@@ -2,10 +2,10 @@ import type { AIProvider } from "@/core/ai/ports";
 import type { CreateAssetChunkInput } from "@/core/assets/ports";
 import { createProcessedContentBlobKey } from "@/core/blob/keys";
 import type { BlobStore } from "@/core/blob/ports";
+import { createLogger } from "@/core/logging/logger";
 import { createChunkVectorId } from "@/core/vector/keys";
 import type { VectorStore } from "@/core/vector/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
-import { createLogger } from "@/platform/observability/logger";
 
 import { buildAIInvocationFields } from "./ai-observability";
 import { chunkAssetContent } from "./chunking";

@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { AssetNotFoundError } from "@/core/assets/errors";
+import { createLogger } from "@/core/logging/logger";
 import { WorkflowRunNotFoundError } from "@/core/workflows/errors";
 import type { AppBindings } from "@/env";
 import {
@@ -49,7 +50,6 @@ import {
   getWorkflowRunDetail,
   listWorkflowRunsByAssetId,
 } from "@/features/workflows/server/service";
-import { createLogger } from "@/platform/observability/logger";
 
 const saveAssetInputSchema = z
   .object({

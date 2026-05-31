@@ -1,12 +1,12 @@
 import { z } from "zod";
 import type { AIProvider } from "@/core/ai/ports";
 import type { CreateAssetAssertionInput } from "@/core/assets/ports";
+import { createLogger } from "@/core/logging/logger";
 import { buildAIInvocationFields } from "@/features/ingest/server/ai-observability";
 import {
   ingestPromptRegistry,
   parseJsonObject,
 } from "@/features/ingest/server/prompts";
-import { createLogger } from "@/platform/observability/logger";
 import { deriveAssertions } from "./indexing-policy";
 
 interface AssertionExtractionContext {

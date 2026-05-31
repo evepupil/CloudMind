@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { AIProvider } from "@/core/ai/ports";
+import { createLogger } from "@/core/logging/logger";
 import type { VectorStore } from "@/core/vector/ports";
 import type {
   AssetDetail,
@@ -13,7 +14,6 @@ import {
 } from "@/features/ingest/model/enrichment";
 import { normalizeContent } from "@/features/ingest/server/content-processing";
 import { deriveDescriptor } from "@/features/workflows/server/indexing-policy";
-import { createLogger } from "@/platform/observability/logger";
 
 import { buildAIInvocationFields } from "./ai-observability";
 import { searchMetadataTerms } from "./metadata-terms";

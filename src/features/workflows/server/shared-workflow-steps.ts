@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { CreateAssetChunkInput } from "@/core/assets/ports";
+import { createLogger } from "@/core/logging/logger";
 import type { AssetDetail } from "@/features/assets/model/types";
 import type { TextAssetEnrichmentInput } from "@/features/ingest/model/enrichment";
 import {
@@ -12,7 +13,6 @@ import {
   persistProcessedContent,
 } from "@/features/ingest/server/content-processing";
 import { upsertMetadataTermVectors } from "@/features/ingest/server/metadata-terms";
-import { createLogger } from "@/platform/observability/logger";
 import { deriveAssertionsWithAIFallback } from "./assertion-extraction";
 import {
   type AssetAccessPolicy,

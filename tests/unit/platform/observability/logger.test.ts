@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { Logger } from "@/core/logging/ports";
 import { createLogger } from "@/platform/observability/logger";
 
 describe("structured logger", () => {
@@ -9,7 +10,7 @@ describe("structured logger", () => {
 
   it("emits info logs with a stable JSON payload", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const logger = createLogger("search");
+    const logger: Logger = createLogger("search");
 
     logger.info("search_completed", {
       durationMs: 42,

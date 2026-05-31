@@ -6,6 +6,7 @@ import type {
 } from "@/core/assets/ports";
 import { createRawAssetBlobKey } from "@/core/blob/keys";
 import type { BlobStore } from "@/core/blob/ports";
+import { createLogger } from "@/core/logging/logger";
 import type { JobQueue } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { WebPageFetcher } from "@/core/web/ports";
@@ -20,7 +21,6 @@ import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provi
 import { getBlobStoreFromBindings } from "@/platform/blob/r2/get-blob-store";
 import { getAssetIngestRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
 import { getWorkflowRepositoryFromBindings } from "@/platform/db/d1/repositories/get-workflow-repository";
-import { createLogger } from "@/platform/observability/logger";
 import { getJobQueueFromBindings } from "@/platform/queue/cloudflare/get-job-queue";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 import { getWebPageFetcherFromBindings } from "@/platform/web/jina/get-web-page-fetcher";

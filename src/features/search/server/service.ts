@@ -3,6 +3,7 @@ import type {
   AssetSearchInput,
   AssetSearchRepository,
 } from "@/core/assets/ports";
+import { createLogger } from "@/core/logging/logger";
 import type { VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
 import type { AssetSearchFilters } from "@/features/assets/model/types";
@@ -11,7 +12,6 @@ import type { EvidenceItem } from "@/features/search/model/evidence";
 import type { SearchResult } from "@/features/search/model/types";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
-import { createLogger } from "@/platform/observability/logger";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 import { scoreAssetAssertionMatch } from "./assertion-scoring";
 import {

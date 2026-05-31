@@ -1,5 +1,6 @@
 import type { AIProvider } from "@/core/ai/ports";
 import type { AssetSearchRepository } from "@/core/assets/ports";
+import { createLogger } from "@/core/logging/logger";
 import type { VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
@@ -17,7 +18,6 @@ import {
 } from "@/features/search/server/evidence";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
-import { createLogger } from "@/platform/observability/logger";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 import type {
   AskLibraryIndexingSummary,

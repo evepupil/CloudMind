@@ -1,7 +1,7 @@
 import type { AIProvider } from "@/core/ai/ports";
 import type { CreateAssetFacetInput } from "@/core/assets/ports";
+import { createLogger } from "@/core/logging/logger";
 import type { VectorStore } from "@/core/vector/ports";
-import { createLogger } from "@/platform/observability/logger";
 
 const METADATA_TERM_NAMESPACE = "metadata_terms";
 const metadataTermLogger = createLogger("metadata_terms");

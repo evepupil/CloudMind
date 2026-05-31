@@ -1,6 +1,7 @@
 import type { AIProvider } from "@/core/ai/ports";
 import type { AssetIngestRepository } from "@/core/assets/ports";
 import type { BlobStore } from "@/core/blob/ports";
+import { createLogger } from "@/core/logging/logger";
 import type { JobQueue, JobQueueMessage } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { WebPageFetcher } from "@/core/web/ports";
@@ -15,7 +16,6 @@ import type {
   WorkflowTriggerType,
   WorkflowType,
 } from "@/features/workflows/model/types";
-import { createLogger } from "@/platform/observability/logger";
 
 export interface WorkflowServices {
   assetRepository: AssetIngestRepository;

@@ -1,16 +1,6 @@
+import type { LogFields, Logger, LogOptions } from "@/core/logging/ports";
+
 type LogLevel = "info" | "warn" | "error";
-
-type LogFields = Record<string, unknown>;
-
-interface LogOptions {
-  error?: unknown;
-}
-
-interface Logger {
-  info: (event: string, fields?: LogFields) => void;
-  warn: (event: string, fields?: LogFields, options?: LogOptions) => void;
-  error: (event: string, fields?: LogFields, options?: LogOptions) => void;
-}
 
 const APP_NAME = "cloudmind";
 
