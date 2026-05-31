@@ -269,7 +269,7 @@ const buildSemanticEvidence = (
     .map((match) => {
       const chunk = chunkMatchMap.get(match.id);
 
-      if (!chunk || !chunk.vectorId) {
+      if (!chunk?.vectorId) {
         return null;
       }
 

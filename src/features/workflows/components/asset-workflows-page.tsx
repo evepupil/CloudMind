@@ -66,7 +66,9 @@ const formatJsonPreview = (
 
   try {
     preview = JSON.stringify(JSON.parse(value), null, 2);
-  } catch {}
+  } catch {
+    // 不是合法 JSON，保持原始字符串用于预览
+  }
 
   if (preview.length <= limit) {
     return preview;

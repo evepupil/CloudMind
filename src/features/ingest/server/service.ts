@@ -427,7 +427,12 @@ export const createIngestService = (
                   }
                 ).catch(() => undefined);
               }
-            } catch {}
+            } catch (error) {
+              ingestLogger.warn("Fallback AI enrichment also failed", {
+                assetTitle: input.title,
+                error: String(error),
+              });
+            }
           }
         }
         const createdAsset = await repository.createTextAsset({

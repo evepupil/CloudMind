@@ -82,7 +82,11 @@ const parseStateJson = (value: string | null): Record<string, unknown> => {
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       return parsed as Record<string, unknown>;
     }
-  } catch {}
+  } catch (error) {
+    workflowLogger.warn("Failed to parse workflow state JSON", {
+      error: String(error),
+    });
+  }
 
   return {};
 };
@@ -440,7 +444,11 @@ export const parseWorkflowStepQueuePayload = (
         stepKey: payload.stepKey,
       };
     }
-  } catch {}
+  } catch (error) {
+    workflowLogger.warn("Failed to parse queue payload", {
+      error: String(error),
+    });
+  }
 
   return null;
 };
