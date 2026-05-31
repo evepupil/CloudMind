@@ -81,6 +81,7 @@ describe("WorkersAIProvider.generateText", () => {
     });
     expect(result).toEqual({
       text: "grounded answer [S1]",
+      provider: "workers_ai",
       model: "@cf/qwen/qwen3-30b-a3b-fp8",
     });
   });

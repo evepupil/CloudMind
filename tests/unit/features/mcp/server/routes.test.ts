@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssetNotFoundError } from "@/core/assets/errors";
+import type { McpTokenRepository } from "@/core/mcp-tokens/ports";
 import { WorkflowRunNotFoundError } from "@/core/workflows/errors";
 import type { AppEnv } from "@/env";
 import type { AssetDetail } from "@/features/assets/model/types";
@@ -13,6 +14,8 @@ import type { AskLibraryResult } from "@/features/chat/model/types";
 import * as chatService from "@/features/chat/server/service";
 import * as ingestService from "@/features/ingest/server/service";
 import { registerMcpRoutes } from "@/features/mcp/server/routes";
+import type { McpTokenRecord } from "@/features/mcp-tokens/model/types";
+import { hashMcpTokenValue } from "@/features/mcp-tokens/server/token-secret";
 import type { SearchResult } from "@/features/search/model/types";
 import * as searchService from "@/features/search/server/service";
 import * as termAssetService from "@/features/search/server/term-asset-service";
@@ -69,6 +72,59 @@ vi.mock("@/features/workflows/server/service", () => {
     listWorkflowRunsByAssetId: vi.fn(),
   };
 });
+
+vi.mock("@/platform/db/d1/repositories/get-mcp-token-repository", () => {
+  return {
+    getMcpTokenRepositoryFromBindings: vi.fn(async () => mcpTokenRepository),
+  };
+});
+
+const MCP_TEST_TOKEN = "cm_test_token";
+let mcpTokenRecord: McpTokenRecord;
+
+const mcpTokenRepository: McpTokenRepository = {
+  async listTokens() {
+    return [mcpTokenRecord];
+  },
+  async createToken() {
+    return mcpTokenRecord;
+  },
+  async findActiveTokenByHash(tokenHash) {
+    return tokenHash === mcpTokenRecord.tokenHash &&
+      mcpTokenRecord.revokedAt === null
+      ? mcpTokenRecord
+      : null;
+  },
+  async markTokenUsed(_id, usedAt) {
+    mcpTokenRecord = {
+      ...mcpTokenRecord,
+      lastUsedAt: usedAt,
+      updatedAt: usedAt,
+    };
+  },
+  async revokeToken() {
+    mcpTokenRecord = {
+      ...mcpTokenRecord,
+      revokedAt: "2026-03-20T00:10:00.000Z",
+      updatedAt: "2026-03-20T00:10:00.000Z",
+    };
+
+    return mcpTokenRecord;
+  },
+};
+
+const resetMcpTokenRecord = async () => {
+  mcpTokenRecord = {
+    id: "mcp-token-1",
+    name: "Test MCP token",
+    tokenValue: MCP_TEST_TOKEN,
+    tokenHash: await hashMcpTokenValue(MCP_TEST_TOKEN),
+    lastUsedAt: null,
+    revokedAt: null,
+    createdAt: "2026-03-20T00:00:00.000Z",
+    updatedAt: "2026-03-20T00:00:00.000Z",
+  };
+};
 
 const env = { APP_NAME: "cloudmind-test" };
 
@@ -636,10 +692,16 @@ const createAppFetch = (app: Hono<AppEnv>) => {
     input: Parameters<typeof fetch>[0] | URL,
     init?: RequestInit
   ): Promise<Response> => {
+    const headers = new Headers(init?.headers);
+
+    if (!headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${MCP_TEST_TOKEN}`);
+    }
+
     const request =
       input instanceof Request
-        ? new Request(input, init)
-        : new Request(input.toString(), init);
+        ? new Request(input, { ...init, headers })
+        : new Request(input.toString(), { ...init, headers });
 
     return Promise.resolve(app.fetch(request, env));
   };
@@ -687,7 +749,8 @@ describe("mcp routes", () => {
   let client: Client | null = null;
   let transport: StreamableHTTPClientTransport | null = null;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await resetMcpTokenRecord();
     vi.clearAllMocks();
   });
 

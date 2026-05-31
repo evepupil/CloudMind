@@ -35,15 +35,15 @@ export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => ({
         return normalizeContent(content);
       },
     },
-      summarize: {
-        getEnrichment: getTextAssetEnrichment,
-        generateTitle: true,
-      },
-      deriveDescriptor: {
-        createEnrichment: (context) =>
-          Promise.resolve(getTextAssetEnrichment(context.state)),
-      },
-      deriveFacets: {
+    summarize: {
+      getEnrichment: getTextAssetEnrichment,
+      generateTitle: true,
+    },
+    deriveDescriptor: {
+      createEnrichment: (context) =>
+        Promise.resolve(getTextAssetEnrichment(context.state)),
+    },
+    deriveFacets: {
       getEnrichment: getTextAssetEnrichment,
     },
   }),
