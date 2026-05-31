@@ -4,7 +4,6 @@ import type { VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
 import type { EvidenceItem } from "@/features/search/model/evidence";
-import { scoreAssetAssertionMatch } from "@/features/search/server/assertion-scoring";
 import {
   applyContextPolicyScore,
   getContextResultScope,
@@ -12,14 +11,10 @@ import {
 } from "@/features/search/server/context-policy";
 import {
   annotateEvidenceMatchReasons,
-  buildAssertionEvidenceItem,
-  buildChunkEvidenceItem,
   buildEvidencePacket,
   buildGroupedEvidence,
-  buildSummaryEvidenceItem,
   flattenGroupedEvidence,
 } from "@/features/search/server/evidence";
-import { scoreAssetSummaryMatch } from "@/features/search/server/summary-scoring";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
 import { createLogger } from "@/platform/observability/logger";
@@ -30,7 +25,18 @@ import type {
   AskLibraryResult,
   ChatSource,
 } from "../model/types";
+import {
+  CHAT_ALLOWED_AI_VISIBILITY,
+  type GroundingContext,
+  SOURCE_TYPE_PRIORITY,
+} from "./grounding";
 import { chatPromptRegistry } from "./prompts";
+import {
+  buildGroundingContexts,
+  compareGroundingContexts,
+  getAssertionGroundingContexts,
+  getSummaryGroundingContexts,
+} from "./retrieval";
 
 interface ChatServiceDependencies {
   getAssetRepository: (
@@ -58,14 +64,6 @@ const createFallbackAnswer = (): string => {
   );
 };
 
-const CHAT_ALLOWED_AI_VISIBILITY = ["allow"] as const;
-const CHAT_SUMMARY_ONLY_AI_VISIBILITY = ["summary_only"] as const;
-const SOURCE_TYPE_PRIORITY: Record<ChatSource["sourceType"], number> = {
-  chunk: 4,
-  assertion: 3,
-  term: 2,
-  summary: 1,
-};
 const MIN_RELATIVE_CONTEXT_SCORE_RATIO = 0.42;
 const MIN_SECONDARY_ASSET_SCORE_RATIO = 0.65;
 const MAX_CONTEXTS_PER_ASSET = 2;
@@ -148,8 +146,6 @@ const buildIndexingSummary = (
     ),
   };
 };
-
-type GroundingContext = EvidenceItem;
 
 const MIN_CONTEXT_TOKEN_LENGTH = 2;
 const MIN_CONTEXT_COVERAGE = 0.18;
@@ -346,139 +342,6 @@ const shouldRejectContextAnswer = (
   }
 
   return true;
-};
-
-const getSummaryGroundingContexts = async (
-  repository: AssetSearchRepository,
-  question: string,
-  limit: number,
-  contextPolicy?: ContextRetrievalPolicy
-): Promise<GroundingContext[]> => {
-  if (contextPolicy && !contextPolicy.includeSummaryOnly) {
-    return [];
-  }
-
-  const summaryMatches = await repository
-    .searchAssetSummaries({
-      query: question,
-      limit,
-      aiVisibility: [...CHAT_SUMMARY_ONLY_AI_VISIBILITY],
-    })
-    .catch(() => []);
-
-  return buildSummaryGroundingContexts(question, summaryMatches)
-    .map((context) => ({
-      ...context,
-      score: applyContextPolicyScore(
-        context.score,
-        context.asset,
-        contextPolicy
-      ),
-    }))
-    .map((context) =>
-      annotateEvidenceMatchReasons(context, {
-        profileBoosted: isProfileBoosted(context, contextPolicy),
-      })
-    )
-    .filter((context) =>
-      matchesContextPolicyAsset(context.asset, contextPolicy)
-    );
-};
-
-const getAssertionGroundingContexts = async (
-  repository: AssetSearchRepository,
-  question: string,
-  limit: number,
-  contextPolicy?: ContextRetrievalPolicy
-): Promise<GroundingContext[]> => {
-  if (!repository.searchAssetAssertions) {
-    return [];
-  }
-
-  const assertionMatches = await repository
-    .searchAssetAssertions({
-      query: question,
-      limit,
-      aiVisibility: [
-        ...CHAT_SUMMARY_ONLY_AI_VISIBILITY,
-        ...CHAT_ALLOWED_AI_VISIBILITY,
-      ],
-    })
-    .catch(() => []);
-
-  return assertionMatches
-    .map((match) =>
-      buildAssertionEvidenceItem(
-        match,
-        applyContextPolicyScore(
-          scoreAssetAssertionMatch(question, match),
-          match.asset,
-          contextPolicy
-        )
-      )
-    )
-    .map((context) =>
-      annotateEvidenceMatchReasons(context, {
-        profileBoosted: isProfileBoosted(context, contextPolicy),
-      })
-    )
-    .filter((context) =>
-      matchesContextPolicyAsset(context.asset, contextPolicy)
-    )
-    .sort((left, right) => right.score - left.score);
-};
-
-const buildGroundingContexts = (
-  vectorMatches: Awaited<ReturnType<VectorStore["search"]>>,
-  chunkMatches: Awaited<
-    ReturnType<AssetSearchRepository["getChunkMatchesByVectorIds"]>
-  >
-): GroundingContext[] => {
-  const chunkMatchMap = new Map(
-    chunkMatches
-      .filter((match) => match.vectorId)
-      .map((match) => [match.vectorId as string, match])
-  );
-
-  return vectorMatches.reduce<GroundingContext[]>((contexts, match) => {
-    const chunkMatch = chunkMatchMap.get(match.id);
-
-    if (!chunkMatch) {
-      return contexts;
-    }
-
-    contexts.push(buildChunkEvidenceItem(chunkMatch, match.score));
-
-    return contexts;
-  }, []);
-};
-
-const buildSummaryGroundingContexts = (
-  question: string,
-  summaryMatches: Awaited<
-    ReturnType<AssetSearchRepository["searchAssetSummaries"]>
-  >
-): GroundingContext[] => {
-  return summaryMatches
-    .map((match) =>
-      buildSummaryEvidenceItem(match, scoreAssetSummaryMatch(question, match))
-    )
-    .sort((left, right) => right.score - left.score);
-};
-
-const compareGroundingContexts = (
-  question: string,
-  left: GroundingContext,
-  right: GroundingContext
-): number => {
-  const rightSelectionScore = getContextSelectionScore(question, right);
-  const leftSelectionScore = getContextSelectionScore(question, left);
-
-  if (rightSelectionScore !== leftSelectionScore) {
-    return rightSelectionScore - leftSelectionScore;
-  }
-
-  return SOURCE_TYPE_PRIORITY[right.layer] - SOURCE_TYPE_PRIORITY[left.layer];
 };
 
 const normalizeComparableText = (value: string): string => {
@@ -764,10 +627,20 @@ const selectGroundingContexts = (
         group.assetScore +
         getContextQueryRelevance(question, group.primaryEvidence) * 0.18,
       items: [...group.items].sort((left, right) =>
-        compareGroundingContexts(question, left, right)
+        compareGroundingContexts(
+          question,
+          left,
+          right,
+          getContextSelectionScore
+        )
       ),
       primaryEvidence: [...group.items].sort((left, right) =>
-        compareGroundingContexts(question, left, right)
+        compareGroundingContexts(
+          question,
+          left,
+          right,
+          getContextSelectionScore
+        )
       )[0] as GroundingContext,
     }))
     .sort((left, right) => {
@@ -778,7 +651,8 @@ const selectGroundingContexts = (
       return compareGroundingContexts(
         question,
         left.primaryEvidence,
-        right.primaryEvidence
+        right.primaryEvidence,
+        getContextSelectionScore
       );
     });
   const sortedContexts = flattenGroupedEvidence(groupedContexts);
@@ -1013,7 +887,13 @@ export const createChatService = (
 
       if (!queryVector) {
         const lexicalContexts = [...assertionContexts, ...summaryContexts].sort(
-          (left, right) => compareGroundingContexts(question, left, right)
+          (left, right) =>
+            compareGroundingContexts(
+              question,
+              left,
+              right,
+              getContextSelectionScore
+            )
         );
         const selectedLexicalContexts = selectGroundingContexts(
           question,
@@ -1155,7 +1035,14 @@ export const createChatService = (
         ...groundingContexts,
         ...assertionContexts,
         ...summaryContexts,
-      ].sort((left, right) => compareGroundingContexts(question, left, right));
+      ].sort((left, right) =>
+        compareGroundingContexts(
+          question,
+          left,
+          right,
+          getContextSelectionScore
+        )
+      );
       const selectedGroundingContexts = selectGroundingContexts(
         question,
         allGroundingContexts,
