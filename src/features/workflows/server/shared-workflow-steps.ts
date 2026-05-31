@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { CreateAssetChunkInput } from "@/core/assets/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
 import type { TextAssetEnrichmentInput } from "@/features/ingest/model/enrichment";
@@ -27,6 +28,169 @@ import type {
 import { mergeDescriptorWithEnrichment } from "./text-enrichment";
 
 const logger = createLogger("workflow-steps");
+
+const assetTypeSchema = z.enum(["url", "pdf", "note", "image", "chat"]);
+const assetSourceKindSchema = z
+  .enum(["manual", "browser_extension", "upload", "mcp", "import"])
+  .nullable();
+const assetDomainSchema = z.enum([
+  "engineering",
+  "product",
+  "research",
+  "personal",
+  "finance",
+  "health",
+  "archive",
+  "general",
+]);
+const assetDocumentClassSchema = z.enum([
+  "reference_doc",
+  "design_doc",
+  "bug_note",
+  "paper",
+  "journal_entry",
+  "meeting_note",
+  "spec",
+  "howto",
+  "general_note",
+]);
+const assetSensitivitySchema = z.enum([
+  "public",
+  "internal",
+  "private",
+  "restricted",
+]);
+const assetAiVisibilitySchema = z.enum(["allow", "summary_only", "deny"]);
+
+const assetDescriptorSchema = z.object({
+  version: z.literal(2),
+  strategy: z.literal("heuristic_v2"),
+  assetType: assetTypeSchema,
+  sourceKind: assetSourceKindSchema,
+  domain: assetDomainSchema,
+  documentClass: assetDocumentClassSchema,
+  topics: z.array(z.string()),
+  tags: z.array(z.string()),
+  collectionKey: z.string().nullable(),
+  capturedAt: z.string().nullable(),
+  sourceHost: z.string().nullable(),
+  language: z.string().nullable(),
+  mimeType: z.string().nullable(),
+  signals: z.array(z.string()),
+}) satisfies z.ZodType<AssetDescriptor>;
+
+const assetAccessPolicySchema = z.object({
+  version: z.literal(1),
+  strategy: z.literal("heuristic_v1"),
+  sensitivity: assetSensitivitySchema,
+  aiVisibility: assetAiVisibilitySchema,
+  retrievalPriority: z.number(),
+  reasons: z.array(z.string()),
+}) satisfies z.ZodType<AssetAccessPolicy>;
+
+const preparedChunkSchema = z.object({
+  chunkIndex: z.number().int().nonnegative(),
+  text: z.string(),
+  textPreview: z.string(),
+}) satisfies z.ZodType<PreparedChunk>;
+
+const persistedContentSchema = z.object({
+  contentText: z.string(),
+  contentR2Key: z.string(),
+  chunks: z.array(preparedChunkSchema),
+});
+
+const embeddingsSchema = z.array(z.array(z.number()));
+
+const indexedChunkSchema = z
+  .object({
+    chunkIndex: z.number().int().nonnegative(),
+    textPreview: z.string(),
+    contentText: z.string(),
+    vectorId: z.string().nullable().optional(),
+  })
+  .transform((chunk): CreateAssetChunkInput => {
+    if (chunk.vectorId === undefined) {
+      return {
+        chunkIndex: chunk.chunkIndex,
+        textPreview: chunk.textPreview,
+        contentText: chunk.contentText,
+      };
+    }
+
+    return {
+      chunkIndex: chunk.chunkIndex,
+      textPreview: chunk.textPreview,
+      contentText: chunk.contentText,
+      vectorId: chunk.vectorId,
+    };
+  });
+
+const validateWorkflowState = <T>(
+  field: string,
+  schema: z.ZodType<T>,
+  value: unknown
+): T => {
+  const parsed = schema.safeParse(value);
+
+  if (!parsed.success) {
+    logger.warn("Invalid workflow state field", {
+      field,
+      issues: parsed.error.issues.map((issue) => ({
+        path: issue.path.join("."),
+        message: issue.message,
+      })),
+    });
+
+    throw new Error(`Workflow state field "${field}" is invalid.`);
+  }
+
+  return parsed.data;
+};
+
+const readDescriptor = (state: Record<string, unknown>): AssetDescriptor => {
+  return validateWorkflowState(
+    "descriptor",
+    assetDescriptorSchema,
+    state.descriptor
+  );
+};
+
+const readAccessPolicy = (
+  state: Record<string, unknown>
+): AssetAccessPolicy => {
+  return validateWorkflowState(
+    "accessPolicy",
+    assetAccessPolicySchema,
+    state.accessPolicy
+  );
+};
+
+const readPersistedContent = (state: Record<string, unknown>) => {
+  return validateWorkflowState(
+    "persistedContent",
+    persistedContentSchema,
+    state.persistedContent
+  );
+};
+
+const readEmbeddings = (state: Record<string, unknown>): number[][] => {
+  return validateWorkflowState(
+    "embeddings",
+    embeddingsSchema,
+    state.embeddings
+  );
+};
+
+const readIndexedChunks = (
+  state: Record<string, unknown>
+): CreateAssetChunkInput[] => {
+  return validateWorkflowState(
+    "indexedChunks",
+    z.array(indexedChunkSchema),
+    state.indexedChunks
+  );
+};
 
 // clean_content — 参数化内容来源获取
 export const createCleanContentStep = (options: {
@@ -191,13 +355,9 @@ export const createDeriveAccessPolicyStep = (): WorkflowStepDefinition => ({
   key: "derive_access_policy",
   type: "derive_access_policy",
   execute: async (context) => {
-    const descriptor = context.state.descriptor;
     const summary = context.state.summary;
     const normalizedContent = context.state.normalizedContent;
-
-    if (!descriptor || typeof descriptor !== "object") {
-      throw new Error("Workflow state is missing descriptor.");
-    }
+    const descriptor = readDescriptor(context.state);
 
     const derived = deriveAccessPolicy(
       {
@@ -206,7 +366,7 @@ export const createDeriveAccessPolicyStep = (): WorkflowStepDefinition => ({
           typeof normalizedContent === "string" ? normalizedContent : null,
         summary: typeof summary === "string" ? summary : null,
       },
-      descriptor as AssetDescriptor
+      descriptor
     );
 
     await context.services.assetRepository.updateAssetIndexing(
@@ -244,23 +404,11 @@ export const createDeriveFacetsStep = (options?: {
   key: "derive_facets",
   type: "derive_facets",
   execute: async (context) => {
-    const descriptor = context.state.descriptor;
-    const accessPolicy = context.state.accessPolicy;
+    const descriptor = readDescriptor(context.state);
+    const accessPolicy = readAccessPolicy(context.state);
     const enrichment = options?.getEnrichment?.(context.state);
 
-    if (!descriptor || typeof descriptor !== "object") {
-      throw new Error("Workflow state is missing descriptor.");
-    }
-
-    if (!accessPolicy || typeof accessPolicy !== "object") {
-      throw new Error("Workflow state is missing access policy.");
-    }
-
-    const facets = deriveFacets(
-      descriptor as AssetDescriptor,
-      accessPolicy as AssetAccessPolicy,
-      enrichment?.facets
-    );
+    const facets = deriveFacets(descriptor, accessPolicy, enrichment?.facets);
 
     await context.services.assetRepository.replaceAssetFacets?.(
       context.asset.id,
@@ -354,16 +502,7 @@ export const createChunkStep = (): WorkflowStepDefinition => ({
   key: "chunk",
   type: "chunk",
   execute: (context) => {
-    const persistedContent = context.state.persistedContent;
-
-    if (
-      !persistedContent ||
-      typeof persistedContent !== "object" ||
-      !("chunks" in persistedContent) ||
-      !Array.isArray(persistedContent.chunks)
-    ) {
-      throw new Error("Workflow state is missing persisted content.");
-    }
+    const persistedContent = readPersistedContent(context.state);
 
     return {
       output: { chunkCount: persistedContent.chunks.length },
@@ -376,20 +515,11 @@ export const createEmbedStep = (): WorkflowStepDefinition => ({
   key: "embed",
   type: "embed",
   execute: async (context) => {
-    const persistedContent = context.state.persistedContent;
-
-    if (
-      !persistedContent ||
-      typeof persistedContent !== "object" ||
-      !("chunks" in persistedContent) ||
-      !Array.isArray(persistedContent.chunks)
-    ) {
-      throw new Error("Workflow state is missing persisted content.");
-    }
+    const persistedContent = readPersistedContent(context.state);
 
     const embeddings = await createChunkEmbeddings(
       context.services.aiProvider,
-      persistedContent.chunks as PreparedChunk[]
+      persistedContent.chunks
     );
 
     return {
@@ -407,27 +537,14 @@ export const createIndexStep = (): WorkflowStepDefinition => ({
   key: "index",
   type: "index",
   execute: async (context) => {
-    const persistedContent = context.state.persistedContent;
-    const embeddings = context.state.embeddings;
-
-    if (
-      !persistedContent ||
-      typeof persistedContent !== "object" ||
-      !("chunks" in persistedContent) ||
-      !Array.isArray(persistedContent.chunks)
-    ) {
-      throw new Error("Workflow state is missing persisted content.");
-    }
-
-    if (!Array.isArray(embeddings)) {
-      throw new Error("Workflow state is missing embeddings.");
-    }
+    const persistedContent = readPersistedContent(context.state);
+    const embeddings = readEmbeddings(context.state);
 
     const indexedChunks = await indexPreparedChunks(
       context.services.vectorStore,
       context.asset,
-      persistedContent.chunks as PreparedChunk[],
-      embeddings as number[][]
+      persistedContent.chunks,
+      embeddings
     );
 
     return {
@@ -446,21 +563,13 @@ export const createFinalizeStep = (options?: {
   type: "finalize",
   execute: async (context) => {
     const summary = context.state.summary;
-    const persistedContent = context.state.persistedContent;
-    const indexedChunks = context.state.indexedChunks;
 
     if (typeof summary !== "string") {
       throw new Error("Workflow state is missing summary.");
     }
 
-    if (
-      !persistedContent ||
-      typeof persistedContent !== "object" ||
-      !("contentText" in persistedContent) ||
-      !("contentR2Key" in persistedContent)
-    ) {
-      throw new Error("Workflow state is missing persisted content.");
-    }
+    const persistedContent = readPersistedContent(context.state);
+    const indexedChunks = readIndexedChunks(context.state);
 
     const rawR2Key = options?.getRawR2Key?.(context.state) ?? null;
 
@@ -469,21 +578,13 @@ export const createFinalizeStep = (options?: {
       {
         summary,
         rawR2Key,
-        contentText:
-          typeof persistedContent.contentText === "string"
-            ? persistedContent.contentText
-            : null,
-        contentR2Key:
-          typeof persistedContent.contentR2Key === "string"
-            ? persistedContent.contentR2Key
-            : null,
+        contentText: persistedContent.contentText,
+        contentR2Key: persistedContent.contentR2Key,
       }
     );
     await context.services.assetRepository.replaceAssetChunks(
       context.asset.id,
-      Array.isArray(indexedChunks)
-        ? (indexedChunks as CreateAssetChunkInput[])
-        : []
+      indexedChunks
     );
 
     if (options?.afterFinalize) {
