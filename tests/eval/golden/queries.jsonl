@@ -1,0 +1,20 @@
+{"query":"serverless sqlite database on cloudflare","lang":"en","expectedAssetIds":["cf-d1"]}
+{"query":"vector index with native metadata filtering","lang":"en","expectedAssetIds":["cf-vectorize"]}
+{"query":"object storage with no egress fees s3 compatible","lang":"en","expectedAssetIds":["cf-r2"]}
+{"query":"what is retrieval augmented generation","lang":"en","expectedAssetIds":["rag-basics"]}
+{"query":"multilingual embedding model dimensions","lang":"en","expectedAssetIds":["bge-m3"]}
+{"query":"stateless model context protocol server tools","lang":"en","expectedAssetIds":["mcp-server"]}
+{"query":"combine ranked lists hybrid search","lang":"en","expectedAssetIds":["rrf-fusion"]}
+{"query":"typescript strict compiler options","lang":"en","expectedAssetIds":["ts-strict"]}
+{"query":"ai memory layer knowledge graph write path","lang":"en","expectedAssetIds":["memory-layer"],"note":"structure: relevant passage spans one chunk"}
+{"query":"async queue consumer batch retry","lang":"en","expectedAssetIds":["cf-queues"]}
+{"query":"cross encoder reranker relevance scoring","lang":"en","expectedAssetIds":["reranker"]}
+{"query":"cloudflare database and vector index","lang":"en","expectedAssetIds":["cf-d1","cf-vectorize"],"note":"multi-relevant"}
+{"query":"向量检索 余弦相似度 语义搜索","lang":"zh","expectedAssetIds":["zh-vector"]}
+{"query":"个人记忆层 知识图谱 私有部署","lang":"zh","expectedAssetIds":["zh-memory"]}
+{"query":"手冲咖啡 粉水比 水温","lang":"zh","expectedAssetIds":["zh-coffee"]}
+{"query":"力量训练 深蹲 蛋白质","lang":"zh","expectedAssetIds":["zh-fitness"]}
+{"query":"嵌入模型 语义召回","lang":"zh","expectedAssetIds":["zh-vector"],"note":"cjk"}
+{"query":"记忆 遗忘 整合 写路径","lang":"zh","expectedAssetIds":["zh-memory"],"note":"cjk"}
+{"query":"多语言 嵌入模型 中文","lang":"zh","expectedAssetIds":["zh-vector"],"note":"cjk multilingual"}
+{"query":"知识图谱 实体 关系","lang":"zh","expectedAssetIds":["zh-memory"],"note":"cjk graph"}

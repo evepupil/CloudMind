@@ -71,7 +71,7 @@
 
 ### 任务
 
-- [ ] **P1-T0 · Eval harness scaffold: golden query set + metrics runner (measure-before-change)** — `M` · 依赖: —
+- [x] **P1-T0 · Eval harness scaffold: golden query set + metrics runner (measure-before-change)** — `M` · 依赖: — ✅ 2026-06-05（基线 Recall@10=1.0000 MRR=0.9750 nDCG@10=0.9815 MAP=0.9750）
   - **为什么**：ADR-002 makes retrieval the承重墙; 'better' must be falsifiable before we touch ranking. Building the harness first (against the CURRENT pipeline) gives a baseline so every later task reports a delta instead of a vibe. Runs offline against the search service with mock AIProvider/VectorStore or a seeded local D1 so it has no Cloudflare dependency in CI.
   - **改动**：
     - tests/eval/golden/queries.jsonl — new: golden set of {query, lang(en|zh), expectedAssetIds[], note} covering CJK queries, multi-term, structure-sensitive (heading/list) cases, and the assertion-vs-chunk dimension-mismatch case from the doc

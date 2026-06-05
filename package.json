@@ -14,6 +14,7 @@
     "deploy:one-click": "node scripts/one-click-deploy.mjs",
     "db:generate": "drizzle-kit generate",
     "test": "vitest run",
+    "eval": "vitest run tests/eval",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
