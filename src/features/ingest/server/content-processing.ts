@@ -5,7 +5,7 @@ import type { BlobStore } from "@/core/blob/ports";
 import { createLogger } from "@/core/logging/logger";
 import { createChunkVectorId } from "@/core/vector/keys";
 import type { VectorStore } from "@/core/vector/ports";
-import type { AssetDetail } from "@/features/assets/model/types";
+import type { AssetDetail, AssetType } from "@/features/assets/model/types";
 
 import { buildAIInvocationFields } from "./ai-observability";
 import { chunkAssetContent } from "./chunking";
@@ -22,6 +22,17 @@ const ingestAiLogger = createLogger("ingest_ai");
 
 export const normalizeContent = (content: string): string => {
   return content.replace(/\s+/g, " ").trim();
+};
+
+// 这里在切块前做结构保留清洗：压平行内空白，但保留换行/段落/标题/列表标记，
+// 让结构感知切块能按真实边界断开（取代旧的 normalizeContent 把结构整体压平）。
+export const cleanContentPreservingStructure = (content: string): string => {
+  return content
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ *\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 };
 
 export const createTextSummary = (content: string): string => {
@@ -174,7 +185,8 @@ export const createContentPreview = (content: string): string => {
 export const persistProcessedContent = async (
   blobStore: BlobStore,
   assetId: string,
-  content: string
+  content: string,
+  assetType?: AssetType
 ): Promise<{
   contentText: string;
   contentR2Key: string;
@@ -187,7 +199,7 @@ export const persistProcessedContent = async (
   }
 
   const contentR2Key = createProcessedContentBlobKey(assetId, "txt");
-  const chunks = chunkAssetContent(normalizedContent);
+  const chunks = chunkAssetContent(normalizedContent, { assetType });
 
   await blobStore.put({
     key: contentR2Key,

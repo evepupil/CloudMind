@@ -4,11 +4,11 @@ import { createLogger } from "@/core/logging/logger";
 import type { AssetDetail } from "@/features/assets/model/types";
 import type { TextAssetEnrichmentInput } from "@/features/ingest/model/enrichment";
 import {
+  cleanContentPreservingStructure,
   createChunkEmbeddings,
   generateAssetSummary,
   generateAssetTitle,
   indexPreparedChunks,
-  normalizeContent,
   type PreparedChunk,
   persistProcessedContent,
 } from "@/features/ingest/server/content-processing";
@@ -205,7 +205,7 @@ export const createCleanContentStep = (options: {
       throw new Error("Asset content is empty and cannot be processed.");
     }
 
-    const normalizedContent = normalizeContent(content);
+    const normalizedContent = cleanContentPreservingStructure(content);
 
     if (!normalizedContent) {
       throw new Error("Fetched page content is empty after cleaning.");
@@ -473,7 +473,8 @@ export const createPersistContentStep = (options?: {
     const persistedContent = await persistProcessedContent(
       context.services.blobStore,
       context.asset.id,
-      normalizedContent
+      normalizedContent,
+      context.asset.type
     );
 
     const extra = options?.buildExtraMetadata?.(context.state) ?? {};

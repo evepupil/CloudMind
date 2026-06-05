@@ -85,7 +85,7 @@
     - Golden set has >=20 queries including >=6 CJK queries and >=3 that target heading/list structure
     - Harness consumes the existing SearchServiceDependencies injection seam (no production code import cycles)
 
-- [ ] **P1-T1 · Stop whitespace-collapse before chunking; structural/token-aware chunker per asset type** — `M` · 依赖: P1-T0
+- [x] **P1-T1 · Stop whitespace-collapse before chunking; structural/token-aware chunker per asset type** — `M` · 依赖: P1-T0 ✅ 2026-06-05（结构保留清洗 + token 感知切块；7 个单元测试；eval 基线无回归。注：eval 跑预切块语料，切块质量由单元测试验证）
   - **为什么**：content-processing.ts normalizeContent and chunking.ts normalizeChunkText both run /\s+/ → ' ', flattening paragraphs/headings so chunking.ts findChunkBoundary's \n branch is dead code and chunks break mid-sentence (doc §2 first 🔴). shared-workflow-steps.ts createCleanContentStep also calls normalizeContent on raw content. Preserve structure; split per asset type (markdown/heading-aware for note/pdf text, list/line-aware) with token-budgeted windows + overlap.
   - **改动**：
     - src/features/ingest/server/content-processing.ts — split normalizeContent into a structure-preserving cleaner (collapse intra-line runs of spaces/tabs but KEEP newlines, paragraph breaks, list markers) used before chunking; keep a separate flatten() only for summary/preview generation (createTextSummary/createContentPreview)

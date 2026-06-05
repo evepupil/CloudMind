@@ -9,7 +9,6 @@ import {
   type TextAssetEnrichmentInput,
   textAssetEnrichmentSchema,
 } from "@/features/ingest/model/enrichment";
-import { normalizeContent } from "@/features/ingest/server/content-processing";
 import { enqueueWorkflow, type WorkflowDefinition } from "./runtime";
 import { buildSharedIngestSteps } from "./shared-workflow-steps";
 
@@ -32,7 +31,8 @@ export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => ({
           throw new Error("Asset content is empty and cannot be processed.");
         }
 
-        return normalizeContent(content);
+        // 这里保留原始换行结构，交由 clean_content 的结构保留清洗处理，避免切块前丢失段落/标题。
+        return content;
       },
     },
     summarize: {
