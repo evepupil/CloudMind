@@ -67,6 +67,8 @@ export const extractGeneratedText = (output: unknown): string => {
 export class WorkersAIProvider implements AIProvider {
   private readonly ai: Ai;
 
+  public readonly embeddingModel = EMBEDDING_MODEL;
+
   public constructor(ai: Ai) {
     this.ai = ai;
   }

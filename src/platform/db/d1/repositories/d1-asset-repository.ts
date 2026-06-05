@@ -805,6 +805,9 @@ export class D1AssetRepository implements AssetRepository {
       textPreview: chunk.textPreview,
       contentText: chunk.contentText,
       vectorId: chunk.vectorId ?? null,
+      contentHash: chunk.contentHash ?? null,
+      embeddingModel: chunk.embeddingModel ?? null,
+      embeddingDim: chunk.embeddingDim ?? null,
       createdAt: now,
       updatedAt: now,
     }));

@@ -114,6 +114,7 @@ describe("shared workflow steps", () => {
             chunkIndex: 0,
             text: "Chunk text",
             textPreview: "Chunk text",
+            contentHash: "hash",
           },
         ],
       },

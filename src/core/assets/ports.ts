@@ -74,6 +74,9 @@ export interface CreateAssetChunkInput {
   textPreview: string;
   contentText: string;
   vectorId?: string | null;
+  contentHash?: string | null | undefined;
+  embeddingModel?: string | null | undefined;
+  embeddingDim?: number | null | undefined;
 }
 
 export interface CreateAssetFacetInput {

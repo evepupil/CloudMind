@@ -4,13 +4,15 @@ import { createLogger } from "@/core/logging/logger";
 import type { AssetDetail } from "@/features/assets/model/types";
 import type { TextAssetEnrichmentInput } from "@/features/ingest/model/enrichment";
 import {
+  type ChunkEmbeddingPlanItem,
   cleanContentPreservingStructure,
   createChunkEmbeddings,
   generateAssetSummary,
   generateAssetTitle,
-  indexPreparedChunks,
+  indexPlannedChunks,
   type PreparedChunk,
   persistProcessedContent,
+  planChunkEmbeddings,
 } from "@/features/ingest/server/content-processing";
 import { upsertMetadataTermVectors } from "@/features/ingest/server/metadata-terms";
 import { deriveAssertionsWithAIFallback } from "./assertion-extraction";
@@ -92,6 +94,7 @@ const preparedChunkSchema = z.object({
   chunkIndex: z.number().int().nonnegative(),
   text: z.string(),
   textPreview: z.string(),
+  contentHash: z.string(),
 }) satisfies z.ZodType<PreparedChunk>;
 
 const persistedContentSchema = z.object({
@@ -102,28 +105,39 @@ const persistedContentSchema = z.object({
 
 const embeddingsSchema = z.array(z.array(z.number()));
 
+const chunkPlanItemSchema = z.object({
+  chunkIndex: z.number().int().nonnegative(),
+  text: z.string(),
+  textPreview: z.string(),
+  contentHash: z.string(),
+  reusedVectorId: z.string().nullable(),
+}) satisfies z.ZodType<ChunkEmbeddingPlanItem>;
+
 const indexedChunkSchema = z
   .object({
     chunkIndex: z.number().int().nonnegative(),
     textPreview: z.string(),
     contentText: z.string(),
     vectorId: z.string().nullable().optional(),
+    contentHash: z.string().nullable().optional(),
+    embeddingModel: z.string().nullable().optional(),
+    embeddingDim: z.number().nullable().optional(),
   })
   .transform((chunk): CreateAssetChunkInput => {
-    if (chunk.vectorId === undefined) {
-      return {
-        chunkIndex: chunk.chunkIndex,
-        textPreview: chunk.textPreview,
-        contentText: chunk.contentText,
-      };
-    }
-
-    return {
+    const result: CreateAssetChunkInput = {
       chunkIndex: chunk.chunkIndex,
       textPreview: chunk.textPreview,
       contentText: chunk.contentText,
-      vectorId: chunk.vectorId,
+      contentHash: chunk.contentHash ?? null,
+      embeddingModel: chunk.embeddingModel ?? null,
+      embeddingDim: chunk.embeddingDim ?? null,
     };
+
+    if (chunk.vectorId !== undefined) {
+      result.vectorId = chunk.vectorId;
+    }
+
+    return result;
   });
 
 const validateWorkflowState = <T>(
@@ -179,6 +193,16 @@ const readEmbeddings = (state: Record<string, unknown>): number[][] => {
     "embeddings",
     embeddingsSchema,
     state.embeddings
+  );
+};
+
+const readChunkPlan = (
+  state: Record<string, unknown>
+): ChunkEmbeddingPlanItem[] => {
+  return validateWorkflowState(
+    "chunkPlan",
+    z.array(chunkPlanItemSchema),
+    state.chunkPlan
   );
 };
 
@@ -517,18 +541,24 @@ export const createEmbedStep = (): WorkflowStepDefinition => ({
   type: "embed",
   execute: async (context) => {
     const persistedContent = readPersistedContent(context.state);
-
+    const chunkPlan = planChunkEmbeddings(
+      persistedContent.chunks,
+      context.asset.chunks,
+      context.services.aiProvider.embeddingModel
+    );
+    const toEmbed = chunkPlan.filter((item) => item.reusedVectorId === null);
     const embeddings = await createChunkEmbeddings(
       context.services.aiProvider,
-      persistedContent.chunks
+      toEmbed
     );
 
     return {
       output: {
         embeddingCount: embeddings.length,
+        reusedCount: chunkPlan.length - toEmbed.length,
         dimensions: embeddings[0]?.length ?? 0,
       },
-      state: { embeddings },
+      state: { chunkPlan, embeddings },
     };
   },
 });
@@ -538,14 +568,15 @@ export const createIndexStep = (): WorkflowStepDefinition => ({
   key: "index",
   type: "index",
   execute: async (context) => {
-    const persistedContent = readPersistedContent(context.state);
+    const chunkPlan = readChunkPlan(context.state);
     const embeddings = readEmbeddings(context.state);
 
-    const indexedChunks = await indexPreparedChunks(
+    const indexedChunks = await indexPlannedChunks(
       context.services.vectorStore,
       context.asset,
-      persistedContent.chunks,
-      embeddings
+      chunkPlan,
+      embeddings,
+      context.services.aiProvider.embeddingModel
     );
 
     return {

@@ -137,6 +137,9 @@ export const mapChunkSummary = (
     textPreview: record.textPreview,
     contentText: record.contentText,
     vectorId: record.vectorId,
+    contentHash: record.contentHash,
+    embeddingModel: record.embeddingModel,
+    embeddingDim: record.embeddingDim,
   };
 };
 

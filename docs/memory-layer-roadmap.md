@@ -110,7 +110,7 @@
     - createEmbeddings still returns dimensions and handles empty input as before
     - search/server/service.ts (purpose:'query') and content-processing.ts createChunkEmbeddings (purpose:'document') and metadata-terms.ts paths get the correct asymmetric treatment with no call-site change
 
-- [ ] **P1-T3 · chunks: embedding_model + embedding_dim + content_hash columns for incremental re-embed & migratability** — `M` · 依赖: P1-T2
+- [x] **P1-T3 · chunks: embedding_model + embedding_dim + content_hash columns for incremental re-embed & migratability** — `M` · 依赖: P1-T2 ✅ 2026-06-05（迁移 0010 已应用本地 D1；planChunkEmbeddings 按 hash+model 跳过重嵌、indexPlannedChunks 只 upsert 变化项；AIProvider.embeddingModel；14 个单元测试）
   - **为什么**：asset_chunks (schema/asset-chunks.ts) stores no embedding model/dim or content hash, so we can't tell which chunks are stale when the model/prefix changes (P1-T2) and can't do incremental re-embed — today reprocessing re-embeds everything. Adding embeddingModel/embeddingDim/contentHash lets us skip unchanged chunks (idempotent by content_hash, mirrors doc §7 step-5 '按 content_hash 幂等去重') and detect dimension drift. Per ADR-003 this is a fresh-rebuild migration, not a backfill script.
   - **改动**：
     - src/platform/db/d1/schema/asset-chunks.ts — add embeddingModel text, embeddingDim integer, contentHash text columns + index on (assetId, contentHash)

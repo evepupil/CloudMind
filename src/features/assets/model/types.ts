@@ -159,6 +159,9 @@ export interface AssetChunkSummary {
   textPreview: string;
   contentText?: string | null;
   vectorId: string | null;
+  contentHash?: string | null | undefined;
+  embeddingModel?: string | null | undefined;
+  embeddingDim?: number | null | undefined;
 }
 
 export interface AssetChunkMatch extends AssetChunkSummary {
