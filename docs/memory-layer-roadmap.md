@@ -99,7 +99,7 @@
     - Chunk windows respect an approximate token budget with sentence-safe overlap; empty/whitespace-only input still returns []
     - Eval (P1-T0) Recall@k for the >=3 structure-targeting golden queries improves vs baseline
 
-- [ ] **P1-T2 · bge-m3 query/passage instruction prefix (fix the no-op purpose flag)** — `S` · 依赖: P1-T0
+- [x] **P1-T2 · bge-m3 query/passage instruction prefix (fix the no-op purpose flag)** — `S` · 依赖: P1-T0 ✅ 2026-06-05（query 加指令前缀、passage 不变=无需重嵌；3 个 createEmbeddings 测试）
   - **为什么**：workers-ai-provider.ts createEmbeddings branches on input.purpose but both branches are identical (line 111: query→texts, else→texts.slice()) — the purpose flag is a no-op (doc §2 platform-facts row). bge-m3 benefits from asymmetric query vs passage instruction prefixes. Apply the prefix in the provider per purpose. This changes passage embeddings, so it must land WITH the re-embed (P1-T3) to avoid embedding twice (roadmap: P1 re-embed precedes P2).
   - **改动**：
     - src/platform/ai/workers-ai/workers-ai-provider.ts — apply distinct query vs passage instruction prefix to each text based on input.purpose before this.ai.run(EMBEDDING_MODEL,...); centralize the prefix strings as constants

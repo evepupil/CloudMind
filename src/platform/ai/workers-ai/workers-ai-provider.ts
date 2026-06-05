@@ -10,6 +10,11 @@ const EMBEDDING_MODEL = "@cf/baai/bge-m3";
 const TEXT_GENERATION_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
 const PROVIDER_NAME = "workers_ai";
 
+// bge-m3 支持非对称检索：给 query 加指令前缀、passage 不加。
+// 这样既启用了之前形同虚设的 purpose 标志，又保持 passage 向量不变（无需重嵌语料）。
+const QUERY_EMBEDDING_INSTRUCTION =
+  "Represent this query for retrieving relevant documents: ";
+
 interface WorkersAITextGenerationChoice {
   message?:
     | {
@@ -108,7 +113,10 @@ export class WorkersAIProvider implements AIProvider {
       };
     }
 
-    const texts = input.purpose === "query" ? input.texts : input.texts.slice();
+    const texts =
+      input.purpose === "query"
+        ? input.texts.map((text) => `${QUERY_EMBEDDING_INSTRUCTION}${text}`)
+        : input.texts.slice();
     const output = (await this.ai.run(EMBEDDING_MODEL, {
       text: texts,
       truncate_inputs: true,

@@ -86,3 +86,50 @@ describe("WorkersAIProvider.generateText", () => {
     });
   });
 });
+
+describe("WorkersAIProvider.createEmbeddings", () => {
+  it("prepends a query instruction to query texts (asymmetric retrieval)", async () => {
+    const runMock = vi.fn(async (_model: string, _input: unknown) => ({
+      data: [[0.1, 0.2]],
+      shape: [1, 2],
+    }));
+    const provider = new WorkersAIProvider({ run: runMock } as unknown as Ai);
+
+    await provider.createEmbeddings({
+      texts: ["hybrid search"],
+      purpose: "query",
+    });
+
+    const call = runMock.mock.calls[0];
+    expect(call?.[0]).toBe("@cf/baai/bge-m3");
+    const args = call?.[1] as { text: string[] } | undefined;
+    expect(args?.text[0]).not.toBe("hybrid search");
+    expect(args?.text[0]?.endsWith("hybrid search")).toBe(true);
+  });
+
+  it("leaves document texts unprefixed so existing passage vectors stay valid", async () => {
+    const runMock = vi.fn(async (_model: string, _input: unknown) => ({
+      data: [[0.1, 0.2]],
+      shape: [1, 2],
+    }));
+    const provider = new WorkersAIProvider({ run: runMock } as unknown as Ai);
+
+    await provider.createEmbeddings({
+      texts: ["a stored passage"],
+      purpose: "document",
+    });
+
+    const args = runMock.mock.calls[0]?.[1] as { text: string[] } | undefined;
+    expect(args?.text).toEqual(["a stored passage"]);
+  });
+
+  it("returns empty without calling the model for empty input", async () => {
+    const runMock = vi.fn();
+    const provider = new WorkersAIProvider({ run: runMock } as unknown as Ai);
+
+    const result = await provider.createEmbeddings({ texts: [] });
+
+    expect(result.embeddings).toEqual([]);
+    expect(runMock).not.toHaveBeenCalled();
+  });
+});
