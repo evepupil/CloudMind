@@ -5,10 +5,30 @@ export interface VectorRecord {
   metadataJson?: string | undefined;
 }
 
+// 这里描述 Vectorize 原生 metadata 过滤条件（在 ANN topK 之前生效），
+// 标量等价于 $eq；对象形式支持 $eq/$ne/$in/$nin 与范围比较。
+export type VectorFilterCondition =
+  | string
+  | number
+  | boolean
+  | {
+      $eq?: string | number | boolean;
+      $ne?: string | number | boolean;
+      $in?: Array<string | number>;
+      $nin?: Array<string | number>;
+      $gt?: string | number;
+      $gte?: string | number;
+      $lt?: string | number;
+      $lte?: string | number;
+    };
+
+export type VectorMetadataFilter = Record<string, VectorFilterCondition>;
+
 export interface VectorSearchInput {
   values: number[];
   topK: number;
   namespace?: string | undefined;
+  filter?: VectorMetadataFilter | undefined;
 }
 
 export interface VectorSearchMatch {

@@ -68,6 +68,11 @@ export class VectorizeStore implements VectorStore {
       options.namespace = input.namespace;
     }
 
+    if (input.filter) {
+      // 这里把统一过滤条件下推给 Vectorize 原生 metadata 过滤（topK 之前生效）。
+      options.filter = input.filter as unknown as VectorizeVectorMetadataFilter;
+    }
+
     const result = await this.index.query(input.values, options);
 
     return result.matches.map((match) => ({

@@ -193,26 +193,6 @@ class FixedVectorStore implements VectorStore {
   }
 }
 
-class TrackedVectorStore implements VectorStore {
-  public readonly requestedTopKs: number[] = [];
-
-  public constructor(private readonly matches: VectorSearchMatch[]) {}
-
-  public async upsert(): Promise<void> {
-    return undefined;
-  }
-
-  public async search(input: VectorSearchInput): Promise<VectorSearchMatch[]> {
-    this.requestedTopKs.push(input.topK);
-
-    return this.matches.slice(0, input.topK);
-  }
-
-  public async deleteByIds(): Promise<void> {
-    return undefined;
-  }
-}
-
 class MixedDomainSearchRepository implements AssetSearchRepository {
   public async searchAssets(
     _input: AssetSearchInput
@@ -607,6 +587,10 @@ describe("search service", () => {
     expect(vectorSearchSpy).toHaveBeenCalledWith({
       values: [0.11, 0.22, 0.33],
       topK: 2,
+      filter: {
+        aiVisibility: { $eq: "allow" },
+        scopeId: { $eq: "default" },
+      },
     });
     expect(repository.summaryQueries).toEqual([
       {
@@ -1246,22 +1230,18 @@ describe("search service", () => {
     expect(result.groupedEvidence[0]?.primaryEvidence.layer).toBe("chunk");
   });
 
-  it("searchAssets overfetches vector hits when hard filters exclude top semantic matches", async () => {
+  it("searchAssets issues a single Vectorize query with a native metadata filter (no over-fetch ladder)", async () => {
     const repository = new HardFilterAwareSearchRepository();
-    const vectorStore = new TrackedVectorStore([
-      {
-        id: "personal-1:0",
-        score: 0.99,
-      },
-      {
-        id: "personal-2:0",
-        score: 0.98,
-      },
-      {
-        id: "engineering-1:0",
-        score: 0.97,
-      },
-    ]);
+    const searchInputs: VectorSearchInput[] = [];
+    const vectorStore: VectorStore = {
+      upsert: vi.fn(async () => undefined),
+      deleteByIds: vi.fn(async () => undefined),
+      search: vi.fn(async (input: VectorSearchInput) => {
+        searchInputs.push(input);
+
+        return [{ id: "engineering-1:0", score: 0.97 }];
+      }),
+    };
     const service = createSearchService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
@@ -1279,7 +1259,15 @@ describe("search service", () => {
       }
     );
 
-    expect(vectorStore.requestedTopKs).toEqual([1, 3]);
+    // 单次向量检索（删除了 1/3/6/12 overfetch 阶梯与 240 召回天花板）
+    expect(searchInputs).toHaveLength(1);
+    expect(searchInputs[0]?.topK).toBe(1);
+    // 携带原生 metadata 过滤
+    expect(searchInputs[0]?.filter).toMatchObject({
+      aiVisibility: { $eq: "allow" },
+      domain: { $eq: "engineering" },
+      scopeId: { $eq: "default" },
+    });
     expect(result.items).toHaveLength(1);
     expect(result.items[0]?.kind).toBe("chunk");
     expect(

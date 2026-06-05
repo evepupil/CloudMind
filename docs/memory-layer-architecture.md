@@ -282,6 +282,18 @@ Cloudflare **Cron Trigger + Queue/Workflows** 跑后台"睡眠期"维护：
 
 ---
 
+## P1 运维 runbook（一次性，部署/重建时执行）
+
+P1-T4 起，检索改用 **Vectorize 原生 metadata 过滤**（在 ANN topK 之前生效），删除了旧的 1/3/6/12 overfetch 阶梯与 240 召回天花板。由于 **metadata 索引必须在 upsert 向量之前声明**、且变更需重建索引，需在部署或 fresh rebuild（ADR-003）时一次性执行：
+
+1. 重建 Vectorize 索引：`wrangler vectorize create cloudmind-asset-chunks --dimensions=1024 --metric=cosine`
+2. 为可过滤字段创建 string metadata 索引（共 8 个）：`aiVisibility / domain / documentClass / sourceKind / sourceHost / collectionKey / type / scopeId`——完整命令见 `wrangler.jsonc` 注释。
+3. 全量 re-ingest / reprocess，写入带 metadata 的 chunk 向量（**旧向量缺 metadata 会被原生过滤排除**，故必须重灌）。
+
+> 本地无真 Vectorize，T4 的适配器与 service 逻辑由单测覆盖（过滤条件下推 Vectorize、单次查询无阶梯），端到端需部署后验证。topic/tag/日期等多值/范围过滤仍由 D1 join 兜底。
+
+---
+
 ## 参考资料（对标项目）
 
 - mem0 — [Memory Operations (DeepWiki)](https://deepwiki.com/mem0ai/mem0/3.3-history-and-storage-management) · [State of AI Agent Memory 2026](https://mem0.ai/blog/state-of-ai-agent-memory-2026)

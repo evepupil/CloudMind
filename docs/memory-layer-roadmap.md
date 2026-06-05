@@ -126,7 +126,7 @@
     - Changing EMBEDDING_MODEL or the prefix (P1-T2) marks chunks stale and triggers re-embed
     - `npm run db:generate` produces migration 0010 and `tsc` passes with the extended CreateAssetChunkInput
 
-- [ ] **P1-T4 · Vectorize native metadata filter + drop over-fetch ladder/240 ceiling (index recreate)** — `L` · 依赖: P1-T3
+- [x] **P1-T4 · Vectorize native metadata filter + drop over-fetch ladder/240 ceiling (index recreate)** — `L` · 依赖: P1-T3 ✅ 2026-06-06（单次原生过滤查询取代 1/3/6/12 阶梯+240 天花板；chunk 向量写入可过滤 metadata；适配器+service 单测；reindex runbook 入 wrangler.jsonc + 架构文档。⚠️ 端到端需部署后 reindex 验证）
   - **为什么**：service.ts getFilteredSemanticMatches walks FILTERED_VECTOR_FETCH_MULTIPLIERS [1,3,6,12] up to MAX_FILTERED_VECTOR_TOP_K=240, post-filtering chunk matches in D1 because the team believed Vectorize couldn't filter natively — the doc §2 platform-facts row says it CAN filter pre-topK. Push filter fields (type/domain/documentClass/sourceKind/sourceHost/collectionKey/aiVisibility/scope_id) into Vectorize metadata at upsert and pass a native filter at query. Vectorize only indexes declared metadata indexes and changing them requires recreating the index — align this one-shot recreate with the ADR-003 L1 fresh rebuild (drop & recreate D1 + Vectorize). Needs full re-embed/re-index of all chunks.
   - **改动**：
     - src/core/vector/ports.ts — add filter?: Record<string,...> to VectorSearchInput and ensure VectorRecord metadata carries the filterable fields

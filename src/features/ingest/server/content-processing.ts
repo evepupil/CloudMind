@@ -293,6 +293,39 @@ export const createChunkEmbeddings = async (
   return embeddings;
 };
 
+// 这里构造写入向量的 metadata：除 assetId/chunkIndex/textPreview 外带上可过滤字段，
+// 供 Vectorize 原生 metadata 过滤在 ANN topK 之前生效（null/undefined 字段省略，Vectorize 不接受 null 值）。
+const buildChunkVectorMetadata = (
+  asset: AssetDetail,
+  chunkIndex: number,
+  textPreview: string
+): Record<string, string | number | boolean> => {
+  const metadata: Record<string, string | number | boolean> = {
+    assetId: asset.id,
+    chunkIndex,
+    textPreview,
+    type: asset.type,
+    domain: asset.domain,
+    aiVisibility: asset.aiVisibility,
+    scopeId: "default",
+  };
+
+  if (asset.documentClass) {
+    metadata.documentClass = asset.documentClass;
+  }
+  if (asset.sourceKind) {
+    metadata.sourceKind = asset.sourceKind;
+  }
+  if (asset.sourceHost) {
+    metadata.sourceHost = asset.sourceHost;
+  }
+  if (asset.collectionKey) {
+    metadata.collectionKey = asset.collectionKey;
+  }
+
+  return metadata;
+};
+
 // 这里按增量计划落库：只 upsert 需要重嵌的 chunk 向量、复用未变 chunk 的既有向量，
 // 清理过期向量，并给每个 chunk 盖上 contentHash / embeddingModel / embeddingDim 以支撑后续增量与模型迁移。
 export const indexPlannedChunks = async (
@@ -321,11 +354,9 @@ export const indexPlannedChunks = async (
   const vectorRecords = toEmbed.map((item, index) => ({
     id: createChunkVectorId(asset.id, item.chunkIndex),
     values: embeddings[index] ?? [],
-    metadataJson: JSON.stringify({
-      assetId: asset.id,
-      chunkIndex: item.chunkIndex,
-      textPreview: item.textPreview,
-    }),
+    metadataJson: JSON.stringify(
+      buildChunkVectorMetadata(asset, item.chunkIndex, item.textPreview)
+    ),
   }));
 
   if (vectorRecords.length > 0) {

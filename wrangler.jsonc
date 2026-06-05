@@ -27,6 +27,19 @@
       "bucket_name": "cloudmind-assets"
     }
   ],
+  // P1-T4：Vectorize 原生 metadata 过滤需在创建索引时声明可过滤的 metadata 索引，
+  // 且 metadata 索引必须在 upsert 向量【之前】声明；变更需重建索引（与 ADR-003 fresh rebuild 对齐）。
+  // 一次性 reindex runbook（部署/重建时执行；本地无真 Vectorize，不做端到端验证）：
+  //   wrangler vectorize create cloudmind-asset-chunks --dimensions=1024 --metric=cosine
+  //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=aiVisibility --type=string
+  //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=domain --type=string
+  //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=documentClass --type=string
+  //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=sourceKind --type=string
+  //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=sourceHost --type=string
+  //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=collectionKey --type=string
+  //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=type --type=string
+  //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=scopeId --type=string
+  //   # 然后全量 re-ingest / reprocess，写入带 metadata 的向量（旧向量无 metadata 会被原生过滤排除）。
   "vectorize": [
     {
       "binding": "ASSET_VECTORS",

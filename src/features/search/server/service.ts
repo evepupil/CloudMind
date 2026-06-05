@@ -4,7 +4,7 @@ import type {
   AssetSearchRepository,
 } from "@/core/assets/ports";
 import { createLogger } from "@/core/logging/logger";
-import type { VectorStore } from "@/core/vector/ports";
+import type { VectorMetadataFilter, VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
 import type { AssetSearchFilters } from "@/features/assets/model/types";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
@@ -37,8 +37,6 @@ import { scoreAssetTermMatch } from "./term-scoring";
 
 const SEARCHABLE_AI_VISIBILITY = ["allow"] as const;
 const SUMMARY_ONLY_AI_VISIBILITY = ["summary_only"] as const;
-const FILTERED_VECTOR_FETCH_MULTIPLIERS = [1, 3, 6, 12] as const;
-const MAX_FILTERED_VECTOR_TOP_K = 240;
 const searchLogger = createLogger("search");
 
 const getSearchFilters = (input: AssetSearchFilters): AssetSearchFilters => {
@@ -54,12 +52,6 @@ const getSearchFilters = (input: AssetSearchFilters): AssetSearchFilters => {
     tag: input.tag,
     collection: input.collection,
   };
-};
-
-const hasHardSearchFilters = (filters: AssetSearchFilters): boolean => {
-  return Object.values(getSearchFilters(filters)).some(
-    (value) => value !== undefined
-  );
 };
 
 const getAppliedFilterKeys = (filters: AssetSearchFilters): string[] => {
@@ -304,62 +296,66 @@ const buildSemanticEvidence = (
   ].sort((left, right) => right.score - left.score);
 };
 
-const getFilteredSemanticMatches = async (
+// 这里把硬过滤映射为 Vectorize 原生 metadata 过滤（单值字段 + aiVisibility + scopeId）。
+// topic/tag 为多值 facet、日期为范围，仍交由下游 D1 join 兜底，不进原生过滤。
+const buildSemanticVectorFilter = (
+  filters: AssetSearchFilters
+): VectorMetadataFilter => {
+  const applied = getSearchFilters(filters);
+  const filter: VectorMetadataFilter = {
+    aiVisibility: { $eq: "allow" },
+    scopeId: { $eq: "default" },
+  };
+
+  if (applied.type) {
+    filter.type = { $eq: applied.type };
+  }
+  if (applied.domain) {
+    filter.domain = { $eq: applied.domain };
+  }
+  if (applied.documentClass) {
+    filter.documentClass = { $eq: applied.documentClass };
+  }
+  if (applied.sourceKind) {
+    filter.sourceKind = { $eq: applied.sourceKind };
+  }
+  if (applied.sourceHost) {
+    filter.sourceHost = { $eq: applied.sourceHost };
+  }
+  if (applied.collection) {
+    filter.collectionKey = { $eq: applied.collection };
+  }
+
+  return filter;
+};
+
+// 这里用 Vectorize 原生 metadata 过滤在 ANN 层一次到位（删除 1/3/6/12 overfetch 阶梯与 240 召回天花板）；
+// getChunkMatchesByVectorIds 仅用于 hydration，并对 topic/tag/日期等多值过滤做兜底收敛。
+const getSemanticMatches = async (
   vectorStore: VectorStore,
   repository: AssetSearchRepository,
   queryVector: number[],
   topK: number,
   filters: AssetSearchFilters
 ) => {
-  const shouldOverfetch = hasHardSearchFilters(filters);
-  let lastVectorMatches: Awaited<ReturnType<VectorStore["search"]>> = [];
-  let lastChunkMatches: Awaited<
-    ReturnType<AssetSearchRepository["getChunkMatchesByVectorIds"]>
-  > = [];
+  const vectorMatches = await vectorStore.search({
+    values: queryVector,
+    topK,
+    filter: buildSemanticVectorFilter(filters),
+  });
 
-  for (const multiplier of FILTERED_VECTOR_FETCH_MULTIPLIERS) {
-    const requestedTopK = shouldOverfetch
-      ? Math.min(topK * multiplier, MAX_FILTERED_VECTOR_TOP_K)
-      : topK;
+  const chunkMatches =
+    vectorMatches.length > 0
+      ? await repository.getChunkMatchesByVectorIds(
+          vectorMatches.map((match) => match.id),
+          {
+            aiVisibility: [...SEARCHABLE_AI_VISIBILITY],
+            ...getSearchFilters(filters),
+          }
+        )
+      : [];
 
-    if (
-      lastVectorMatches.length > 0 &&
-      requestedTopK <= lastVectorMatches.length
-    ) {
-      continue;
-    }
-
-    const vectorMatches = await vectorStore.search({
-      values: queryVector,
-      topK: requestedTopK,
-    });
-    const chunkMatches =
-      vectorMatches.length > 0
-        ? await repository.getChunkMatchesByVectorIds(
-            vectorMatches.map((match) => match.id),
-            {
-              aiVisibility: [...SEARCHABLE_AI_VISIBILITY],
-              ...getSearchFilters(filters),
-            }
-          )
-        : [];
-
-    lastVectorMatches = vectorMatches;
-    lastChunkMatches = chunkMatches;
-
-    if (!shouldOverfetch) {
-      break;
-    }
-
-    if (chunkMatches.length >= topK || vectorMatches.length < requestedTopK) {
-      break;
-    }
-  }
-
-  return {
-    vectorMatches: lastVectorMatches,
-    chunkMatches: lastChunkMatches,
-  };
+  return { vectorMatches, chunkMatches };
 };
 
 // 这里集中资产语义搜索用例，便于后续扩展为混合检索或重排。
@@ -449,14 +445,13 @@ export const createSearchService = (
           contextPolicy
         );
       } else {
-        const { vectorMatches, chunkMatches } =
-          await getFilteredSemanticMatches(
-            vectorStore,
-            repository,
-            queryVector,
-            topK,
-            input
-          );
+        const { vectorMatches, chunkMatches } = await getSemanticMatches(
+          vectorStore,
+          repository,
+          queryVector,
+          topK,
+          input
+        );
 
         orderedEvidence = buildSemanticEvidence(
           query,
