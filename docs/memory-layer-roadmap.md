@@ -184,7 +184,7 @@
     - Reranker failure degrades gracefully to RRF order (no thrown 500) — covered by a test
     - Eval (P1-T0): nDCG@10 improves over the RRF-only result from P1-T6
 
-- [ ] **P1-T8 · Fix 3 indexing/embedding bugs: delete ghost vectors, reprocess-0-chunks wipe, all-or-nothing batch embed** — `M` · 依赖: P1-T3
+- [x] **P1-T8 · Fix 3 indexing/embedding bugs: delete ghost vectors, reprocess-0-chunks wipe, all-or-nothing batch embed** — `M` · 依赖: P1-T3 ✅ 2026-06-06（(a) deleteAsset 删前取 chunk vectorIds 并 deleteByIds 清 ghost；(b) indexPlannedChunks 0-chunk 改 no-op 不再清空；(c) createChunkEmbeddings 分批+重试+容忍部分失败(返回 nullable，index 跳过失败 chunk)。4 个新单测）
   - **为什么**：Doc §2 🐛 trio. (a) assets/server/service.ts deleteAsset only calls softDeleteAsset — never deletes the chunks' Vectorize vectors → ghost vectors keep surfacing in search (also the doc §10 forget() relies on this fix). (b) content-processing.ts indexPreparedChunks: when chunks.length===0 it deletes ALL of an asset's vectors — a transient 0-chunk reprocess wipes a healthy asset's index. (c) createChunkEmbeddings embeds the whole batch at once and throws if embeddings.length!==chunks.length, so one provider hiccup fails the entire asset.
   - **改动**：
     - src/features/assets/server/service.ts — deleteAsset: after softDeleteAsset, look up the asset's chunk vectorIds and call vectorStore.deleteByIds (inject getVectorStore into dependencies like getBlobStore already is)

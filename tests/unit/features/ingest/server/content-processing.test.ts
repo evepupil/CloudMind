@@ -6,6 +6,7 @@ import type { AssetDetail } from "@/features/assets/model/types";
 import {
   type ChunkEmbeddingPlanItem,
   computeChunkContentHash,
+  createChunkEmbeddings,
   generateAssetSummary,
   generateAssetTitle,
   indexPlannedChunks,
@@ -368,7 +369,7 @@ describe("indexPlannedChunks", () => {
     expect(result[1]?.embeddingDim).toBe(4);
   });
 
-  it("deletes all existing vectors when there are no chunks", async () => {
+  it("does not wipe existing vectors on a 0-chunk reprocess (guards transient empties)", async () => {
     const deleteByIds = vi.fn(async (_ids: string[]) => undefined);
     const store: VectorStore = {
       upsert: vi.fn(async (_records: unknown) => undefined),
@@ -388,6 +389,86 @@ describe("indexPlannedChunks", () => {
     );
 
     expect(result).toEqual([]);
-    expect(deleteByIds).toHaveBeenCalledWith(["asset:0"]);
+    expect(deleteByIds).not.toHaveBeenCalled();
+  });
+
+  it("skips chunks whose embedding failed and keeps the successful ones", async () => {
+    const upsert = vi.fn(async (_records: unknown) => undefined);
+    const deleteByIds = vi.fn(async (_ids: string[]) => undefined);
+    const store: VectorStore = {
+      upsert,
+      search: vi.fn(async () => []),
+      deleteByIds,
+    };
+    const plan: ChunkEmbeddingPlanItem[] = [
+      {
+        chunkIndex: 0,
+        text: "ok",
+        textPreview: "ok",
+        contentHash: "h0",
+        reusedVectorId: null,
+      },
+      {
+        chunkIndex: 1,
+        text: "failed",
+        textPreview: "failed",
+        contentHash: "h1",
+        reusedVectorId: null,
+      },
+    ];
+
+    const result = await indexPlannedChunks(
+      store,
+      makeAsset([]),
+      plan,
+      [[0.1, 0.2], null],
+      EMBEDDING_MODEL
+    );
+
+    // 只 upsert 成功嵌入的 chunk 0，失败的 chunk 1 被跳过
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(upsert).toHaveBeenCalledWith([
+      expect.objectContaining({ id: "asset:0" }),
+    ]);
+    expect(result.map((chunk) => chunk.chunkIndex)).toEqual([0]);
+  });
+});
+
+describe("createChunkEmbeddings", () => {
+  it("returns null for chunks whose batch fails after retry (no whole-asset failure)", async () => {
+    const aiProvider: AIProvider = {
+      generateText: vi.fn(async () => ({ text: "" })),
+      createEmbeddings: vi.fn(async () => {
+        throw new Error("provider hiccup");
+      }),
+    };
+
+    const result = await createChunkEmbeddings(aiProvider, [
+      { text: "a" },
+      { text: "b" },
+    ]);
+
+    expect(result).toEqual([null, null]);
+    // 重试一次：共两次调用
+    expect(aiProvider.createEmbeddings).toHaveBeenCalledTimes(2);
+  });
+
+  it("embeds a successful batch positionally", async () => {
+    const aiProvider: AIProvider = {
+      generateText: vi.fn(async () => ({ text: "" })),
+      createEmbeddings: vi.fn(async (input) => ({
+        embeddings: input.texts.map(() => [0.1, 0.2]),
+      })),
+    };
+
+    const result = await createChunkEmbeddings(aiProvider, [
+      { text: "a" },
+      { text: "b" },
+    ]);
+
+    expect(result).toEqual([
+      [0.1, 0.2],
+      [0.1, 0.2],
+    ]);
   });
 });

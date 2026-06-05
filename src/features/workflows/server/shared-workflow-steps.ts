@@ -103,7 +103,7 @@ const persistedContentSchema = z.object({
   chunks: z.array(preparedChunkSchema),
 });
 
-const embeddingsSchema = z.array(z.array(z.number()));
+const embeddingsSchema = z.array(z.array(z.number()).nullable());
 
 const chunkPlanItemSchema = z.object({
   chunkIndex: z.number().int().nonnegative(),
@@ -188,7 +188,9 @@ const readPersistedContent = (state: Record<string, unknown>) => {
   );
 };
 
-const readEmbeddings = (state: Record<string, unknown>): number[][] => {
+const readEmbeddings = (
+  state: Record<string, unknown>
+): Array<number[] | null> => {
   return validateWorkflowState(
     "embeddings",
     embeddingsSchema,
@@ -554,9 +556,9 @@ export const createEmbedStep = (): WorkflowStepDefinition => ({
 
     return {
       output: {
-        embeddingCount: embeddings.length,
+        embeddingCount: embeddings.filter((value) => value !== null).length,
         reusedCount: chunkPlan.length - toEmbed.length,
-        dimensions: embeddings[0]?.length ?? 0,
+        dimensions: embeddings.find((value) => value !== null)?.length ?? 0,
       },
       state: { chunkPlan, embeddings },
     };

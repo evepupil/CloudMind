@@ -5,6 +5,7 @@ import type {
   UpdateAssetMetadataInput,
 } from "@/core/assets/ports";
 import type { BlobStore } from "@/core/blob/ports";
+import type { VectorStore } from "@/core/vector/ports";
 import type {
   AssetDetail,
   AssetListQuery,
@@ -181,9 +182,15 @@ class InMemoryAssetRepository implements AssetRepository {
 describe("asset service", () => {
   const getAssetRepositoryMock = vi.fn();
   const getBlobStoreMock = vi.fn();
+  const getVectorStoreMock = vi.fn();
   const blobStoreMock: BlobStore = {
     put: vi.fn(),
     get: vi.fn(),
+  };
+  const vectorStoreMock: VectorStore = {
+    upsert: vi.fn(),
+    search: vi.fn(),
+    deleteByIds: vi.fn(),
   };
 
   beforeEach(() => {
@@ -200,6 +207,7 @@ describe("asset service", () => {
       })
     );
     const service = createAssetService({
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
     });
@@ -230,6 +238,7 @@ describe("asset service", () => {
       })
     );
     const service = createAssetService({
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
     });
@@ -255,6 +264,7 @@ describe("asset service", () => {
       })
     );
     const service = createAssetService({
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue({
         ...blobStoreMock,
@@ -286,6 +296,7 @@ describe("asset service", () => {
       })
     );
     const service = createAssetService({
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue({
         ...blobStoreMock,
@@ -325,6 +336,7 @@ describe("asset service", () => {
       })
     );
     const service = createAssetService({
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
     });
@@ -347,6 +359,7 @@ describe("asset service", () => {
       })
     );
     const service = createAssetService({
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
     });
@@ -356,5 +369,46 @@ describe("asset service", () => {
     await expect(repository.getAssetById("asset-delete-1")).rejects.toThrow(
       AssetNotFoundError
     );
+  });
+
+  it("deleteAsset removes the asset's chunk vectors (no ghost vectors)", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-delete-vec",
+        chunks: [
+          {
+            id: "c0",
+            chunkIndex: 0,
+            textPreview: "a",
+            vectorId: "asset-delete-vec:0",
+          },
+          {
+            id: "c1",
+            chunkIndex: 1,
+            textPreview: "b",
+            vectorId: "asset-delete-vec:1",
+          },
+        ],
+      })
+    );
+    const deleteByIds = vi.fn();
+    const service = createAssetService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue({
+        ...vectorStoreMock,
+        deleteByIds,
+      }),
+    });
+
+    await service.deleteAsset(
+      { APP_NAME: "cloudmind-test" },
+      "asset-delete-vec"
+    );
+
+    expect(deleteByIds).toHaveBeenCalledWith([
+      "asset-delete-vec:0",
+      "asset-delete-vec:1",
+    ]);
   });
 });

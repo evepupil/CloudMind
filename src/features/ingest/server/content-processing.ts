@@ -273,24 +273,56 @@ export const persistProcessedContent = async (
   };
 };
 
+const EMBED_BATCH_SIZE = 32;
+
+// 这里对单个子批做"最多重试一次"的嵌入；最终仍失败则返回 null，让上层跳过该批而非整资产失败。
+const embedBatchWithRetry = async (
+  aiProvider: AIProvider,
+  texts: string[]
+): Promise<number[][] | null> => {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const { embeddings } = await aiProvider.createEmbeddings({
+        texts,
+        purpose: "document",
+      });
+
+      if (embeddings.length === texts.length) {
+        return embeddings;
+      }
+    } catch {
+      // 失败则进入下一次重试；两次仍失败返回 null。
+    }
+  }
+
+  return null;
+};
+
+// 这里分子批嵌入并容忍部分失败：返回按 chunk 位置对齐的数组，失败的位置为 null（由 index 步骤跳过），
+// 取代旧的"整批一次性 + 长度不等就整资产抛错"。
 export const createChunkEmbeddings = async (
   aiProvider: AIProvider,
   chunks: ReadonlyArray<{ text: string }>
-): Promise<number[][]> => {
-  if (chunks.length === 0) {
-    return [];
+): Promise<Array<number[] | null>> => {
+  const results: Array<number[] | null> = new Array<number[] | null>(
+    chunks.length
+  ).fill(null);
+
+  for (let start = 0; start < chunks.length; start += EMBED_BATCH_SIZE) {
+    const batch = chunks.slice(start, start + EMBED_BATCH_SIZE);
+    const embeddings = await embedBatchWithRetry(
+      aiProvider,
+      batch.map((chunk) => chunk.text)
+    );
+
+    if (embeddings) {
+      embeddings.forEach((embedding, offset) => {
+        results[start + offset] = embedding;
+      });
+    }
   }
 
-  const { embeddings } = await aiProvider.createEmbeddings({
-    texts: chunks.map((chunk) => chunk.text),
-    purpose: "document",
-  });
-
-  if (embeddings.length !== chunks.length) {
-    throw new Error("Embedding count does not match processed chunk count.");
-  }
-
-  return embeddings;
+  return results;
 };
 
 // 这里构造写入向量的 metadata：除 assetId/chunkIndex/textPreview 外带上可过滤字段，
@@ -332,16 +364,12 @@ export const indexPlannedChunks = async (
   vectorStore: VectorStore,
   asset: AssetDetail,
   plan: ChunkEmbeddingPlanItem[],
-  embeddings: number[][],
+  embeddings: Array<number[] | null>,
   model: string | undefined
 ): Promise<CreateAssetChunkInput[]> => {
+  // 0 chunk 时不再清空既有向量（避免清洗瞬时失败把健康索引整体抹掉）；
+  // 真正的删除走 deleteAsset / forget。
   if (plan.length === 0) {
-    await vectorStore.deleteByIds(
-      asset.chunks
-        .map((chunk) => chunk.vectorId)
-        .filter((value): value is string => Boolean(value))
-    );
-
     return [];
   }
 
@@ -349,22 +377,37 @@ export const indexPlannedChunks = async (
     asset.chunks.map((chunk) => [chunk.chunkIndex, chunk.embeddingDim ?? null])
   );
   const toEmbed = plan.filter((item) => item.reusedVectorId === null);
-  const embeddedDim = embeddings[0]?.length ?? null;
+  // 容忍部分嵌入失败：只保留成功拿到向量的 chunk（位置对齐 embeddings），失败的跳过。
+  const embeddedItems = toEmbed
+    .map((item, index) => ({ item, embedding: embeddings[index] }))
+    .filter(
+      (entry): entry is { item: ChunkEmbeddingPlanItem; embedding: number[] } =>
+        Array.isArray(entry.embedding) && entry.embedding.length > 0
+    );
+  const embeddedDim = embeddedItems[0]?.embedding.length ?? null;
+  const embeddedChunkIndexes = new Set(
+    embeddedItems.map((entry) => entry.item.chunkIndex)
+  );
 
-  const vectorRecords = toEmbed.map((item, index) => ({
-    id: createChunkVectorId(asset.id, item.chunkIndex),
-    values: embeddings[index] ?? [],
-    metadataJson: JSON.stringify(
-      buildChunkVectorMetadata(asset, item.chunkIndex, item.textPreview)
-    ),
-  }));
-
-  if (vectorRecords.length > 0) {
-    await vectorStore.upsert(vectorRecords);
+  if (embeddedItems.length > 0) {
+    await vectorStore.upsert(
+      embeddedItems.map(({ item, embedding }) => ({
+        id: createChunkVectorId(asset.id, item.chunkIndex),
+        values: embedding,
+        metadataJson: JSON.stringify(
+          buildChunkVectorMetadata(asset, item.chunkIndex, item.textPreview)
+        ),
+      }))
+    );
   }
 
+  // 最终保留：可复用 chunk + 成功嵌入的 chunk（嵌入失败的 chunk 被跳过，不进结果）。
+  const finalChunks = plan.filter(
+    (item) =>
+      item.reusedVectorId !== null || embeddedChunkIndexes.has(item.chunkIndex)
+  );
   const nextVectorIds = new Set(
-    plan.map((item) => createChunkVectorId(asset.id, item.chunkIndex))
+    finalChunks.map((item) => createChunkVectorId(asset.id, item.chunkIndex))
   );
   const staleVectorIds = asset.chunks
     .map((chunk) => chunk.vectorId)
@@ -373,7 +416,7 @@ export const indexPlannedChunks = async (
 
   await vectorStore.deleteByIds(staleVectorIds);
 
-  return plan.map((item) => ({
+  return finalChunks.map((item) => ({
     chunkIndex: item.chunkIndex,
     textPreview: item.textPreview,
     contentText: item.text,
