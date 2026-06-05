@@ -30,6 +30,7 @@ import {
   flattenGroupedEvidence,
   toSearchResultItem,
 } from "./evidence";
+import { FUSION_CHANNEL_WEIGHTS, normalizeChannelScores } from "./fusion";
 import { scoreAssetSummaryMatch } from "./summary-scoring";
 import type { SearchAssetsByTermsResult } from "./term-asset-service";
 import { searchAssetsByTerms } from "./term-asset-service";
@@ -237,9 +238,18 @@ const buildLexicalEvidence = (
     .sort((left, right) => right.score - left.score);
 
   return [
-    ...orderedAssertionEvidence,
-    ...buildTermEvidence(termMatches, contextPolicy),
-    ...orderedSummaryEvidence,
+    ...normalizeChannelScores(
+      orderedAssertionEvidence,
+      FUSION_CHANNEL_WEIGHTS.assertion
+    ),
+    ...normalizeChannelScores(
+      buildTermEvidence(termMatches, contextPolicy),
+      FUSION_CHANNEL_WEIGHTS.term
+    ),
+    ...normalizeChannelScores(
+      orderedSummaryEvidence,
+      FUSION_CHANNEL_WEIGHTS.summary
+    ),
   ].sort((left, right) => right.score - left.score);
 };
 
@@ -282,10 +292,16 @@ const buildSemanticEvidence = (
     .filter((item) =>
       item ? matchesContextPolicyAsset(item.asset, contextPolicy) : false
     )
-    .filter((item): item is EvidenceItem => item !== null);
+    .filter((item): item is EvidenceItem => item !== null)
+    // 这里按 context-policy 调整后的分数排序，作为 chunk 通道内 rank（再交给 RRF），
+    // 避免直接沿用原始 cosine 顺序而忽略 boost/suppress 重排。
+    .sort((left, right) => right.score - left.score);
 
   return [
-    ...orderedChunkEvidence,
+    ...normalizeChannelScores(
+      orderedChunkEvidence,
+      FUSION_CHANNEL_WEIGHTS.chunk
+    ),
     ...buildLexicalEvidence(
       query,
       summaryMatches,

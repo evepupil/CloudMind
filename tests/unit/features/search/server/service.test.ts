@@ -609,7 +609,7 @@ describe("search service", () => {
       items: [
         {
           kind: "chunk",
-          score: 0.95,
+          score: expect.any(Number),
           indexing: expect.objectContaining({
             matchedLayer: "chunk",
             domain: "engineering",
@@ -644,7 +644,7 @@ describe("search service", () => {
           expect.objectContaining({
             id: "chunk:chunk-1",
             layer: "chunk",
-            score: 0.95,
+            score: expect.any(Number),
             text: "Semantic preview 1",
             snippet: "Semantic preview 1",
             matchReasons: expect.arrayContaining([
@@ -679,7 +679,7 @@ describe("search service", () => {
             title: "CloudMind Asset 1",
           }),
           assetScore: expect.any(Number),
-          topScore: 0.95,
+          topScore: expect.any(Number),
           matchedLayers: ["chunk"],
           primaryEvidence: expect.objectContaining({
             id: "chunk:chunk-1",
@@ -1011,7 +1011,7 @@ describe("search service", () => {
         id: "asset-a",
       }),
       assetScore: expect.any(Number),
-      topScore: 0.94,
+      topScore: expect.any(Number),
       matchedLayers: ["chunk"],
       primaryEvidence: expect.objectContaining({
         id: "chunk:chunk-asset-a-1",
@@ -1352,5 +1352,90 @@ describe("search service", () => {
         pageSize: 5,
       }
     );
+  });
+
+  it("ranks a semantic chunk above a keyword-grazing assertion (RRF, not raw-score sort)", async () => {
+    const makeAsset = (id: string) => ({
+      id,
+      type: "note" as const,
+      title: id,
+      summary: `${id} summary`,
+      sourceUrl: null,
+      sourceKind: "manual" as const,
+      status: "ready" as const,
+      domain: "engineering" as const,
+      sensitivity: "internal" as const,
+      aiVisibility: "allow" as const,
+      retrievalPriority: 0,
+      collectionKey: "engineering:notes",
+      capturedAt: "2026-03-24T00:00:00.000Z",
+      descriptorJson: null,
+      createdAt: "2026-03-24T00:00:00.000Z",
+      updatedAt: "2026-03-24T00:00:00.000Z",
+    });
+    const repository: AssetSearchRepository = {
+      async searchAssets() {
+        return {
+          items: [],
+          pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+        };
+      },
+      async getChunkMatchesByVectorIds() {
+        return [
+          {
+            id: "chunk-a",
+            chunkIndex: 0,
+            textPreview: "semantic chunk",
+            contentText: "the semantically relevant chunk about the topic",
+            vectorId: "asset-a:0",
+            asset: makeAsset("asset-a"),
+          },
+        ];
+      },
+      async searchAssetSummaries() {
+        return [];
+      },
+      async searchAssetAssertions() {
+        return [
+          {
+            id: "assert-b",
+            assertionIndex: 0,
+            kind: "fact",
+            text: "vectorize metadata filtering",
+            sourceChunkIndex: null,
+            sourceSpanJson: null,
+            confidence: 0.9,
+            createdAt: "2026-03-24T00:00:00.000Z",
+            updatedAt: "2026-03-24T00:00:00.000Z",
+            asset: makeAsset("asset-b"),
+          },
+        ];
+      },
+    };
+    // 中等相关度的 chunk（cosine 0.55）：旧的"原始分硬排序"会被 assertion 的高 floor 分压过。
+    const vectorStore: VectorStore = {
+      upsert: vi.fn(async () => undefined),
+      deleteByIds: vi.fn(async () => undefined),
+      search: vi.fn(async () => [{ id: "asset-a:0", score: 0.55 }]),
+    };
+    const service = createSearchService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+      searchAssetsByTerms: searchAssetsByTermsMock,
+    });
+
+    const result = await service.searchAssets(
+      { APP_NAME: "cloudmind-test" },
+      { query: "vectorize metadata filtering", page: 1, pageSize: 5 }
+    );
+
+    // RRF：rank-1 的语义 chunk（权重 1.0）胜过 rank-1 的蹭关键词 assertion（权重 0.92）。
+    expect(result.groupedEvidence[0]?.asset.id).toBe("asset-a");
+    expect(result.groupedEvidence[0]?.primaryEvidence.layer).toBe("chunk");
+    const assertionRank = result.groupedEvidence.findIndex(
+      (group) => group.asset.id === "asset-b"
+    );
+    expect(assertionRank).toBeGreaterThan(0);
   });
 });

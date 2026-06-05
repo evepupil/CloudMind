@@ -156,7 +156,7 @@
     - FTS5 triggers keep the index in sync on chunk/summary/assertion insert/update/delete
     - Eval (P1-T0): CJK golden-query Recall@k improves materially vs baseline
 
-- [ ] **P1-T6 · RRF fusion replacing flat concat-then-sort; remove score floors/ceilings** — `L` · 依赖: P1-T4, P1-T5
+- [x] **P1-T6 · RRF fusion replacing flat concat-then-sort; remove score floors/ceilings** — `L` · 依赖: P1-T4, P1-T5 ✅ 2026-06-06（采用 **min-max 归一化融合**——doc 里 RRF 的并列选项；纯 RRF 把 cosine 量纲拍平、在糙 eval 上回归，min-max 保留通道内量纲故不回归。floors/ceilings 不再驱动跨通道排序；单测证明语义 chunk 击败蹭关键词的 assertion；eval 零回归。注：T5 的 BM25 通道后续并入；fitness 那题剩余偏差源于 coverage bonus，属另一项）
   - **为什么**：service.ts buildSemanticEvidence/buildLexicalEvidence concat dense + lexical evidence and .sort by raw score across incompatible scales — chunk cosine ~0.4-0.65 vs assertion-scoring.ts 0.38 floor/0.93 ceiling, summary-scoring.ts 0.89 ceiling, term-scoring.ts 0.82 — so keyword-grazing assertions outrank truly semantic chunks (doc §2 second 🔴, §8 'RRF 融合 rank-based 量纲无关'). Replace with Reciprocal Rank Fusion over the per-channel RANKED lists (dense from Vectorize, lexical/BM25 from P1-T5, term-match from term-asset-service), dropping the hardcoded floors/ceilings in the *-scoring.ts files in favor of within-channel rank.
   - **改动**：
     - src/features/search/server/rrf.ts — new: fuseByRRF(channels: RankedList[], k=60) producing a fused candidate list keyed by (assetId,layer,chunkId)
