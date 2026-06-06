@@ -18,3 +18,8 @@
 {"query":"记忆 遗忘 整合 写路径","lang":"zh","expectedAssetIds":["zh-memory"],"note":"cjk"}
 {"query":"多语言 嵌入模型 中文","lang":"zh","expectedAssetIds":["zh-vector"],"note":"cjk multilingual"}
 {"query":"知识图谱 实体 关系","lang":"zh","expectedAssetIds":["zh-memory"],"note":"cjk graph"}
+{"query":"vector retrieval index","lang":"en","expectedAssetIds":["cf-vectorize"],"filters":{"domain":"engineering"},"excludedAssetIds":["zh-vector","bge-m3","rag-basics"],"note":"filter: domain=engineering excludes research vector docs"}
+{"query":"model server protocol tools","lang":"en","expectedAssetIds":["mcp-server"],"filters":{"domain":"engineering"},"excludedAssetIds":["bge-m3"],"note":"filter: domain=engineering excludes research embedding-model doc"}
+{"query":"cloudflare object storage and async queues","lang":"en","expectedAssetIds":["cf-r2","cf-queues"],"note":"diversity: two distinct engineering assets"}
+{"query":"reranker and rank fusion for hybrid retrieval","lang":"en","expectedAssetIds":["reranker","rrf-fusion"],"note":"diversity: rerank + fusion both relevant"}
+{"query":"向量 嵌入 记忆 图谱","lang":"zh","expectedAssetIds":["zh-vector","zh-memory"],"note":"cjk diversity: two distinct zh assets"}

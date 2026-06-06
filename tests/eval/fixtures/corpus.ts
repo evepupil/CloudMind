@@ -1,7 +1,7 @@
 // 这里定义离线 eval 的种子语料，并据此构建可注入 createSearchService 的全套 fake 依赖。
 // 目标：用真实的 search service 排序逻辑跑一组金标准查询，使每次检索改动都有可度量的 delta。
 
-import type { AIProvider } from "@/core/ai/ports";
+import type { AIProvider, RerankInput, RerankResult } from "@/core/ai/ports";
 import type {
   AssetSearchInput,
   AssetSearchRepository,
@@ -19,6 +19,7 @@ import type {
   AssetChunkMatch,
   AssetDomain,
   AssetListResult,
+  AssetSearchFilters,
   AssetSummary,
   AssetSummaryMatch,
   AssetTermMatchItem,
@@ -323,6 +324,45 @@ const matchesFilters = (
   return true;
 };
 
+// 这里让词面/term 通道也尊重硬过滤（domain/type/sourceKind），用于过滤正确性金标准。
+const matchesQueryFilters = (
+  asset: AssetSummary,
+  filters: AssetSearchFilters
+): boolean => {
+  if (filters.domain && asset.domain !== filters.domain) {
+    return false;
+  }
+  if (filters.type && asset.type !== filters.type) {
+    return false;
+  }
+  if (filters.sourceKind && asset.sourceKind !== filters.sourceKind) {
+    return false;
+  }
+
+  return true;
+};
+
+// 这里把检索管线拆成可单独度量的阶段：
+//   lexical  仅词面（summary/assertion/term/FTS chunk）
+//   dense    仅向量语义
+//   fused    跨通道融合（min-max 归一化）
+//   reranked 融合后再 cross-encoder 重排 + MMR
+// 每阶段独立跑 eval，使各阶段贡献可归因、回归可定位。
+export interface StageConfig {
+  dense: boolean;
+  lexical: boolean;
+  rerank: boolean;
+}
+
+export const PIPELINE_STAGES = {
+  lexical: { dense: false, lexical: true, rerank: false },
+  dense: { dense: true, lexical: false, rerank: false },
+  fused: { dense: true, lexical: true, rerank: false },
+  reranked: { dense: true, lexical: true, rerank: true },
+} as const satisfies Record<string, StageConfig>;
+
+export type PipelineStageName = keyof typeof PIPELINE_STAGES;
+
 export interface EvalDependencies {
   getAssetRepository: () => AssetSearchRepository;
   getVectorStore: () => VectorStore;
@@ -341,7 +381,8 @@ export interface EvalDependencies {
 
 // 这里把语料组装成 createSearchService 可直接消费的依赖集合。
 export const buildEvalDependencies = (
-  corpus: CorpusAsset[] = CORPUS
+  corpus: CorpusAsset[] = CORPUS,
+  stage: StageConfig = PIPELINE_STAGES.reranked
 ): EvalDependencies => {
   const built = buildCorpus(corpus);
 
@@ -373,12 +414,17 @@ export const buildEvalDependencies = (
     async searchAssetSummaries(
       input: SearchAssetSummaryInput
     ): Promise<AssetSummaryMatch[]> {
+      if (!stage.lexical) {
+        return [];
+      }
+
       const tokens = queryTokens(input.query);
 
       return built.summaries
         .filter((match) =>
           input.aiVisibility.includes(match.asset.aiVisibility)
         )
+        .filter((match) => matchesQueryFilters(match.asset, input))
         .filter((match) =>
           containsAnyToken(`${match.asset.title} ${match.summary}`, tokens)
         )
@@ -388,14 +434,46 @@ export const buildEvalDependencies = (
     async searchAssetAssertions(
       input: SearchAssetAssertionInput
     ): Promise<AssetAssertionMatch[]> {
+      if (!stage.lexical) {
+        return [];
+      }
+
       const tokens = queryTokens(input.query);
 
       return built.assertions
         .filter((match) =>
           input.aiVisibility.includes(match.asset.aiVisibility)
         )
+        .filter((match) => matchesQueryFilters(match.asset, input))
         .filter((match) => containsAnyToken(match.text, tokens))
         .slice(0, input.limit);
+    },
+
+    async searchChunksByText(
+      input: SearchAssetSummaryInput
+    ): Promise<AssetChunkMatch[]> {
+      if (!stage.lexical) {
+        return [];
+      }
+
+      const tokens = queryTokens(input.query);
+
+      // 词面 chunk 通道：按 query token 在 chunk 文本里的命中数排序（BM25 的确定性替身）。
+      return [...built.chunkByVectorId.values()]
+        .filter((chunk) =>
+          input.aiVisibility.includes(chunk.asset.aiVisibility)
+        )
+        .filter((chunk) => matchesQueryFilters(chunk.asset, input))
+        .map((chunk) => ({
+          chunk,
+          overlap: tokens.filter((token) =>
+            (chunk.contentText ?? "").toLowerCase().includes(token)
+          ).length,
+        }))
+        .filter((entry) => entry.overlap > 0)
+        .sort((left, right) => right.overlap - left.overlap)
+        .slice(0, input.limit)
+        .map((entry) => entry.chunk);
     },
   };
 
@@ -405,6 +483,10 @@ export const buildEvalDependencies = (
     },
 
     async search(input: VectorSearchInput): Promise<VectorSearchMatch[]> {
+      if (!stage.dense) {
+        return [];
+      }
+
       return built.chunkVectors
         .map((entry) => ({
           id: entry.vectorId,
@@ -429,17 +511,55 @@ export const buildEvalDependencies = (
         embeddings: input.texts.map((text) => deterministicEmbedding(text)),
       };
     },
+
+    // 确定性 fake reranker：用 hash-embedding 余弦近似 cross-encoder 相关性，
+    // 让 eval 在无 Cloudflare 依赖下覆盖 T7 重排接线；stage.rerank 关闭时省略该方法。
+    ...(stage.rerank
+      ? {
+          async rerank(input: RerankInput): Promise<RerankResult[]> {
+            const queryVector = deterministicEmbedding(input.query);
+
+            return input.documents
+              .map((text, index) => ({
+                index,
+                score: cosineSimilarity(
+                  queryVector,
+                  deterministicEmbedding(text)
+                ),
+              }))
+              .sort((left, right) => right.score - left.score);
+          },
+        }
+      : {}),
   };
 
   const searchAssetsByTerms: EvalDependencies["searchAssetsByTerms"] = async (
     _bindings,
     input
   ) => {
+    if (!stage.lexical) {
+      return {
+        terms: [],
+        items: [],
+        pagination: {
+          page: 1,
+          pageSize: input.pageSize ?? 20,
+          total: 0,
+          totalPages: 0,
+        },
+      };
+    }
+
+    const filters = (input.filters ?? {}) as AssetSearchFilters;
     const tokens = queryTokens(input.query);
     const terms: SearchTermItem[] = [];
     const items: AssetTermMatchItem[] = [];
 
     for (const entry of built.termAssets) {
+      if (!matchesQueryFilters(entry.asset, filters)) {
+        continue;
+      }
+
       const matched = entry.terms.filter((term) =>
         tokens.some(
           (token) =>

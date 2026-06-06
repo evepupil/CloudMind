@@ -4,17 +4,25 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
 
+import type { AssetSearchFilters } from "@/features/assets/model/types";
 import { createSearchService } from "@/features/search/server/service";
 import {
   buildEvalDependencies,
   CORPUS,
   type CorpusAsset,
+  PIPELINE_STAGES,
+  type PipelineStageName,
+  type StageConfig,
 } from "./fixtures/corpus";
 
 export interface GoldenQuery {
   query: string;
   lang: "en" | "zh";
   expectedAssetIds: string[];
+  // 可选硬过滤（domain/type/sourceKind…）：用于过滤正确性金标准。
+  filters?: AssetSearchFilters;
+  // 命中即判过滤失败：这些资产虽词面匹配但必须被过滤掉。
+  excludedAssetIds?: string[];
   note?: string;
 }
 
@@ -26,6 +34,7 @@ export interface QueryEval {
   mrr: number;
   ndcgAt10: number;
   ap: number;
+  filterOk: boolean;
 }
 
 export interface EvalReport {
@@ -37,8 +46,20 @@ export interface EvalReport {
     mrr: number;
     ndcgAt10: number;
     map: number;
+    filterViolations: number;
   };
 }
+
+export interface StagedReport {
+  stages: Record<PipelineStageName, EvalReport>;
+}
+
+export const STAGE_ORDER: PipelineStageName[] = [
+  "lexical",
+  "dense",
+  "fused",
+  "reranked",
+];
 
 const recallAtK = (
   ranked: string[],
@@ -127,11 +148,17 @@ export const loadGoldenQueries = (): GoldenQuery[] => {
 };
 
 export const runEval = async (
-  options: { corpus?: CorpusAsset[] | undefined; k?: number | undefined } = {}
+  options: {
+    corpus?: CorpusAsset[] | undefined;
+    k?: number | undefined;
+    stage?: StageConfig | undefined;
+  } = {}
 ): Promise<EvalReport> => {
   const k = options.k ?? 10;
   const corpus = options.corpus ?? CORPUS;
-  const service = createSearchService(buildEvalDependencies(corpus));
+  const service = createSearchService(
+    buildEvalDependencies(corpus, options.stage ?? PIPELINE_STAGES.reranked)
+  );
   const queries = loadGoldenQueries();
   const perQuery: QueryEval[] = [];
 
@@ -140,11 +167,13 @@ export const runEval = async (
       query: golden.query,
       page: 1,
       pageSize: 20,
+      ...(golden.filters ?? {}),
     });
     const rankedAssetIds = result.groupedEvidence.map(
       (group) => group.asset.id
     );
     const relevant = new Set(golden.expectedAssetIds);
+    const excluded = new Set(golden.excludedAssetIds ?? []);
 
     perQuery.push({
       query: golden.query,
@@ -154,6 +183,7 @@ export const runEval = async (
       mrr: reciprocalRank(rankedAssetIds, relevant),
       ndcgAt10: ndcgAt(rankedAssetIds, relevant, 10),
       ap: averagePrecision(rankedAssetIds, relevant),
+      filterOk: rankedAssetIds.every((id) => !excluded.has(id)),
     });
   }
 
@@ -170,8 +200,22 @@ export const runEval = async (
       mrr: mean((item) => item.mrr),
       ndcgAt10: mean((item) => item.ndcgAt10),
       map: mean((item) => item.ap),
+      filterViolations: perQuery.filter((item) => !item.filterOk).length,
     },
   };
+};
+
+// 这里把同一组金标准在四个管线阶段各跑一遍，使每阶段贡献可归因、回归可定位。
+export const runStagedEval = async (
+  options: { corpus?: CorpusAsset[] | undefined; k?: number | undefined } = {}
+): Promise<StagedReport> => {
+  const stages = {} as Record<PipelineStageName, EvalReport>;
+
+  for (const name of STAGE_ORDER) {
+    stages[name] = await runEval({ ...options, stage: PIPELINE_STAGES[name] });
+  }
+
+  return { stages };
 };
 
 export const formatReport = (report: EvalReport): string => {
@@ -192,6 +236,23 @@ export const formatReport = (report: EvalReport): string => {
   lines.push(
     `AGG Recall@${report.k}=${aggregate.recallAtK.toFixed(4)} MRR=${aggregate.mrr.toFixed(4)} nDCG@10=${aggregate.ndcgAt10.toFixed(4)} MAP=${aggregate.map.toFixed(4)}`
   );
+
+  return lines.join("\n");
+};
+
+export const formatStagedReport = (report: StagedReport): string => {
+  const lines: string[] = [
+    `eval per-stage (n=${report.stages.reranked.aggregate.count}):`,
+    "  stage       R@10     MRR    nDCG@10   MAP   filterViol",
+  ];
+
+  for (const name of STAGE_ORDER) {
+    const agg = report.stages[name].aggregate;
+
+    lines.push(
+      `  ${name.padEnd(9)}  ${agg.recallAtK.toFixed(4)}  ${agg.mrr.toFixed(4)}  ${agg.ndcgAt10.toFixed(4)}  ${agg.map.toFixed(4)}  ${String(agg.filterViolations).padStart(4)}`
+    );
+  }
 
   return lines.join("\n");
 };
