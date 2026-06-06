@@ -1127,6 +1127,7 @@ describe("processTextAsset", () => {
       "derive_access_policy",
       "derive_facets",
       "derive_assertions",
+      "extract_entities",
       "persist_content",
       "chunk",
       "embed",
@@ -1134,7 +1135,9 @@ describe("processTextAsset", () => {
       "finalize",
     ]);
     expect(
-      workflowRepository.steps.every((step) => step.status === "succeeded")
+      workflowRepository.steps.every(
+        (step) => step.status === "succeeded" || step.status === "skipped"
+      )
     ).toBe(true);
     expect(workflowRepository.artifacts).toEqual([
       expect.objectContaining({
@@ -1840,6 +1843,7 @@ describe("processUrlAsset", () => {
       "derive_access_policy",
       "derive_facets",
       "derive_assertions",
+      "extract_entities",
       "persist_content",
       "chunk",
       "embed",
@@ -2160,6 +2164,7 @@ describe("processPdfAsset", () => {
       "derive_access_policy",
       "derive_facets",
       "derive_assertions",
+      "extract_entities",
       "persist_content",
       "chunk",
       "embed",
@@ -2167,7 +2172,9 @@ describe("processPdfAsset", () => {
       "finalize",
     ]);
     expect(
-      workflowRepository.steps.every((step) => step.status === "succeeded")
+      workflowRepository.steps.every(
+        (step) => step.status === "succeeded" || step.status === "skipped"
+      )
     ).toBe(true);
     expect(workflowRepository.artifacts).toEqual([
       expect.objectContaining({

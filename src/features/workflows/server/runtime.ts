@@ -2,6 +2,7 @@ import type { AIProvider } from "@/core/ai/ports";
 import type { AssetIngestRepository } from "@/core/assets/ports";
 import type { BlobStore } from "@/core/blob/ports";
 import { createLogger } from "@/core/logging/logger";
+import type { MemoryRepository } from "@/core/memory/ports";
 import type { JobQueue, JobQueueMessage } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { WebPageFetcher } from "@/core/web/ports";
@@ -25,6 +26,8 @@ export interface WorkflowServices {
   aiProvider: AIProvider;
   jobQueue: JobQueue;
   webPageFetcher?: WebPageFetcher | undefined;
+  // L2 记忆写仓储（可选）：未注入时 extract_entities 步骤优雅跳过，不阻塞摄取。
+  memoryRepository?: MemoryRepository | undefined;
 }
 
 export interface WorkflowExecutionContext {

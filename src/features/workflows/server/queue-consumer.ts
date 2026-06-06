@@ -3,6 +3,7 @@ import type { AppBindings } from "@/env";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getBlobStoreFromBindings } from "@/platform/blob/r2/get-blob-store";
 import { getAssetIngestRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
+import { getMemoryRepositoryFromBindings } from "@/platform/db/d1/repositories/get-memory-repository";
 import { getWorkflowRepositoryFromBindings } from "@/platform/db/d1/repositories/get-workflow-repository";
 import { getJobQueueFromBindings } from "@/platform/queue/cloudflare/get-job-queue";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
@@ -40,5 +41,6 @@ export const consumeWorkflowQueueMessage = async (
     aiProvider: await getAIProviderFromBindings(bindings),
     jobQueue: getJobQueueFromBindings(bindings),
     webPageFetcher: getWebPageFetcherFromBindings(bindings),
+    memoryRepository: getMemoryRepositoryFromBindings(bindings),
   });
 };

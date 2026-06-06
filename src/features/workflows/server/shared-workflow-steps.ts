@@ -15,6 +15,8 @@ import {
   planChunkEmbeddings,
 } from "@/features/ingest/server/content-processing";
 import { upsertMetadataTermVectors } from "@/features/ingest/server/metadata-terms";
+import { extractGraphFromText } from "@/features/memory/server/graph-extraction";
+import { writeGraphToMemory } from "@/features/memory/server/memory-write";
 import { deriveAssertionsWithAIFallback } from "./assertion-extraction";
 import {
   type AssetAccessPolicy,
@@ -632,6 +634,64 @@ export const createFinalizeStep = (options?: {
 });
 
 // 组合函数：构建除 load_source 外的完整步骤列表
+// extract_entities — 从清洗后的正文抽取 entities/SPO 写入 L2 知识图谱（激活原本死着的步骤）。
+// memoryRepository 未注入、无正文或抽取为空时优雅跳过，绝不阻塞摄取。
+export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
+  key: "extract_entities",
+  type: "extract_entities",
+  execute: async (context) => {
+    const memoryRepository = context.services.memoryRepository;
+    const normalizedContent = context.state.normalizedContent;
+
+    if (
+      !memoryRepository ||
+      typeof normalizedContent !== "string" ||
+      normalizedContent.trim().length === 0
+    ) {
+      return { status: "skipped" };
+    }
+
+    const graph = await extractGraphFromText(
+      context.services.aiProvider,
+      normalizedContent
+    );
+
+    if (graph.entities.length === 0 && graph.statements.length === 0) {
+      return {
+        status: "skipped",
+        output: { entityCount: 0, statementCount: 0, edgeCount: 0 },
+      };
+    }
+
+    // 写一条 ingest 情节，让 provenance 既能指回 asset/chunk，也能指回 L1 episode。
+    const episode = await memoryRepository.createEpisode({
+      kind: "ingest",
+      assetId: context.asset.id,
+    });
+
+    const result = await writeGraphToMemory(
+      memoryRepository,
+      { assetId: context.asset.id, episodeId: episode.id },
+      graph
+    );
+
+    return {
+      output: {
+        entityCount: result.entityCount,
+        statementCount: result.statementCount,
+        edgeCount: result.edgeCount,
+      },
+      artifacts: [
+        {
+          artifactType: "entities",
+          storageKind: "inline",
+          metadataJson: JSON.stringify(result),
+        },
+      ],
+    };
+  },
+});
+
 export const buildSharedIngestSteps = (options: {
   cleanContent: {
     getContent: (asset: AssetDetail, state: Record<string, unknown>) => string;
@@ -669,6 +729,7 @@ export const buildSharedIngestSteps = (options: {
     createDeriveAccessPolicyStep(),
     createDeriveFacetsStep(options.deriveFacets),
     createDeriveAssertionsStep(),
+    createExtractEntitiesStep(),
     createPersistContentStep(options.persistContent),
     createChunkStep(),
     createEmbedStep(),
