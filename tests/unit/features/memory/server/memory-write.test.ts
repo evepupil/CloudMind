@@ -22,6 +22,7 @@ class FakeMemoryRepository implements MemoryRepository {
   public readonly statements: CreateStatementInput[] = [];
   public readonly edges: CreateEdgeInput[] = [];
   public readonly provenance: AddProvenanceInput[] = [];
+  public readonly vectorUpdates = new Map<string, string>();
   private seq = 0;
 
   public async createEpisode(
@@ -29,6 +30,19 @@ class FakeMemoryRepository implements MemoryRepository {
   ): Promise<{ id: string }> {
     this.seq += 1;
     return { id: `ep${this.seq}` };
+  }
+
+  public async getEntityByVectorId(
+    _vectorId: string
+  ): Promise<MemoryEntity | null> {
+    return null;
+  }
+
+  public async setEntityVectorId(
+    entityId: string,
+    vectorId: string
+  ): Promise<void> {
+    this.vectorUpdates.set(entityId, vectorId);
   }
 
   public async upsertEntityByNormalizedName(

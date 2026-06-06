@@ -28,6 +28,8 @@ export interface WorkflowServices {
   webPageFetcher?: WebPageFetcher | undefined;
   // L2 记忆写仓储（可选）：未注入时 extract_entities 步骤优雅跳过，不阻塞摄取。
   memoryRepository?: MemoryRepository | undefined;
+  // L2 实体向量命名空间（可选）：未注入时 embedding 消歧退回精确归一化名匹配。
+  graphVectorStore?: VectorStore | undefined;
 }
 
 export interface WorkflowExecutionContext {

@@ -6,6 +6,7 @@ import { getAssetIngestRepositoryFromBindings } from "@/platform/db/d1/repositor
 import { getMemoryRepositoryFromBindings } from "@/platform/db/d1/repositories/get-memory-repository";
 import { getWorkflowRepositoryFromBindings } from "@/platform/db/d1/repositories/get-workflow-repository";
 import { getJobQueueFromBindings } from "@/platform/queue/cloudflare/get-job-queue";
+import { getGraphVectorStoreFromBindings } from "@/platform/vector/vectorize/get-graph-vector-store";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 import { getWebPageFetcherFromBindings } from "@/platform/web/jina/get-web-page-fetcher";
 
@@ -42,5 +43,8 @@ export const consumeWorkflowQueueMessage = async (
     jobQueue: getJobQueueFromBindings(bindings),
     webPageFetcher: getWebPageFetcherFromBindings(bindings),
     memoryRepository: getMemoryRepositoryFromBindings(bindings),
+    graphVectorStore: bindings?.GRAPH_VECTORS
+      ? getGraphVectorStoreFromBindings(bindings)
+      : undefined,
   });
 };

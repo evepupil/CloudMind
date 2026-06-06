@@ -8,6 +8,7 @@ export interface AppBindings {
   DB?: D1Database;
   ASSET_FILES?: R2Bucket;
   ASSET_VECTORS?: Vectorize;
+  GRAPH_VECTORS?: Vectorize;
   AI?: Ai;
   WORKFLOW_QUEUE?: Queue;
   JINA_API_KEY?: string;

@@ -1,5 +1,4 @@
 import { and, eq } from "drizzle-orm";
-
 import type {
   AddProvenanceInput,
   CreateEdgeInput,
@@ -190,5 +189,41 @@ export class D1MemoryRepository implements MemoryRepository {
       span: input.span ?? null,
       createdAt: now,
     });
+  }
+
+  public async getEntityByVectorId(
+    vectorId: string
+  ): Promise<MemoryEntity | null> {
+    const rows = await this.db
+      .select()
+      .from(entities)
+      .where(eq(entities.embeddingVectorId, vectorId))
+      .limit(1);
+    const found = rows[0];
+
+    if (!found) {
+      return null;
+    }
+
+    return {
+      id: found.id,
+      scopeId: found.scopeId,
+      canonicalName: found.canonicalName,
+      normalizedName: found.normalizedName,
+      type: found.type,
+      mentionCount: found.mentionCount,
+    };
+  }
+
+  public async setEntityVectorId(
+    entityId: string,
+    vectorId: string
+  ): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .update(entities)
+      .set({ embeddingVectorId: vectorId, updatedAt: now })
+      .where(eq(entities.id, entityId));
   }
 }

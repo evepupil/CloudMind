@@ -44,6 +44,12 @@
     {
       "binding": "ASSET_VECTORS",
       "index_name": "cloudmind-asset-chunks"
+    },
+    // L2 知识图谱实体/陈述向量（embedding 近似消歧用）
+    // wrangler vectorize create graph_entities --dimensions=1024 --metric=cosine
+    {
+      "binding": "GRAPH_VECTORS",
+      "index_name": "graph_entities"
     }
   ],
   "queues": {
