@@ -159,11 +159,7 @@ const SYSTEM_PROMPT = [
 export const extractGraphFromText = async (
   aiProvider: AIProvider,
   text: string,
-  options?: {
-    maxChars?: number | undefined;
-    // 观测 hook：拿到模型原始响应（用于诊断空抽取/解析失败）。
-    onRaw?: ((raw: string) => void) | undefined;
-  }
+  options?: { maxChars?: number | undefined }
 ): Promise<ExtractedGraph> => {
   const trimmed = text.trim();
 
@@ -188,8 +184,6 @@ export const extractGraphFromText = async (
 
     return EMPTY_GRAPH;
   }
-
-  options?.onRaw?.(result.text);
 
   const parsed = parseGraphResponse(result.text);
 
