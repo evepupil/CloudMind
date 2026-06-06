@@ -81,6 +81,25 @@ export const parseExtractedGraph = (raw: unknown): ExtractedGraph | null => {
   };
 };
 
+// qwen3 等推理模型会先输出 <think>…</think>，其中常含花括号，会让 parseJsonObject 的
+// 「首{到末}」切片把推理文本一起吞进去导致 JSON.parse 失败。这里先剥离 think 块再解析。
+const stripReasoning = (text: string): string =>
+  text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
+// 把模型原始响应解析为抽取图：剥 think → parseJsonObject（容 markdown fence/前后散文）→ Zod 校验。
+// 任何环节失败返回 null，由调用方退回空图。
+export const parseGraphResponse = (text: string): ExtractedGraph | null => {
+  let raw: unknown;
+
+  try {
+    raw = parseJsonObject(stripReasoning(text));
+  } catch {
+    return null;
+  }
+
+  return parseExtractedGraph(raw);
+};
+
 const SYSTEM_PROMPT = [
   "You extract a knowledge graph from text for a personal memory layer.",
   "Return ONLY a JSON object, no prose, with this exact shape:",
@@ -115,7 +134,8 @@ export const extractGraphFromText = async (
       systemPrompt: SYSTEM_PROMPT,
       prompt: `Extract entities and subject-predicate-object statements from the following text:\n\n${body}`,
       temperature: 0.1,
-      maxOutputTokens: 1200,
+      // 预算留足：推理模型的 <think> 会先吃掉一部分 token，避免 JSON 被截断。
+      maxOutputTokens: 2000,
     });
   } catch (error) {
     logger.warn("graph_extraction_failed", {}, { error });
@@ -123,15 +143,7 @@ export const extractGraphFromText = async (
     return EMPTY_GRAPH;
   }
 
-  let parsed: ExtractedGraph | null;
-
-  try {
-    parsed = parseExtractedGraph(parseJsonObject(result.text));
-  } catch (error) {
-    logger.warn("graph_extraction_invalid", {}, { error });
-
-    return EMPTY_GRAPH;
-  }
+  const parsed = parseGraphResponse(result.text);
 
   if (!parsed) {
     logger.warn("graph_extraction_invalid", {});

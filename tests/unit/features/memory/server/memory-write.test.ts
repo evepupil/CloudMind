@@ -13,6 +13,7 @@ import {
   type ExtractedGraph,
   normalizeEntityName,
   parseExtractedGraph,
+  parseGraphResponse,
 } from "@/features/memory/server/graph-extraction";
 import { writeGraphToMemory } from "@/features/memory/server/memory-write";
 
@@ -104,6 +105,31 @@ describe("parseExtractedGraph", () => {
 
   it("returns null on invalid shape", () => {
     expect(parseExtractedGraph({ entities: [{ type: "person" }] })).toBeNull();
+  });
+});
+
+describe("parseGraphResponse", () => {
+  it("strips <think> reasoning containing braces before parsing fenced json", () => {
+    const raw =
+      '<think>The subject { is } D1</think>\n```json\n{"entities":[{"name":"D1","type":"product"}],"statements":[]}\n```';
+
+    expect(parseGraphResponse(raw)?.entities).toEqual([
+      { name: "D1", type: "product" },
+    ]);
+  });
+
+  it("parses raw json after stripping reasoning", () => {
+    const raw =
+      '<think>blah {x}</think> {"entities":[{"name":"Acme"}],"statements":[]}';
+
+    expect(parseGraphResponse(raw)?.entities).toEqual([
+      { name: "Acme", type: null },
+    ]);
+  });
+
+  it("returns null when there is no json payload", () => {
+    expect(parseGraphResponse("<think>only reasoning</think>")).toBeNull();
+    expect(parseGraphResponse("no json here")).toBeNull();
   });
 });
 
