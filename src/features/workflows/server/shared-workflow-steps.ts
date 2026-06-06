@@ -651,15 +651,29 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
       return { status: "skipped" };
     }
 
+    let rawSample = "";
     const graph = await extractGraphFromText(
       context.services.aiProvider,
-      normalizedContent
+      normalizedContent,
+      {
+        onRaw: (raw) => {
+          rawSample = raw.slice(0, 1500);
+        },
+      }
     );
 
     if (graph.entities.length === 0 && graph.statements.length === 0) {
       return {
         status: "skipped",
         output: { entityCount: 0, statementCount: 0, edgeCount: 0 },
+        // 诊断用：空抽取时落一份原始响应样本，便于排查模型输出（稳定后移除）。
+        artifacts: [
+          {
+            artifactType: "entities",
+            storageKind: "inline",
+            metadataJson: JSON.stringify({ debug: "empty_graph", rawSample }),
+          },
+        ],
       };
     }
 

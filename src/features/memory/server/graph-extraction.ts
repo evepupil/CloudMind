@@ -117,7 +117,11 @@ const SYSTEM_PROMPT = [
 export const extractGraphFromText = async (
   aiProvider: AIProvider,
   text: string,
-  options?: { maxChars?: number | undefined }
+  options?: {
+    maxChars?: number | undefined;
+    // 观测 hook：拿到模型原始响应（用于诊断空抽取/解析失败）。
+    onRaw?: ((raw: string) => void) | undefined;
+  }
 ): Promise<ExtractedGraph> => {
   const trimmed = text.trim();
 
@@ -132,9 +136,9 @@ export const extractGraphFromText = async (
   try {
     result = await aiProvider.generateText({
       systemPrompt: SYSTEM_PROMPT,
-      prompt: `Extract entities and subject-predicate-object statements from the following text:\n\n${body}`,
+      // qwen3 等推理模型：/no_think 关闭 <think> 链路，直接产出 JSON，避免推理吃光 token。
+      prompt: `Extract entities and subject-predicate-object statements from the following text. Respond with JSON only. /no_think\n\n${body}`,
       temperature: 0.1,
-      // 预算留足：推理模型的 <think> 会先吃掉一部分 token，避免 JSON 被截断。
       maxOutputTokens: 2000,
     });
   } catch (error) {
@@ -142,6 +146,8 @@ export const extractGraphFromText = async (
 
     return EMPTY_GRAPH;
   }
+
+  options?.onRaw?.(result.text);
 
   const parsed = parseGraphResponse(result.text);
 
