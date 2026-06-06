@@ -34,6 +34,7 @@ import {
   toSearchResultItem,
 } from "./evidence";
 import { FUSION_CHANNEL_WEIGHTS, normalizeChannelScores } from "./fusion";
+import { rerankEvidence } from "./rerank";
 import { scoreAssetSummaryMatch } from "./summary-scoring";
 import type { SearchAssetsByTermsResult } from "./term-asset-service";
 import { searchAssetsByTerms } from "./term-asset-service";
@@ -546,7 +547,13 @@ export const createSearchService = (
           contextPolicy
         );
       }
-      const orderedGroups = buildGroupedEvidence(orderedEvidence);
+      // 融合后接 cross-encoder 重排 + MMR 多样化；失败优雅退回融合顺序。
+      const rerankedEvidence = await rerankEvidence(
+        aiProvider,
+        query,
+        orderedEvidence
+      );
+      const orderedGroups = buildGroupedEvidence(rerankedEvidence);
       const pageGroups = orderedGroups.slice(offset, offset + pageSize);
       const pageItems = flattenGroupedEvidence(pageGroups);
       const resultScope = getContextResultScope(
