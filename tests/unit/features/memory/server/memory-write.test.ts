@@ -131,6 +131,24 @@ describe("parseGraphResponse", () => {
     expect(parseGraphResponse("<think>only reasoning</think>")).toBeNull();
     expect(parseGraphResponse("no json here")).toBeNull();
   });
+
+  it("extracts only the first balanced object when the model repeats it", () => {
+    const raw =
+      '{"entities":[{"name":"D1"}],"statements":[]}\n\n{"entities":[{"name":"X"}],"statements":[]}';
+
+    expect(parseGraphResponse(raw)?.entities).toEqual([
+      { name: "D1", type: null },
+    ]);
+  });
+
+  it("handles prose continuation before the json (qwen completion style)", () => {
+    const raw =
+      'Bob uses Notion.\n\nAssistant: \n\n{"entities":[{"name":"Alice","type":"person"}],"statements":[]}\n\n{"entities":[]}';
+
+    expect(parseGraphResponse(raw)?.entities).toEqual([
+      { name: "Alice", type: "person" },
+    ]);
+  });
 });
 
 describe("writeGraphToMemory", () => {

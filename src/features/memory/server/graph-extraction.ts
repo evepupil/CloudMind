@@ -2,7 +2,6 @@ import { z } from "zod";
 
 import type { AIProvider } from "@/core/ai/ports";
 import { createLogger } from "@/core/logging/logger";
-import { parseJsonObject } from "@/features/ingest/server/prompts";
 
 const logger = createLogger("memory_graph_extraction");
 
@@ -86,13 +85,56 @@ export const parseExtractedGraph = (raw: unknown): ExtractedGraph | null => {
 const stripReasoning = (text: string): string =>
   text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 
-// 把模型原始响应解析为抽取图：剥 think → parseJsonObject（容 markdown fence/前后散文）→ Zod 校验。
-// 任何环节失败返回 null，由调用方退回空图。
+// 从可能含散文前缀 / markdown fence / 重复多个对象的响应里，提取**第一个花括号平衡**的完整 JSON 对象。
+// 这是关键修复：qwen 常在 JSON 前续写文本、并把同一对象重复多遍，朴素的「首{到末}」切片会跨多个对象导致解析失败。
+const extractFirstJsonObject = (text: string): string | null => {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const haystack = fenced?.[1] ?? text;
+  const start = haystack.indexOf("{");
+
+  if (start === -1) {
+    return null;
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < haystack.length; i += 1) {
+    const ch = haystack[i];
+
+    if (escaped) {
+      escaped = false;
+    } else if (ch === "\\") {
+      escaped = true;
+    } else if (ch === '"') {
+      inString = !inString;
+    } else if (!inString && ch === "{") {
+      depth += 1;
+    } else if (!inString && ch === "}") {
+      depth -= 1;
+
+      if (depth === 0) {
+        return haystack.slice(start, i + 1);
+      }
+    }
+  }
+
+  return null;
+};
+
+// 把模型原始响应解析为抽取图：剥 think → 取第一个平衡 JSON 对象 → Zod 校验。失败返回 null。
 export const parseGraphResponse = (text: string): ExtractedGraph | null => {
+  const jsonText = extractFirstJsonObject(stripReasoning(text));
+
+  if (!jsonText) {
+    return null;
+  }
+
   let raw: unknown;
 
   try {
-    raw = parseJsonObject(stripReasoning(text));
+    raw = JSON.parse(jsonText);
   } catch {
     return null;
   }
@@ -136,10 +178,10 @@ export const extractGraphFromText = async (
   try {
     result = await aiProvider.generateText({
       systemPrompt: SYSTEM_PROMPT,
-      // qwen3 等推理模型：/no_think 关闭 <think> 链路，直接产出 JSON，避免推理吃光 token。
-      prompt: `Extract entities and subject-predicate-object statements from the following text. Respond with JSON only. /no_think\n\n${body}`,
+      // 定界 <text> 防止模型续写正文；/no_think 关闭 qwen3 推理链路直接产出 JSON。
+      prompt: `Extract entities and subject-predicate-object statements ONLY from the text between the <text> tags. Do not continue, complete, or invent any content. Respond with a single JSON object and nothing else. /no_think\n\n<text>\n${body}\n</text>`,
       temperature: 0.1,
-      maxOutputTokens: 2000,
+      maxOutputTokens: 1200,
     });
   } catch (error) {
     logger.warn("graph_extraction_failed", {}, { error });
