@@ -15,6 +15,7 @@
     "db:generate": "drizzle-kit generate",
     "test": "vitest run",
     "eval": "vitest run tests/eval",
+    "e2e:smoke": "node scripts/e2e-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
