@@ -85,6 +85,13 @@
       "when": 1780674904521,
       "tag": "0011_chunk_fts",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1780757972402,
+      "tag": "0012_good_wallop",
+      "breakpoints": true
     }
   ]
 }
