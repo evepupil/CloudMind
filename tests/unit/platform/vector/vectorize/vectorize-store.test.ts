@@ -29,6 +29,18 @@ describe("VectorizeStore.search", () => {
     });
   });
 
+  it("clamps topK to 50 (Vectorize returnMetadata=all limit)", async () => {
+    const query = vi.fn(async (_values: number[], _options: unknown) => ({
+      matches: [],
+    }));
+    const store = new VectorizeStore({ query } as unknown as Vectorize);
+
+    await store.search({ values: [0.1], topK: 80 });
+
+    const options = query.mock.calls[0]?.[1] as { topK?: number } | undefined;
+    expect(options?.topK).toBe(50);
+  });
+
   it("omits the filter when none is provided", async () => {
     const query = vi.fn(async (_values: number[], _options: unknown) => ({
       matches: [],

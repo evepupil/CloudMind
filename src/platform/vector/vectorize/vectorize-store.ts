@@ -5,6 +5,10 @@ import type {
   VectorStore,
 } from "@/core/vector/ports";
 
+// Vectorize 在 returnMetadata:"all" 下 topK 上限为 50（超过会报 VECTOR_QUERY_ERROR 40025）。
+// 适配器统一用 returnMetadata:"all"（业务需要 textPreview / 元数据词项），故在此钳制 topK。
+const MAX_TOP_K_WITH_FULL_METADATA = 50;
+
 const parseMetadataJson = (
   metadataJson: string | undefined
 ): Record<string, VectorizeVectorMetadata> | undefined => {
@@ -60,7 +64,7 @@ export class VectorizeStore implements VectorStore {
 
   public async search(input: VectorSearchInput): Promise<VectorSearchMatch[]> {
     const options: VectorizeQueryOptions = {
-      topK: input.topK,
+      topK: Math.min(input.topK, MAX_TOP_K_WITH_FULL_METADATA),
       returnMetadata: "all",
     };
 

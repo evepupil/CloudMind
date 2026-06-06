@@ -58,7 +58,11 @@ const log = (message) => {
 };
 
 const login = async () => {
-  const form = new URLSearchParams({ username: USERNAME, password: PASSWORD });
+  const form = new URLSearchParams({
+    username: USERNAME,
+    password: PASSWORD,
+    next: "/",
+  });
   const response = await fetch(`${BASE_URL}/auth/login`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -84,6 +88,7 @@ const login = async () => {
       currentPassword: PASSWORD,
       newPassword: NEW_PASSWORD,
       confirmPassword: NEW_PASSWORD,
+      next: "/",
     });
     const changeResponse = await fetch(`${BASE_URL}/auth/change-password`, {
       method: "POST",
@@ -139,7 +144,9 @@ const waitReady = async (id, title) => {
     if (response.ok) {
       const { item } = await response.json();
 
-      if (item.status === "ready") {
+      // ready 后 chunk 可能比 status 晚一拍写入（finalize 先置 ready 再 replaceAssetChunks），
+      // 这里等到 ready 且 chunk 已落库再返回，避免竞态误报 0 chunk。
+      if (item.status === "ready" && (item.chunks?.length ?? 0) > 0) {
         return item;
       }
 
