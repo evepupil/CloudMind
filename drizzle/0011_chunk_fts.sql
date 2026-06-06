@@ -1,0 +1,5 @@
+CREATE VIRTUAL TABLE `asset_chunks_fts` USING fts5(`content`, `asset_id` UNINDEXED, `chunk_id` UNINDEXED, tokenize = 'trigram');--> statement-breakpoint
+INSERT INTO `asset_chunks_fts`(`rowid`, `content`, `asset_id`, `chunk_id`) SELECT `rowid`, `content_text`, `asset_id`, `id` FROM `asset_chunks`;--> statement-breakpoint
+CREATE TRIGGER `asset_chunks_fts_insert` AFTER INSERT ON `asset_chunks` BEGIN INSERT INTO `asset_chunks_fts`(`rowid`, `content`, `asset_id`, `chunk_id`) VALUES (new.`rowid`, new.`content_text`, new.`asset_id`, new.`id`); END;--> statement-breakpoint
+CREATE TRIGGER `asset_chunks_fts_delete` AFTER DELETE ON `asset_chunks` BEGIN DELETE FROM `asset_chunks_fts` WHERE `rowid` = old.`rowid`; END;--> statement-breakpoint
+CREATE TRIGGER `asset_chunks_fts_update` AFTER UPDATE ON `asset_chunks` BEGIN DELETE FROM `asset_chunks_fts` WHERE `rowid` = old.`rowid`; INSERT INTO `asset_chunks_fts`(`rowid`, `content`, `asset_id`, `chunk_id`) VALUES (new.`rowid`, new.`content_text`, new.`asset_id`, new.`id`); END;

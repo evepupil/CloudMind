@@ -78,6 +78,13 @@
       "when": 1780674904520,
       "tag": "0010_plain_jackal",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1780674904521,
+      "tag": "0011_chunk_fts",
+      "breakpoints": true
     }
   ]
 }
