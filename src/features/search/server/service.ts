@@ -6,7 +6,10 @@ import type {
 import { createLogger } from "@/core/logging/logger";
 import type { VectorMetadataFilter, VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
-import type { AssetSearchFilters } from "@/features/assets/model/types";
+import type {
+  AssetChunkMatch,
+  AssetSearchFilters,
+} from "@/features/assets/model/types";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
 import type { EvidenceItem } from "@/features/search/model/evidence";
 import type { SearchResult } from "@/features/search/model/types";
@@ -144,6 +147,28 @@ const getAssertionMatches = async (
   }
 };
 
+const getLexicalChunkMatches = async (
+  repository: AssetSearchRepository,
+  input: AssetSearchInput,
+  limit: number
+): Promise<AssetChunkMatch[]> => {
+  if (!repository.searchChunksByText) {
+    return [];
+  }
+
+  try {
+    return await repository.searchChunksByText({
+      query: input.query,
+      limit,
+      aiVisibility: [...SEARCHABLE_AI_VISIBILITY],
+      ...getSearchFilters(input),
+    });
+  } catch {
+    // 这里对 FTS 词面检索做兜底，避免边缘 SQL 失败拖垮主链路。
+    return [];
+  }
+};
+
 const withOptionalResultScope = <T extends SearchResult>(
   result: T,
   scope: SearchResult["resultScope"]
@@ -189,11 +214,41 @@ const buildTermEvidence = (
     .sort((left, right) => right.score - left.score);
 };
 
+const buildLexicalChunkEvidence = (
+  lexicalChunkMatches: AssetChunkMatch[],
+  contextPolicy?: ContextRetrievalPolicy
+): EvidenceItem[] => {
+  const total = lexicalChunkMatches.length;
+
+  return lexicalChunkMatches
+    .map((chunk, index) =>
+      buildChunkEvidenceItem(
+        chunk,
+        // 已按 bm25 排好序：用降序排名作为通道内分数（normalizeChannelScores 再做归一化）。
+        applyContextPolicyScore(
+          total > 0 ? (total - index) / total : 0,
+          chunk.asset,
+          contextPolicy
+        )
+      )
+    )
+    .map((item) =>
+      annotateEvidenceMatchReasons(item, {
+        profileBoosted: Boolean(
+          contextPolicy?.boostedDomains.includes(item.asset.domain)
+        ),
+      })
+    )
+    .filter((item) => matchesContextPolicyAsset(item.asset, contextPolicy))
+    .sort((left, right) => right.score - left.score);
+};
+
 const buildLexicalEvidence = (
   query: string,
   repositoryMatches: Awaited<ReturnType<typeof getSummaryMatches>>,
   assertionMatches: Awaited<ReturnType<typeof getAssertionMatches>>,
   termMatches: SearchAssetsByTermsResult,
+  lexicalChunkMatches: AssetChunkMatch[],
   contextPolicy?: ContextRetrievalPolicy
 ): EvidenceItem[] => {
   const orderedAssertionEvidence = assertionMatches
@@ -239,6 +294,10 @@ const buildLexicalEvidence = (
 
   return [
     ...normalizeChannelScores(
+      buildLexicalChunkEvidence(lexicalChunkMatches, contextPolicy),
+      FUSION_CHANNEL_WEIGHTS.lexicalChunk
+    ),
+    ...normalizeChannelScores(
       orderedAssertionEvidence,
       FUSION_CHANNEL_WEIGHTS.assertion
     ),
@@ -262,6 +321,7 @@ const buildSemanticEvidence = (
   summaryMatches: Awaited<ReturnType<typeof getSummaryMatches>>,
   assertionMatches: Awaited<ReturnType<typeof getAssertionMatches>>,
   termMatches: SearchAssetsByTermsResult,
+  lexicalChunkMatches: AssetChunkMatch[],
   contextPolicy?: ContextRetrievalPolicy
 ): EvidenceItem[] => {
   const chunkMatchMap = new Map(
@@ -307,6 +367,7 @@ const buildSemanticEvidence = (
       summaryMatches,
       assertionMatches,
       termMatches,
+      lexicalChunkMatches,
       contextPolicy
     ),
   ].sort((left, right) => right.score - left.score);
@@ -436,19 +497,23 @@ export const createSearchService = (
         purpose: "query",
       });
       const queryVector = embeddingResult.embeddings[0];
-      const [summaryMatches, assertionMatches, termMatches] = await Promise.all(
-        [
-          getSummaryMatches(repository, input, topK, contextPolicy),
-          getAssertionMatches(repository, input, topK, contextPolicy),
-          dependencies.searchAssetsByTerms(bindings, {
-            query,
-            filters: getSearchFilters(input),
-            topK,
-            page: 1,
-            pageSize: topK,
-          }),
-        ]
-      );
+      const [
+        summaryMatches,
+        assertionMatches,
+        termMatches,
+        lexicalChunkMatches,
+      ] = await Promise.all([
+        getSummaryMatches(repository, input, topK, contextPolicy),
+        getAssertionMatches(repository, input, topK, contextPolicy),
+        dependencies.searchAssetsByTerms(bindings, {
+          query,
+          filters: getSearchFilters(input),
+          topK,
+          page: 1,
+          pageSize: topK,
+        }),
+        getLexicalChunkMatches(repository, input, topK),
+      ]);
 
       let orderedEvidence: EvidenceItem[];
 
@@ -458,6 +523,7 @@ export const createSearchService = (
           summaryMatches,
           assertionMatches,
           termMatches,
+          lexicalChunkMatches,
           contextPolicy
         );
       } else {
@@ -476,6 +542,7 @@ export const createSearchService = (
           summaryMatches,
           assertionMatches,
           termMatches,
+          lexicalChunkMatches,
           contextPolicy
         );
       }

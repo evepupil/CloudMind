@@ -9,6 +9,7 @@ import {
   isNull,
   like,
   or,
+  sql,
 } from "drizzle-orm";
 
 import { AssetNotFoundError } from "@/core/assets/errors";
@@ -67,6 +68,7 @@ import {
   sortFacetMatchedAssets,
   splitIntoBatches,
 } from "./d1-asset-repository-helpers";
+import { buildFtsMatchQuery } from "./fts-query";
 import {
   ASSERTION_SEARCH_TERM_BUDGETS,
   expandSearchTerms,
@@ -315,6 +317,46 @@ export class D1AssetRepository implements AssetRepository {
     }
 
     return records.map(mapChunkMatch);
+  }
+
+  public async searchChunksByText(
+    input: SearchAssetSummaryInput
+  ): Promise<AssetChunkMatch[]> {
+    const match = buildFtsMatchQuery(input.query);
+
+    if (!match || input.limit <= 0 || input.aiVisibility.length === 0) {
+      return [];
+    }
+
+    // Step 1：FTS5 trigram MATCH，按 bm25 升序（越小越相关）取有序 chunk id。
+    const ftsRows = await this.db.all<{ chunk_id: string }>(
+      sql`SELECT chunk_id FROM asset_chunks_fts WHERE asset_chunks_fts MATCH ${match} ORDER BY bm25(asset_chunks_fts) LIMIT ${input.limit}`
+    );
+    const orderedIds = ftsRows.map((row) => row.chunk_id);
+
+    if (orderedIds.length === 0) {
+      return [];
+    }
+
+    // Step 2：按 id 取 chunk+asset 并套用可见性/硬过滤，再按 bm25 顺序还原。
+    const records = await this.db
+      .select({ chunk: assetChunks, asset: assets })
+      .from(assetChunks)
+      .innerJoin(assets, eq(assetChunks.assetId, assets.id))
+      .where(
+        and(
+          inArray(assetChunks.id, orderedIds),
+          ...buildAssetSearchFilterConditions(input),
+          inArray(assets.aiVisibility, input.aiVisibility)
+        )
+      );
+    const byId = new Map(
+      records.map((record) => [record.chunk.id, mapChunkMatch(record)])
+    );
+
+    return orderedIds
+      .map((id) => byId.get(id))
+      .filter((value): value is AssetChunkMatch => Boolean(value));
   }
 
   public async searchAssetSummaries(

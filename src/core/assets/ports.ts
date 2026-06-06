@@ -127,6 +127,9 @@ export interface AssetSearchRepository {
     vectorIds: string[],
     query?: ChunkMatchQuery
   ): Promise<AssetChunkMatch[]>;
+  searchChunksByText?(
+    input: SearchAssetSummaryInput
+  ): Promise<AssetChunkMatch[]>;
   searchAssetSummaries(
     input: SearchAssetSummaryInput
   ): Promise<AssetSummaryMatch[]>;
