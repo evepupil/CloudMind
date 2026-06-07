@@ -77,22 +77,65 @@ const rememberInputSchema = z.object({
   visibility: z.enum(["allow", "summary_only", "deny"]).optional(),
 });
 
-const recallInputSchema = z.object({
-  queries: z.array(z.string().trim().min(1).max(200)).min(1).max(5),
-  domain: z
-    .enum([
-      "engineering",
-      "product",
-      "research",
-      "personal",
-      "finance",
-      "health",
-      "archive",
-      "general",
-    ])
-    .optional(),
-  limit: z.number().int().positive().max(50).optional(),
-});
+const recallInputSchema = z
+  .object({
+    queries: z.array(z.string().trim().min(1).max(200)).min(1).max(5),
+    domain: z
+      .enum([
+        "engineering",
+        "product",
+        "research",
+        "personal",
+        "finance",
+        "health",
+        "archive",
+        "general",
+      ])
+      .optional(),
+    limit: z.number().int().positive().max(50).optional(),
+    order: z
+      .enum(["relevance", "recency"])
+      .optional()
+      .describe(
+        "relevance (default) ranks by semantic relevance; recency returns the most recently saved memories first."
+      ),
+    timezoneOffsetMinutes: timezoneOffsetMinutesSchema.describe(
+      "Browser-style timezone offset in minutes. Required when using YYYY-MM-DD date filters."
+    ),
+    createdAtFrom: createdAtFilterInputSchema.describe(
+      "Inclusive lower bound on when the memory was saved. ISO datetime with offset, or YYYY-MM-DD together with timezoneOffsetMinutes."
+    ),
+    createdAtTo: createdAtFilterInputSchema.describe(
+      "Inclusive upper bound on when the memory was saved. ISO datetime with offset, or YYYY-MM-DD together with timezoneOffsetMinutes."
+    ),
+  })
+  .superRefine((value, context) => {
+    validateCreatedAtFilter(
+      value.createdAtFrom,
+      "createdAtFrom",
+      value.timezoneOffsetMinutes,
+      context
+    );
+    validateCreatedAtFilter(
+      value.createdAtTo,
+      "createdAtTo",
+      value.timezoneOffsetMinutes,
+      context
+    );
+  })
+  .transform((value) => ({
+    ...value,
+    createdAtFrom: normalizeDateOnlyFilter(
+      value.createdAtFrom,
+      "start",
+      value.timezoneOffsetMinutes
+    ),
+    createdAtTo: normalizeDateOnlyFilter(
+      value.createdAtTo,
+      "end",
+      value.timezoneOffsetMinutes
+    ),
+  }));
 
 const searchAssetsInputSchema = assetSearchPayloadSchema;
 
@@ -586,6 +629,12 @@ export const createMcpServer = (
         "conventions — then pass them all in `queries` (up to 5). Each memory's " +
         "visibility is respected. Call it once per task with all sub-queries " +
         "batched; avoid calling it repeatedly in a loop. " +
+        "Optional time scoping: pass createdAtFrom/createdAtTo (ISO datetime " +
+        "with offset, or YYYY-MM-DD with timezoneOffsetMinutes) to recall only " +
+        "memories saved within a window — translate the user's " +
+        "'最近/last week/去年' into a concrete range yourself from today's " +
+        "date. Set order='recency' to get the most recently saved memories " +
+        "first instead of the most relevant. " +
         cloudMindInvocationGuidance,
       inputSchema: recallInputSchema,
     },
@@ -595,6 +644,9 @@ export const createMcpServer = (
           queries: input.queries,
           domain: input.domain,
           limit: input.limit,
+          order: input.order,
+          createdAtFrom: input.createdAtFrom,
+          createdAtTo: input.createdAtTo,
         });
 
         return createToolResult(result);

@@ -329,6 +329,16 @@ const buildSemanticVectorFilter = (
     filter.collectionKey = { $eq: applied.collection };
   }
 
+  // M3 时间检索：把 createdAt 范围下推到 Vectorize 原生过滤（ANN topK 之前剪枝），
+  // 避免「先取全时段 topK、再 D1 过滤时间」导致时间窗内更相关的结果被截断而漏召回。
+  // 值为已规范化的 ISO datetime（字典序=时间序）。
+  if (applied.createdAtFrom || applied.createdAtTo) {
+    filter.createdAt = {
+      ...(applied.createdAtFrom ? { $gte: applied.createdAtFrom } : {}),
+      ...(applied.createdAtTo ? { $lte: applied.createdAtTo } : {}),
+    };
+  }
+
   return filter;
 };
 
@@ -361,6 +371,23 @@ const getSemanticMatches = async (
   return { vectorMatches, chunkMatches };
 };
 
+// 图通道按 asset.createdAt 落入时间窗过滤——与 dense/lexical/summary 三通道一致
+// （都用 L1 资产的创建时刻，而非 statement.createdAt），避免 recall 带时间窗时
+// 图证据无视时间约束漏入窗外记忆。值为已规范化 ISO（字典序=时间序）。
+const isAssetWithinCreatedWindow = (
+  createdAt: string,
+  from: string | undefined,
+  to: string | undefined
+): boolean => {
+  if (from && createdAt < from) {
+    return false;
+  }
+  if (to && createdAt > to) {
+    return false;
+  }
+  return true;
+};
+
 // L2 图检索通道：query 向量 → 实体多跳遍历 → 关联事实 → 钻取 L1 资产 → 证据项。
 // 任意环节失败/绑定缺失一律降级为空，绝不拖垮主检索。仅纳入 aiVisibility=allow 且合规资产。
 const buildGraphEvidence = async (
@@ -368,7 +395,9 @@ const buildGraphEvidence = async (
   dependencies: SearchServiceDependencies,
   bindings: AppBindings | undefined,
   assetRepository: AssetSearchRepository,
-  contextPolicy?: ContextRetrievalPolicy
+  contextPolicy?: ContextRetrievalPolicy,
+  createdAtFrom?: string,
+  createdAtTo?: string
 ): Promise<EvidenceItem[]> => {
   const getMemory = dependencies.getMemoryRepository;
   const getGraph = dependencies.getGraphVectorStore;
@@ -419,11 +448,12 @@ const buildGraphEvidence = async (
 
       const asset = assetById.get(hit.assetId);
 
-      // 仅纳入可检索（aiVisibility=allow）且符合 context profile 的资产。
+      // 仅纳入可检索（aiVisibility=allow）、符合 context profile、且落在时间窗内的资产。
       if (
         !asset ||
         asset.aiVisibility !== "allow" ||
-        !matchesContextPolicyAsset(asset, contextPolicy)
+        !matchesContextPolicyAsset(asset, contextPolicy) ||
+        !isAssetWithinCreatedWindow(asset.createdAt, createdAtFrom, createdAtTo)
       ) {
         return [];
       }
@@ -612,7 +642,9 @@ export const createSearchService = (
             dependencies,
             bindings,
             repository,
-            contextPolicy
+            contextPolicy,
+            input.createdAtFrom,
+            input.createdAtTo
           )
         : [];
       const fusedEvidence =
@@ -714,6 +746,7 @@ export const createSearchService = (
       input: RecallMemoriesInput
     ): Promise<RecallResult> {
       const limit = input.limit ?? DEFAULT_RECALL_LIMIT;
+      const order = input.order ?? "relevance";
       const perQuery = await Promise.all(
         input.queries.map(async (query): Promise<PerQueryRecall> => {
           const searchInput: AssetSearchInput = {
@@ -721,12 +754,17 @@ export const createSearchService = (
             page: 1,
             pageSize: RECALL_PER_QUERY_PAGE_SIZE,
             ...(input.domain ? { domain: input.domain } : {}),
+            // 时间窗（已规范化 ISO）下推检索：向量层原生过滤 + D1 兜底，召回不被 topK 截断。
+            ...(input.createdAtFrom
+              ? { createdAtFrom: input.createdAtFrom }
+              : {}),
+            ...(input.createdAtTo ? { createdAtTo: input.createdAtTo } : {}),
           };
 
           return { query, result: await executeSearch(bindings, searchInput) };
         })
       );
-      const memories = mergeRecallResults(perQuery, limit);
+      const memories = mergeRecallResults(perQuery, limit, order);
 
       return {
         queries: input.queries,

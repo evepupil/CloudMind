@@ -38,7 +38,10 @@
   //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=collectionKey --type=string
   //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=type --type=string
   //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=scopeId --type=string
+  //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=createdAt --type=string
   //   # 然后全量 re-ingest / reprocess，写入带 metadata 的向量（旧向量无 metadata 会被原生过滤排除）。
+  // B1-i1（时间检索）：createdAt 索引可对现网【增量】添加（无需重建整库）；仅之后写入的向量带
+  //   createdAt，旧向量不追溯——故旧数据「时间检索」不可见，但不带时间窗的普通检索不受影响。
   "vectorize": [
     {
       "binding": "ASSET_VECTORS",

@@ -224,4 +224,36 @@ describe("search service graph channel", () => {
 
     expect(enqueued).toHaveLength(0);
   });
+
+  it("excludes graph facts whose asset falls outside the createdAt window", async () => {
+    const service = buildService("allow");
+
+    const result = await service.searchAssets(undefined, {
+      query: "where is acme based",
+      page: 1,
+      pageSize: 10,
+      // asset.createdAt=2026-03-19；窗口下界晚于它 → 图证据应被时间过滤排除。
+      createdAtFrom: "2026-06-01T00:00:00.000Z",
+    });
+
+    expect(
+      result.evidence.items.some((item) => item.layer === "statement")
+    ).toBe(false);
+  });
+
+  it("keeps graph facts whose asset is within the createdAt window", async () => {
+    const service = buildService("allow");
+
+    const result = await service.searchAssets(undefined, {
+      query: "where is acme based",
+      page: 1,
+      pageSize: 10,
+      createdAtFrom: "2026-01-01T00:00:00.000Z",
+      createdAtTo: "2026-12-31T23:59:59.999Z",
+    });
+
+    expect(
+      result.evidence.items.filter((item) => item.layer === "statement")
+    ).toHaveLength(1);
+  });
 });

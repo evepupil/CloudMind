@@ -243,4 +243,79 @@ describe("mergeRecallResults", () => {
 
     expect(merged).toEqual([]);
   });
+
+  it("includes the asset createdAt on each recalled memory", () => {
+    const a = asset({ id: "asset-ts", createdAt: "2025-03-01T08:00:00.000Z" });
+    const merged = mergeRecallResults(
+      [perQuery("q", [chunkEv(a, 0, 0.5, "text")])],
+      20
+    );
+
+    expect(merged[0]?.createdAt).toBe("2025-03-01T08:00:00.000Z");
+  });
+
+  it("orders by recency (newest createdAt first) when order is recency", () => {
+    const old = asset({ id: "old", createdAt: "2025-01-01T00:00:00.000Z" });
+    const recent = asset({
+      id: "recent",
+      createdAt: "2026-06-01T00:00:00.000Z",
+    });
+    const mid = asset({ id: "mid", createdAt: "2025-09-01T00:00:00.000Z" });
+    const merged = mergeRecallResults(
+      [
+        perQuery("q", [
+          // 分数与时间故意逆序，证明 recency 用时间而非分数排序。
+          chunkEv(old, 0, 0.9, "old high score"),
+          chunkEv(recent, 0, 0.3, "recent low score"),
+          chunkEv(mid, 0, 0.6, "mid"),
+        ]),
+      ],
+      20,
+      "recency"
+    );
+
+    expect(merged.map((memory) => memory.assetId)).toEqual([
+      "recent",
+      "mid",
+      "old",
+    ]);
+  });
+
+  it("breaks recency ties by score", () => {
+    const sameTime = "2026-06-07T00:00:00.000Z";
+    const a = asset({ id: "a", createdAt: sameTime });
+    const b = asset({ id: "b", createdAt: sameTime });
+    const merged = mergeRecallResults(
+      [
+        perQuery("q", [
+          chunkEv(a, 0, 0.4, "lower"),
+          chunkEv(b, 0, 0.8, "higher"),
+        ]),
+      ],
+      20,
+      "recency"
+    );
+
+    expect(merged.map((memory) => memory.assetId)).toEqual(["b", "a"]);
+  });
+
+  it("defaults to relevance order (by score) when order is omitted", () => {
+    const old = asset({ id: "old", createdAt: "2025-01-01T00:00:00.000Z" });
+    const recent = asset({
+      id: "recent",
+      createdAt: "2026-06-01T00:00:00.000Z",
+    });
+    const merged = mergeRecallResults(
+      [
+        perQuery("q", [
+          chunkEv(recent, 0, 0.3, "recent low"),
+          chunkEv(old, 0, 0.9, "old high"),
+        ]),
+      ],
+      20
+    );
+
+    // 默认 relevance：高分在前，无视时间。
+    expect(merged.map((memory) => memory.assetId)).toEqual(["old", "recent"]);
+  });
 });

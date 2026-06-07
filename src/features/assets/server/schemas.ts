@@ -65,7 +65,16 @@ const normalizeDateFilter = (value: string | undefined): string | undefined => {
     return undefined;
   }
 
-  return value;
+  // 把带偏移的 ISO datetime（如 +08:00）统一归一化为 UTC Z 格式，与存储的
+  // asset.createdAt（恒 Z）同源，确保 Vectorize/D1 的字典序比较即时间序成立。
+  // 解析失败（理论上已被 validateCreatedAtFilter 拦截）时原样返回，交由上层兜底。
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toISOString();
 };
 
 const normalizeDateOnlyFilter = (

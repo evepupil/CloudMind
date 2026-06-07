@@ -58,6 +58,8 @@ export interface RecalledMemory {
   kind: EvidenceLayer;
   domain: AssetDomain;
   sourceKind: AssetSourceKind | null;
+  // 资产创建时刻（ISO）：用于 recency 排序与"某段时间的记忆"展示。
+  createdAt: string;
   matchedQueries: string[];
 }
 

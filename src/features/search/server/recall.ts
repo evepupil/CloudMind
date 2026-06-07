@@ -9,10 +9,17 @@ import type {
 export const DEFAULT_RECALL_LIMIT = 20;
 export const RECALL_PER_QUERY_PAGE_SIZE = 10;
 
+// recall 排序模式：relevance=语义相关优先（默认）；recency=最近创建优先（"最近发生了什么"）。
+export type RecallOrder = "relevance" | "recency";
+
 export interface RecallMemoriesInput {
   queries: string[];
   domain?: AssetDomain | undefined;
   limit?: number | undefined;
+  // 已规范化的 ISO datetime 时间窗（调用方负责把「最近/上周/去年」翻译成绝对范围）。
+  createdAtFrom?: string | undefined;
+  createdAtTo?: string | undefined;
+  order?: RecallOrder | undefined;
 }
 
 // 单个子查询的检索结果，连同发起它的子查询文本一起带回，便于记录 matchedQueries。
@@ -38,16 +45,18 @@ const toRecalledMemory = (
     kind: item.layer,
     domain: item.asset.domain,
     sourceKind: item.asset.sourceKind,
+    createdAt: item.asset.createdAt,
     matchedQueries: [query],
   },
 });
 
 // 纯函数：把多个子查询的检索证据合并去重为一捆记忆。
 // 同一证据被多个子查询命中时保留最高分、并累计 matchedQueries（保留首见的 snippet/title）；
-// 最后按分数降序截断到 limit。
+// 最后按 order（relevance 分数 / recency 时间）排序并截断到 limit。
 export const mergeRecallResults = (
   perQuery: PerQueryRecall[],
-  limit: number
+  limit: number,
+  order: RecallOrder = "relevance"
 ): RecalledMemory[] => {
   const byKey = new Map<string, RecalledMemory>();
 
@@ -69,7 +78,14 @@ export const mergeRecallResults = (
     }
   }
 
-  return [...byKey.values()]
-    .sort((left, right) => right.score - left.score)
-    .slice(0, Math.max(0, limit));
+  // recency：按 createdAt 倒序（ISO 字典序=时间序），同刻用相关分兜底；relevance：纯按分数。
+  const compare =
+    order === "recency"
+      ? (left: RecalledMemory, right: RecalledMemory): number =>
+          right.createdAt.localeCompare(left.createdAt) ||
+          right.score - left.score
+      : (left: RecalledMemory, right: RecalledMemory): number =>
+          right.score - left.score;
+
+  return [...byKey.values()].sort(compare).slice(0, Math.max(0, limit));
 };
