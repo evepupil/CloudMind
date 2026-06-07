@@ -277,6 +277,14 @@ describe("ingest service", () => {
       fetchedAt: "2026-03-19T00:00:00.000Z",
       provider: "jina_reader" as const,
     })),
+    parseArchived: vi.fn((rawContent: string, fallbackSourceUrl: string) => ({
+      title: "Archived title",
+      sourceUrl: fallbackSourceUrl,
+      rawContent,
+      content: "Archived content",
+      fetchedAt: "",
+      provider: "jina_reader" as const,
+    })),
   };
   const getAssetRepositoryMock = vi.fn();
   const getBlobStoreMock = vi.fn();

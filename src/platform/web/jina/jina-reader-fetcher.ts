@@ -34,6 +34,40 @@ const extractHeadingTitle = (content: string): string | null => {
   return headingMatch?.[1]?.trim() || null;
 };
 
+// 把 Jina Reader 的原始响应纯函数解析成结构化结果，供首次抓取与存档重算共用。
+// 这样 reprocess 能从不可变的 L1 原文重建 content/title/sourceUrl，无需重新联网。
+export const parseJinaReaderResponse = (
+  rawContent: string,
+  fallbackSourceUrl: string,
+  fetchedAt: string
+): WebPageFetchResult => {
+  const trimmedRaw = rawContent.trim();
+
+  if (!trimmedRaw) {
+    throw new Error("Jina Reader returned empty content.");
+  }
+
+  const content = extractMarkdownContent(trimmedRaw);
+
+  if (!content) {
+    throw new Error("Jina Reader returned empty markdown content.");
+  }
+
+  const sourceUrl =
+    extractMetadataValue(trimmedRaw, "URL Source") ?? fallbackSourceUrl;
+  const title =
+    extractMetadataValue(trimmedRaw, "Title") ?? extractHeadingTitle(content);
+
+  return {
+    title,
+    sourceUrl,
+    rawContent: trimmedRaw,
+    content,
+    fetchedAt,
+    provider: "jina_reader",
+  };
+};
+
 // 这里封装 Jina Reader 抓取实现；优先复用其网页转 Markdown 能力，而不是自己维护爬虫。
 export class JinaReaderWebPageFetcher implements WebPageFetcher {
   private readonly fetchImpl: typeof fetch;
@@ -64,29 +98,16 @@ export class JinaReaderWebPageFetcher implements WebPageFetcher {
       );
     }
 
-    const rawContent = (await response.text()).trim();
+    const rawContent = await response.text();
 
-    if (!rawContent) {
-      throw new Error("Jina Reader returned empty content.");
-    }
+    return parseJinaReaderResponse(rawContent, url, new Date().toISOString());
+  }
 
-    const content = extractMarkdownContent(rawContent);
-
-    if (!content) {
-      throw new Error("Jina Reader returned empty markdown content.");
-    }
-
-    const sourceUrl = extractMetadataValue(rawContent, "URL Source") ?? url;
-    const title =
-      extractMetadataValue(rawContent, "Title") ?? extractHeadingTitle(content);
-
-    return {
-      title,
-      sourceUrl,
-      rawContent,
-      content,
-      fetchedAt: new Date().toISOString(),
-      provider: "jina_reader",
-    };
+  // reprocess 时从存档的原始响应重建结果；fetchedAt 留空表示「非本次联网抓取」。
+  public parseArchived(
+    rawContent: string,
+    fallbackSourceUrl: string
+  ): WebPageFetchResult {
+    return parseJinaReaderResponse(rawContent, fallbackSourceUrl, "");
   }
 }

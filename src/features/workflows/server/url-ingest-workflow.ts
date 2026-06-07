@@ -4,7 +4,7 @@ import { createRawAssetBlobKey } from "@/core/blob/keys";
 import type { BlobStore } from "@/core/blob/ports";
 import type { JobQueue } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
-import type { WebPageFetcher } from "@/core/web/ports";
+import type { WebPageFetcher, WebPageFetchResult } from "@/core/web/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
 import { enqueueWorkflow, type WorkflowDefinition } from "./runtime";
@@ -55,17 +55,32 @@ export const createUrlIngestWorkflowDefinition = (): WorkflowDefinition => ({
           throw new Error("Asset URL is empty and cannot be processed.");
         }
 
-        const fetchedPage =
-          await getWebPageFetcher(context).fetchUrl(sourceUrl);
+        const fetcher = getWebPageFetcher(context);
         const rawR2Key = createRawAssetBlobKey(context.asset.id, "source.md");
 
-        await context.services.blobStore.put({
-          key: rawR2Key,
-          body: new TextEncoder()
-            .encode(fetchedPage.rawContent)
-            .buffer.slice(0) as ArrayBuffer,
-          contentType: "text/markdown; charset=utf-8",
-        });
+        // L1 不可变铁律：原始快照只在首次抓取写入一次。
+        // 已存在即从存档原文重算下游（reprocess），绝不重抓、绝不覆盖——
+        // 否则会用「当下的页面」毁掉「当初存下的页面」（50 年时间胶囊）。
+        const archived = await context.services.blobStore.get(rawR2Key);
+
+        let fetchedPage: WebPageFetchResult;
+
+        if (archived) {
+          fetchedPage = fetcher.parseArchived(
+            new TextDecoder().decode(archived.body),
+            sourceUrl
+          );
+        } else {
+          fetchedPage = await fetcher.fetchUrl(sourceUrl);
+
+          await context.services.blobStore.put({
+            key: rawR2Key,
+            body: new TextEncoder()
+              .encode(fetchedPage.rawContent)
+              .buffer.slice(0) as ArrayBuffer,
+            contentType: "text/markdown; charset=utf-8",
+          });
+        }
 
         return {
           output: {
@@ -73,6 +88,8 @@ export const createUrlIngestWorkflowDefinition = (): WorkflowDefinition => ({
             rawR2Key,
             provider: fetchedPage.provider,
             fetchedLength: fetchedPage.content.length,
+            // 观测用：archive=从不可变存档重算，fetch=首次联网抓取。
+            source: archived ? "archive" : "fetch",
           },
           state: {
             sourceUrl: fetchedPage.sourceUrl,

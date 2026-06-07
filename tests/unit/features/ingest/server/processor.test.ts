@@ -50,6 +50,7 @@ import {
   consumeWorkflowStepMessage,
   parseWorkflowStepQueuePayload,
 } from "@/features/workflows/server/runtime";
+import { parseJinaReaderResponse } from "@/platform/web/jina/jina-reader-fetcher";
 
 const createJob = (
   overrides: Partial<IngestJobSummary> = {}
@@ -532,16 +533,29 @@ class ScriptedAIProvider implements AIProvider {
 }
 
 class InMemoryWebPageFetcher implements WebPageFetcher {
+  // 记录联网抓取次数，用于断言 reprocess 不再重抓。
+  public fetchCount = 0;
+
   public constructor(
     private readonly fetchUrlResult: WebPageFetchResult | Error
   ) {}
 
   public async fetchUrl(_url: string): Promise<WebPageFetchResult> {
+    this.fetchCount += 1;
+
     if (this.fetchUrlResult instanceof Error) {
       throw this.fetchUrlResult;
     }
 
     return structuredClone(this.fetchUrlResult);
+  }
+
+  // 直接复用真实纯解析函数，确保替身与生产解析行为一致。
+  public parseArchived(
+    rawContent: string,
+    fallbackSourceUrl: string
+  ): WebPageFetchResult {
+    return parseJinaReaderResponse(rawContent, fallbackSourceUrl, "");
   }
 }
 
@@ -1242,6 +1256,12 @@ describe("processUrlAsset", () => {
     expect(result.status).toBe("ready");
     expect(result.summary).toBe("AI summary for the Cloudflare Workers page.");
     expect(result.rawR2Key).toBe("assets/asset-url-1/raw/source.md");
+    // 首次摄取应联网抓取一次并写入原始快照。
+    expect(webPageFetcher.fetchCount).toBe(1);
+    const firstIngestArchive = await blobStore.get(
+      "assets/asset-url-1/raw/source.md"
+    );
+    expect(firstIngestArchive).not.toBeNull();
     expect(result.contentR2Key).toBe("assets/asset-url-1/content/content.txt");
     expect(result.contentText).toBe(
       "Cloudflare Workers runtime guide for building APIs with D1 and R2."
@@ -1308,6 +1328,106 @@ describe("processUrlAsset", () => {
       aiVisibility: "allow",
       retrievalPriority: 50,
     });
+  });
+
+  it("reuses the archived raw snapshot on reprocess without refetching or overwriting it", async () => {
+    const rawKey = "assets/asset-url-reprocess/raw/source.md";
+    const archivedRaw =
+      "Title: Original Archived Title\n" +
+      "URL Source: https://example.com/archived-post\n" +
+      "Markdown Content:\n" +
+      "The original archived body that must survive reprocess.";
+    const archivedBody = encodeArrayBuffer(archivedRaw);
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-url-reprocess",
+        type: "url",
+        title: "Original Archived Title",
+        status: "ready",
+        summary: "Stale summary",
+        contentText: null,
+        sourceUrl: "https://example.com/archived-post",
+        rawR2Key: rawKey,
+        jobs: [createJob({ status: "succeeded" })],
+      })
+    );
+    const blobStore = new InMemoryBlobStore([
+      {
+        key: rawKey,
+        body: archivedBody,
+        size: archivedBody.byteLength,
+        contentType: "text/markdown; charset=utf-8",
+      },
+    ]);
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new ConfigurableAIProvider(
+      "Recomputed summary from the archived snapshot."
+    );
+    // fetchUrl 抛错：一旦 reprocess 试图重抓即失败，从而证明它绝不重抓。
+    const webPageFetcher = new InMemoryWebPageFetcher(
+      new Error("fetchUrl must not be called on reprocess")
+    );
+    const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
+
+    const enqueued = await processUrlAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      webPageFetcher,
+      "asset-url-reprocess",
+      { force: true }
+    );
+
+    expect(enqueued.status).toBe("processing");
+
+    await drainWorkflowQueue(
+      jobQueue,
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      webPageFetcher
+    );
+
+    const result = await repository.getAssetById("asset-url-reprocess");
+
+    expect(result.status).toBe("ready");
+    expect(result.summary).toBe(
+      "Recomputed summary from the archived snapshot."
+    );
+    // 下游内容从不可变存档原文重算。
+    expect(result.contentText).toBe(
+      "The original archived body that must survive reprocess."
+    );
+    // reprocess 绝不联网重抓。
+    expect(webPageFetcher.fetchCount).toBe(0);
+    // 原始快照字节完全未被改动。
+    const stillArchived = await blobStore.get(rawKey);
+
+    if (!stillArchived) {
+      throw new Error("Archived raw snapshot disappeared after reprocess.");
+    }
+
+    expect(new TextDecoder().decode(stillArchived.body)).toBe(archivedRaw);
+    // run 是 reprocess，且 load_source 走的是存档分支。
+    expect(workflowRepository.runs[0]).toEqual(
+      expect.objectContaining({
+        workflowType: "url_ingest_v1",
+        triggerType: "reprocess",
+        status: "succeeded",
+      })
+    );
+
+    const loadSourceStep = workflowRepository.steps.find(
+      (step) => step.stepKey === "load_source"
+    );
+
+    expect(loadSourceStep?.outputJson ?? "").toContain('"source":"archive"');
   });
 
   it("marks the asset as failed when the URL is empty", async () => {
