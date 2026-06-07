@@ -1,4 +1,4 @@
-import type { MemoryRepository } from "@/core/memory/ports";
+import type { MemoryRepository, MemoryStatement } from "@/core/memory/ports";
 
 import { type ExtractedGraph, normalizeEntityName } from "./graph-extraction";
 import type { ReconcileDecision, ReconcileJudge } from "./memory-reconcile";
@@ -105,6 +105,24 @@ export const writeGraphToMemory = async (
   let statementCount = 0;
   let edgeCount = 0;
 
+  // 调和失效一条实体宾语 statement 时，同步失效它投影出的图边（按 src/dst/relation 端点匹配）。
+  // 注：重复事实场景（同端点多条 statement）会失效全部匹配活跃边，属可接受的保守行为
+  // —— 重复 statement 本身是另一类待去重问题，不在本修复范围内。
+  const invalidateMatchingEdge = async (
+    target: MemoryStatement | undefined
+  ): Promise<void> => {
+    if (!target?.objectEntityId) {
+      return;
+    }
+
+    await memoryRepository.invalidateActiveEdges({
+      scopeId,
+      srcEntityId: target.subjectEntityId,
+      dstEntityId: target.objectEntityId,
+      relation: target.predicate,
+    });
+  };
+
   for (const statement of graph.statements) {
     const subjectId = await resolveEntity(statement.subject);
 
@@ -114,13 +132,15 @@ export const writeGraphToMemory = async (
 
     // 智能写调和：取同主语仍有效的陈述作候选，LLM 判 ADD/UPDATE/DELETE/NOOP。
     // 未注入 reconcile 或无候选时退回 ADD（与历史行为一致）。
+    // candidates 提升到循环体作用域：DELETE/UPDATE 失效目标时据此定位要同步失效的边。
+    let candidates: MemoryStatement[] = [];
     let decision: ReconcileDecision = {
       action: "ADD",
       targetStatementId: null,
     };
 
     if (reconcile) {
-      const candidates = await memoryRepository.findActiveStatementsBySubject(
+      candidates = await memoryRepository.findActiveStatementsBySubject(
         subjectId,
         scopeId
       );
@@ -142,6 +162,9 @@ export const writeGraphToMemory = async (
         await memoryRepository.invalidateStatement({
           statementId: decision.targetStatementId,
         });
+        await invalidateMatchingEdge(
+          candidates.find((c) => c.id === decision.targetStatementId)
+        );
       }
 
       continue;
@@ -195,11 +218,15 @@ export const writeGraphToMemory = async (
     }
 
     // UPDATE：把被取代的旧事实置失效，superseded_by 指向新事实（双时间冲突处理，不删）。
+    // 同步失效旧事实投影的图边——新事实已在上面落了新边，旧边不再有效。
     if (decision.action === "UPDATE" && decision.targetStatementId) {
       await memoryRepository.invalidateStatement({
         statementId: decision.targetStatementId,
         supersededById: created.id,
       });
+      await invalidateMatchingEdge(
+        candidates.find((c) => c.id === decision.targetStatementId)
+      );
     }
   }
 

@@ -64,6 +64,15 @@ export interface InvalidateStatementInput {
   supersededById?: string | null | undefined;
 }
 
+// 置匹配的活跃边失效的输入：按 (scope, src, dst, relation) 端点定位。
+// 调和失效一条实体宾语的 statement 时，需同步失效其投影出的图边，避免图遍历读到陈旧关系。
+export interface InvalidateEdgesInput {
+  scopeId?: string | undefined;
+  srcEntityId: string;
+  dstEntityId: string;
+  relation: string;
+}
+
 // L2 有向边读模型，供图遍历（BFS / 递归 CTE）消费。
 export interface MemoryEdge {
   id: string;
@@ -156,6 +165,8 @@ export interface MemoryRepository {
   getStatementById(statementId: string): Promise<MemoryStatement | null>;
   // 置某陈述失效（双时间：expired_at=now），可指向取代它的新陈述。
   invalidateStatement(input: InvalidateStatementInput): Promise<void>;
+  // 置匹配端点的活跃边失效（与 statement 调和同步，避免 edges 表残留陈旧关系）。
+  invalidateActiveEdges(input: InvalidateEdgesInput): Promise<void>;
   // 检索命中强化：批量 bump 陈述的 access_count(+1) 与 last_accessed_at（访问写回闭环）。
   bumpStatementAccess(statementIds: string[]): Promise<void>;
   // —— 图检索读侧（T3）——

@@ -5,6 +5,7 @@ import type {
   CreateEpisodeInput,
   CreateStatementInput,
   EntityVectorRef,
+  InvalidateEdgesInput,
   InvalidateStatementInput,
   MemoryEdge,
   MemoryEntity,
@@ -303,6 +304,25 @@ export class D1MemoryRepository implements MemoryRepository {
         updatedAt: now,
       })
       .where(eq(statements.id, input.statementId));
+  }
+
+  public async invalidateActiveEdges(
+    input: InvalidateEdgesInput
+  ): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .update(edges)
+      .set({ expiredAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(edges.scopeId, input.scopeId ?? DEFAULT_SCOPE),
+          eq(edges.srcEntityId, input.srcEntityId),
+          eq(edges.dstEntityId, input.dstEntityId),
+          eq(edges.relation, input.relation),
+          isNull(edges.expiredAt)
+        )
+      );
   }
 
   public async bumpStatementAccess(statementIds: string[]): Promise<void> {

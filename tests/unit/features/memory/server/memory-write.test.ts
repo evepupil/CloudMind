@@ -6,6 +6,7 @@ import type {
   CreateEpisodeInput,
   CreateStatementInput,
   EntityVectorRef,
+  InvalidateEdgesInput,
   InvalidateStatementInput,
   MemoryEdge,
   MemoryEntity,
@@ -29,7 +30,9 @@ class FakeMemoryRepository implements MemoryRepository {
   public readonly statements: CreateStatementInput[] = [];
   // 完整陈述记录（带 id / expired_at），供调和读侧方法操作；按插入顺序保留。
   public readonly statementRecords = new Map<string, MemoryStatement>();
-  public readonly edges: CreateEdgeInput[] = [];
+  public readonly edges: Array<
+    CreateEdgeInput & { id: string; expired: boolean }
+  > = [];
   public readonly provenance: AddProvenanceInput[] = [];
   public readonly vectorUpdates = new Map<string, string>();
   private seq = 0;
@@ -153,8 +156,27 @@ class FakeMemoryRepository implements MemoryRepository {
 
   public async createEdge(input: CreateEdgeInput): Promise<{ id: string }> {
     this.seq += 1;
-    this.edges.push(input);
-    return { id: `ed${this.seq}` };
+    const id = `ed${this.seq}`;
+    this.edges.push({ ...input, id, expired: false });
+    return { id };
+  }
+
+  public async invalidateActiveEdges(
+    input: InvalidateEdgesInput
+  ): Promise<void> {
+    const scope = input.scopeId ?? "default";
+
+    for (const edge of this.edges) {
+      if (
+        !edge.expired &&
+        (edge.scopeId ?? "default") === scope &&
+        edge.srcEntityId === input.srcEntityId &&
+        edge.dstEntityId === input.dstEntityId &&
+        edge.relation === input.relation
+      ) {
+        edge.expired = true;
+      }
+    }
   }
 
   public async addProvenance(input: AddProvenanceInput): Promise<void> {
@@ -478,5 +500,82 @@ describe("writeGraphToMemory reconciliation", () => {
     const records = [...repo.statementRecords.values()];
     expect(records).toHaveLength(1);
     expect(records[0]?.expiredAt).toBeNull();
+  });
+
+  // 实体宾语版本：会落一条 statement + 一条 edge，用于验证调和时 edge 同步失效。
+  const livesInEntity = (city: string): ExtractedGraph => ({
+    entities: [
+      { name: "Alice", type: "person" },
+      { name: city, type: "place" },
+    ],
+    statements: [
+      {
+        subject: "Alice",
+        predicate: "lives in",
+        object: city,
+        objectIsEntity: true,
+        nlText: `Alice lives in ${city}`,
+        confidence: null,
+      },
+    ],
+  });
+
+  it("UPDATE also invalidates the superseded statement's edge", async () => {
+    const repo = new FakeMemoryRepository();
+    await writeGraphToMemory(
+      repo,
+      { assetId: "a1" },
+      livesInEntity("New York")
+    );
+
+    await writeGraphToMemory(
+      repo,
+      { assetId: "a2" },
+      livesInEntity("Los Angeles"),
+      {
+        reconcile: decide(async ({ candidates }) => ({
+          action: "UPDATE",
+          targetStatementId: candidates[0]?.id ?? null,
+        })),
+      }
+    );
+
+    // 旧边（lives in New York）失效，新边（lives in Los Angeles）仍活跃。
+    expect(repo.edges).toHaveLength(2);
+    const active = repo.edges.filter((edge) => !edge.expired);
+    const expired = repo.edges.filter((edge) => edge.expired);
+    expect(active).toHaveLength(1);
+    expect(expired).toHaveLength(1);
+    expect(active[0]?.dstEntityId).toBe(
+      repo.entities.get("default:los angeles")?.id
+    );
+    expect(expired[0]?.dstEntityId).toBe(
+      repo.entities.get("default:new york")?.id
+    );
+  });
+
+  it("DELETE invalidates the conflicting statement's edge without adding a new one", async () => {
+    const repo = new FakeMemoryRepository();
+    await writeGraphToMemory(
+      repo,
+      { assetId: "a1" },
+      livesInEntity("New York")
+    );
+
+    await writeGraphToMemory(
+      repo,
+      { assetId: "a2" },
+      livesInEntity("Los Angeles"),
+      {
+        reconcile: decide(async ({ candidates }) => ({
+          action: "DELETE",
+          targetStatementId: candidates[0]?.id ?? null,
+        })),
+      }
+    );
+
+    // DELETE 在创建新 statement/edge 前就 continue：只有旧边，且已失效。
+    expect(repo.edges).toHaveLength(1);
+    expect(repo.edges[0]?.expired).toBe(true);
   });
 });
