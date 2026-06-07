@@ -279,7 +279,7 @@ const reprocessExistingAsset = async (
 export const createIngestService = (
   dependencies: IngestServiceDependencies = defaultDependencies
 ) => {
-  return {
+  const service = {
     async ingestTextAsset(
       bindings: AppBindings | undefined,
       input: CreateTextAssetInput
@@ -581,7 +581,24 @@ export const createIngestService = (
         throw error;
       }
     },
+
+    // remember：把一条高密度个人记忆写入（type=note + sourceKind=mcp），复用 note 流水线。
+    // 当前是 ingestTextAsset 的薄封装，作为未来轻量流水线 / 可见性门控 / 快写路径的锚点。
+    // 可见性当前由 classify 自动推导（敏感域→summary_only / 受限词→deny）；
+    // 写时显式 pin（含 sourceKind=mcp 默认更保守初值）留到 A3。
+    async rememberMemory(
+      bindings: AppBindings | undefined,
+      input: { content: string; title?: string | undefined }
+    ): Promise<AssetDetail> {
+      return service.ingestTextAsset(bindings, {
+        title: input.title,
+        content: input.content,
+        sourceKind: "mcp",
+      });
+    },
   };
+
+  return service;
 };
 
 const ingestService = createIngestService();
@@ -590,6 +607,7 @@ export const {
   ingestTextAsset,
   ingestUrlAsset,
   ingestFileAsset,
+  rememberMemory,
   reprocessAsset,
   backfillChunkContent,
 } = ingestService;

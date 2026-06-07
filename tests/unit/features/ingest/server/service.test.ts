@@ -386,6 +386,63 @@ describe("ingest service", () => {
     });
   });
 
+  it("rememberMemory creates an mcp-sourced note and forwards it to the text processor", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-mem-1",
+        title: "Original title",
+      })
+    );
+    const processedAsset = createAsset({
+      id: "asset-mem-1",
+      title: "User coding preference",
+      status: "ready",
+      summary: "Processed memory",
+      sourceKind: "mcp",
+      jobs: [createJob({ status: "succeeded" })],
+    });
+    const service = createIngestService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
+      processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
+      processUrlAsset: processUrlAssetMock,
+      processPdfAsset: processPdfAssetMock,
+      getProcessTextAssetForced: processTextAssetForcedMock,
+      getProcessUrlAssetForced: processUrlAssetForcedMock,
+      getProcessPdfAssetForced: processPdfAssetForcedMock,
+    });
+
+    const result = await service.rememberMemory(env, {
+      content: "The user prefers TypeScript with 2-space indentation.",
+      title: "User coding preference",
+    });
+
+    expect(result).toEqual(processedAsset);
+    expect(processTextAssetMock).toHaveBeenCalledWith(
+      repository,
+      workflowRepositoryMock,
+      blobStoreMock,
+      vectorStoreMock,
+      aiProviderMock,
+      jobQueueMock,
+      "asset-mem-1"
+    );
+    expect(await repository.getAssetById("asset-mem-1")).toMatchObject({
+      contentText: "The user prefers TypeScript with 2-space indentation.",
+      source: {
+        kind: "mcp" satisfies AssetSourceKind,
+      },
+    });
+  });
+
   it("ingestUrlAsset creates the asset and forwards it to the URL processor", async () => {
     const repository = new InMemoryAssetRepository(
       createAsset({

@@ -25,6 +25,7 @@ import {
 import {
   ingestTextAsset,
   ingestUrlAsset,
+  rememberMemory,
   reprocessAsset,
 } from "@/features/ingest/server/service";
 import {
@@ -35,6 +36,7 @@ import {
 } from "@/features/mcp/server/context-profiles";
 import { assetSearchPayloadSchema } from "@/features/search/server/schemas";
 import {
+  recallMemories,
   searchAssets,
   searchAssetsForContext,
 } from "@/features/search/server/service";
@@ -67,6 +69,28 @@ const saveAssetInputSchema = z
       });
     }
   });
+
+const rememberInputSchema = z.object({
+  content: z.string().trim().min(1).max(20000),
+  title: z.string().trim().min(1).max(300).optional(),
+});
+
+const recallInputSchema = z.object({
+  queries: z.array(z.string().trim().min(1).max(200)).min(1).max(5),
+  domain: z
+    .enum([
+      "engineering",
+      "product",
+      "research",
+      "personal",
+      "finance",
+      "health",
+      "archive",
+      "general",
+    ])
+    .optional(),
+  limit: z.number().int().positive().max(50).optional(),
+});
 
 const searchAssetsInputSchema = assetSearchPayloadSchema;
 
@@ -442,6 +466,34 @@ export const createMcpServer = (
   );
 
   server.registerTool(
+    "remember",
+    {
+      title: "Remember",
+      description:
+        "Remember a high-density personal memory about the user — a preference, " +
+        "norm/convention, attribute, decision, or fact — so any AI can recall it " +
+        "later via CloudMind. Distill the salient point into a concise, " +
+        "self-contained statement before saving (store the meaning, not a raw " +
+        "transcript). Visibility is auto-classified — sensitive personal, " +
+        "finance, or health content is gated automatically (explicit visibility " +
+        "control is coming). Returns the stored memory snapshot.",
+      inputSchema: rememberInputSchema,
+    },
+    withToolLogging("remember", async (input) => {
+      try {
+        const item = await rememberMemory(bindings, {
+          content: input.content,
+          title: normalizeOptionalString(input.title),
+        });
+
+        return createToolResult({ item });
+      } catch (error) {
+        return createToolErrorResult(getErrorMessage(error));
+      }
+    })
+  );
+
+  server.registerTool(
     "list_assets",
     {
       title: "List Assets",
@@ -509,6 +561,37 @@ export const createMcpServer = (
           ...result,
           appliedPolicy: getContextProfileSummary(policy),
         });
+      } catch (error) {
+        return createToolErrorResult(getErrorMessage(error));
+      }
+    })
+  );
+
+  server.registerTool(
+    "recall",
+    {
+      title: "Recall",
+      description:
+        "Recall the user's own stored memories relevant to the current task, " +
+        "returned as one merged, de-duplicated bundle. First expand the user's " +
+        "request into several focused sub-queries or keywords — e.g. for " +
+        '"should I buy a house": age, income, city, marital status; for ' +
+        '"build me a website": preferred stack, coding style, project ' +
+        "conventions — then pass them all in `queries` (up to 5). Each memory's " +
+        "visibility is respected. Call it once per task with all sub-queries " +
+        "batched; avoid calling it repeatedly in a loop. " +
+        cloudMindInvocationGuidance,
+      inputSchema: recallInputSchema,
+    },
+    withToolLogging("recall", async (input) => {
+      try {
+        const result = await recallMemories(bindings, {
+          queries: input.queries,
+          domain: input.domain,
+          limit: input.limit,
+        });
+
+        return createToolResult(result);
       } catch (error) {
         return createToolErrorResult(getErrorMessage(error));
       }

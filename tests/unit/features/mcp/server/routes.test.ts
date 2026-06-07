@@ -42,6 +42,7 @@ vi.mock("@/features/ingest/server/service", () => {
     ingestTextAsset: vi.fn(),
     reprocessAsset: vi.fn(),
     ingestUrlAsset: vi.fn(),
+    rememberMemory: vi.fn(),
   };
 });
 
@@ -49,6 +50,7 @@ vi.mock("@/features/search/server/service", () => {
   return {
     searchAssets: vi.fn(),
     searchAssetsForContext: vi.fn(),
+    recallMemories: vi.fn(),
   };
 });
 
@@ -690,9 +692,11 @@ describe("mcp routes", () => {
 
     expect(result.tools.map((tool) => tool.name)).toEqual([
       "save_asset",
+      "remember",
       "list_assets",
       "search_assets",
       "search_assets_for_context",
+      "recall",
       "get_asset",
       "update_asset",
       "delete_asset",
@@ -722,6 +726,12 @@ describe("mcp routes", () => {
     );
     expect(toolsByName.ask_library_for_context?.description).toContain(
       "Prefer search_assets* plus get_asset"
+    );
+    expect(toolsByName.remember?.description).toContain(
+      "high-density personal memory"
+    );
+    expect(toolsByName.recall?.description).toContain(
+      "merged, de-duplicated bundle"
     );
   });
 
@@ -781,6 +791,77 @@ describe("mcp routes", () => {
       title: "Cloudflare Docs",
       url: "https://developers.cloudflare.com",
       sourceKind: "mcp",
+    });
+  });
+
+  it("remember stores a high-density memory through the ingest service", async () => {
+    const app = createApp();
+    const item = createAssetDetail({
+      id: "asset-mem-1",
+      title: "Coding preference",
+      sourceKind: "mcp",
+    });
+
+    vi.mocked(ingestService.rememberMemory).mockResolvedValue(item);
+    const connected = await createConnectedClient(app);
+
+    client = connected.client;
+    transport = connected.transport;
+
+    const result = await client.callTool({
+      name: "remember",
+      arguments: {
+        content: "The user prefers TypeScript with 2-space indentation.",
+        title: "Coding preference",
+      },
+    });
+
+    expect(getStructuredContent(result)).toEqual({ item });
+    expect(ingestService.rememberMemory).toHaveBeenCalledWith(env, {
+      content: "The user prefers TypeScript with 2-space indentation.",
+      title: "Coding preference",
+    });
+  });
+
+  it("recall fans out sub-queries through the search service", async () => {
+    const app = createApp();
+    const recallResult = {
+      queries: ["income", "city"],
+      memories: [
+        {
+          assetId: "asset-1",
+          title: "Profile",
+          snippet: "annual income ~500k",
+          score: 0.8,
+          kind: "chunk" as const,
+          domain: "finance" as const,
+          sourceKind: "mcp" as const,
+          matchedQueries: ["income"],
+        },
+      ],
+      total: 1,
+    };
+
+    vi.mocked(searchService.recallMemories).mockResolvedValue(recallResult);
+    const connected = await createConnectedClient(app);
+
+    client = connected.client;
+    transport = connected.transport;
+
+    const result = await client.callTool({
+      name: "recall",
+      arguments: {
+        queries: ["income", "city"],
+        domain: "finance",
+        limit: 10,
+      },
+    });
+
+    expect(getStructuredContent(result)).toEqual(recallResult);
+    expect(searchService.recallMemories).toHaveBeenCalledWith(env, {
+      queries: ["income", "city"],
+      domain: "finance",
+      limit: 10,
     });
   });
 

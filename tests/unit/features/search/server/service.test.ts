@@ -16,6 +16,7 @@ import type {
   AssetListResult,
   AssetSummaryMatch,
 } from "@/features/assets/model/types";
+import { RECALL_PER_QUERY_PAGE_SIZE } from "@/features/search/server/recall";
 import { createSearchService } from "@/features/search/server/service";
 
 class InMemorySearchRepository implements AssetSearchRepository {
@@ -1079,5 +1080,70 @@ describe("search service", () => {
     // RRF：rank-1 的语义 chunk（权重 1.0）作为该资产卡片的主证据。
     expect(result.groupedEvidence[0]?.asset.id).toBe("asset-a");
     expect(result.groupedEvidence[0]?.primaryEvidence.layer).toBe("chunk");
+  });
+
+  it("recallMemories runs one retrieval per sub-query and bundles deduped memories", async () => {
+    const repository = new InMemorySearchRepository();
+    const vectorStore = new InMemoryVectorStore();
+    const vectorSearchSpy = vi.spyOn(vectorStore, "search");
+    const service = createSearchService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+    });
+
+    const result = await service.recallMemories(
+      { APP_NAME: "cloudmind-test" },
+      { queries: ["income", "city"] }
+    );
+
+    // 扇出：每个子查询各跑一次完整检索，topK = 每查询取数；不传 domain 时硬过滤不含 domain。
+    expect(vectorSearchSpy).toHaveBeenCalledTimes(2);
+    for (const call of vectorSearchSpy.mock.calls) {
+      expect(call[0]?.topK).toBe(RECALL_PER_QUERY_PAGE_SIZE);
+      expect(call[0]?.filter).not.toHaveProperty("domain");
+    }
+    expect(result.queries).toEqual(["income", "city"]);
+    expect(result.total).toBe(result.memories.length);
+    expect(result.memories.length).toBeGreaterThan(0);
+  });
+
+  it("recallMemories injects domain into the per-query hard filter only when provided", async () => {
+    const repository = new InMemorySearchRepository();
+    const vectorStore = new InMemoryVectorStore();
+    const vectorSearchSpy = vi.spyOn(vectorStore, "search");
+    const service = createSearchService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+    });
+
+    await service.recallMemories(
+      { APP_NAME: "cloudmind-test" },
+      { queries: ["budget"], domain: "finance" }
+    );
+
+    expect(vectorSearchSpy).toHaveBeenCalledTimes(1);
+    expect(vectorSearchSpy.mock.calls[0]?.[0]?.filter).toMatchObject({
+      domain: { $eq: "finance" },
+    });
+  });
+
+  it("recallMemories truncates the bundle to an explicit limit", async () => {
+    const repository = new InMemorySearchRepository();
+    const vectorStore = new InMemoryVectorStore();
+    const service = createSearchService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
+    });
+
+    const result = await service.recallMemories(
+      { APP_NAME: "cloudmind-test" },
+      { queries: ["a", "b"], limit: 1 }
+    );
+
+    expect(result.memories.length).toBe(1);
+    expect(result.total).toBe(1);
   });
 });

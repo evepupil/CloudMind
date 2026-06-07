@@ -17,7 +17,7 @@ import { recallGraphStatements } from "@/features/memory/server/graph-recall";
 import { buildReinforceGraphAccessMessage } from "@/features/memory/server/reinforcement";
 import { applySalienceWeight } from "@/features/memory/server/salience";
 import type { EvidenceItem } from "@/features/search/model/evidence";
-import type { SearchResult } from "@/features/search/model/types";
+import type { RecallResult, SearchResult } from "@/features/search/model/types";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
 import { getMemoryRepositoryFromBindings } from "@/platform/db/d1/repositories/get-memory-repository";
@@ -40,6 +40,13 @@ import {
   toSearchResultItem,
 } from "./evidence";
 import { FUSION_CHANNEL_WEIGHTS, normalizeChannelScores } from "./fusion";
+import {
+  DEFAULT_RECALL_LIMIT,
+  mergeRecallResults,
+  type PerQueryRecall,
+  RECALL_PER_QUERY_PAGE_SIZE,
+  type RecallMemoriesInput,
+} from "./recall";
 import { rerankEvidence } from "./rerank";
 import { scoreAssetSummaryMatch } from "./summary-scoring";
 
@@ -699,9 +706,38 @@ export const createSearchService = (
     ): Promise<SearchResult> {
       return executeSearch(bindings, input, contextPolicy);
     },
+
+    // recall：吃多个子查询 → 各自走完整检索（纯语义平等，不加权）→ 合并去重整捆返回。
+    // 复用 executeSearch 的可见性门控（allow 硬过滤 + summary_only 独立通道）。
+    async recallMemories(
+      bindings: AppBindings | undefined,
+      input: RecallMemoriesInput
+    ): Promise<RecallResult> {
+      const limit = input.limit ?? DEFAULT_RECALL_LIMIT;
+      const perQuery = await Promise.all(
+        input.queries.map(async (query): Promise<PerQueryRecall> => {
+          const searchInput: AssetSearchInput = {
+            query,
+            page: 1,
+            pageSize: RECALL_PER_QUERY_PAGE_SIZE,
+            ...(input.domain ? { domain: input.domain } : {}),
+          };
+
+          return { query, result: await executeSearch(bindings, searchInput) };
+        })
+      );
+      const memories = mergeRecallResults(perQuery, limit);
+
+      return {
+        queries: input.queries,
+        memories,
+        total: memories.length,
+      };
+    },
   };
 };
 
 const searchService = createSearchService();
 
-export const { searchAssets, searchAssetsForContext } = searchService;
+export const { searchAssets, searchAssetsForContext, recallMemories } =
+  searchService;
