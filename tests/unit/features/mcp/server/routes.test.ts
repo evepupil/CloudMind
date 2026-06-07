@@ -733,6 +733,28 @@ describe("mcp routes", () => {
     expect(toolsByName.recall?.description).toContain(
       "merged, de-duplicated bundle"
     );
+
+    // 回归保护：recall 对外暴露的 JSON schema 必须保留 properties。曾因 inputSchema 带
+    // .transform() 退化为 ZodPipe，normalizeObjectSchema 返回 undefined，ListTools 暴露空
+    // properties，桥接层不知道 queries 是数组而把入参序列化错（后端报 expected array）。
+    const recallProps = (toolsByName.recall?.inputSchema.properties ??
+      {}) as Record<string, { type?: string; maxItems?: number }>;
+
+    expect(recallProps.queries).toBeDefined();
+    expect(recallProps.queries?.type).toBe("array");
+    expect(recallProps.queries?.maxItems).toBe(5);
+    expect(toolsByName.recall?.inputSchema.required).toContain("queries");
+
+    // 同根问题（.transform()/.and() 都会退化）：这三个工具也必须保留 properties。
+    for (const name of [
+      "search_assets",
+      "search_assets_for_context",
+      "list_assets",
+    ]) {
+      const props = toolsByName[name]?.inputSchema.properties ?? {};
+
+      expect(Object.keys(props).length).toBeGreaterThan(0);
+    }
   });
 
   it("save_asset ingests text content through the existing ingest service", async () => {

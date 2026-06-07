@@ -7,7 +7,6 @@ import { WorkflowRunNotFoundError } from "@/core/workflows/errors";
 import type { AppBindings } from "@/env";
 import {
   createdAtFilterInputSchema,
-  normalizeDateOnlyFilter,
   timezoneOffsetMinutesSchema,
   validateCreatedAtFilter,
 } from "@/features/assets/server/schemas";
@@ -34,7 +33,11 @@ import {
   getContextProfileSummary,
   resolveContextRetrievalPolicy,
 } from "@/features/mcp/server/context-profiles";
-import { assetSearchPayloadSchema } from "@/features/search/server/schemas";
+import {
+  assetSearchPayloadRawSchema,
+  normalizeCreatedAtFilters,
+  validateCreatedAtFilters,
+} from "@/features/search/server/schemas";
 import {
   recallMemories,
   searchAssets,
@@ -77,9 +80,18 @@ const rememberInputSchema = z.object({
   visibility: z.enum(["allow", "summary_only", "deny"]).optional(),
 });
 
+// 注意：MCP inputSchema 必须保持纯 object（可带 .superRefine），绝不能 .transform()——
+// 否则对外暴露的 JSON schema 退化为空 properties，桥接层不知道 queries 是数组而序列化失败。
+// 时间窗的 normalize 改到 handler 里调 normalizeCreatedAtFilters。
 const recallInputSchema = z
   .object({
-    queries: z.array(z.string().trim().min(1).max(200)).min(1).max(5),
+    queries: z
+      .array(z.string().trim().min(1).max(200))
+      .min(1)
+      .max(5)
+      .describe(
+        'REQUIRED. A JSON array of 1 to 5 focused sub-query strings, e.g. ["annual income", "city", "marital status"]. Must be an array even for a single query (["..."]); do NOT pass a bare string.'
+      ),
     domain: z
       .enum([
         "engineering",
@@ -91,22 +103,29 @@ const recallInputSchema = z
         "archive",
         "general",
       ])
-      .optional(),
-    limit: z.number().int().positive().max(50).optional(),
+      .optional()
+      .describe("Optional: hard-filter recall to a single domain."),
+    limit: z
+      .number()
+      .int()
+      .positive()
+      .max(50)
+      .optional()
+      .describe("Optional: max merged memories to return (default 20)."),
     order: z
       .enum(["relevance", "recency"])
       .optional()
       .describe(
-        "relevance (default) ranks by semantic relevance; recency returns the most recently saved memories first."
+        "Optional: relevance (default) ranks by semantic relevance; recency returns the most recently saved memories first."
       ),
     timezoneOffsetMinutes: timezoneOffsetMinutesSchema.describe(
-      "Browser-style timezone offset in minutes. Required when using YYYY-MM-DD date filters."
+      "Optional: browser-style timezone offset in minutes (e.g. -480 for UTC+8). Required only when a createdAt filter uses YYYY-MM-DD."
     ),
     createdAtFrom: createdAtFilterInputSchema.describe(
-      "Inclusive lower bound on when the memory was saved. ISO datetime with offset, or YYYY-MM-DD together with timezoneOffsetMinutes."
+      "Optional: inclusive lower bound on when the memory was saved. ISO datetime with offset (e.g. 2026-06-08T00:00:00+08:00) or YYYY-MM-DD with timezoneOffsetMinutes."
     ),
     createdAtTo: createdAtFilterInputSchema.describe(
-      "Inclusive upper bound on when the memory was saved. ISO datetime with offset, or YYYY-MM-DD together with timezoneOffsetMinutes."
+      "Optional: inclusive upper bound on when the memory was saved. Same formats as createdAtFrom."
     ),
   })
   .superRefine((value, context) => {
@@ -122,29 +141,18 @@ const recallInputSchema = z
       value.timezoneOffsetMinutes,
       context
     );
-  })
-  .transform((value) => ({
-    ...value,
-    createdAtFrom: normalizeDateOnlyFilter(
-      value.createdAtFrom,
-      "start",
-      value.timezoneOffsetMinutes
-    ),
-    createdAtTo: normalizeDateOnlyFilter(
-      value.createdAtTo,
-      "end",
-      value.timezoneOffsetMinutes
-    ),
-  }));
+  });
 
-const searchAssetsInputSchema = assetSearchPayloadSchema;
+const searchAssetsInputSchema = assetSearchPayloadRawSchema.superRefine(
+  validateCreatedAtFilters
+);
 
-const searchAssetsForContextInputSchema = assetSearchPayloadSchema.and(
-  z.object({
+const searchAssetsForContextInputSchema = assetSearchPayloadRawSchema
+  .extend({
     profile: z.enum(contextProfileValues).optional(),
     allowFallback: z.boolean().optional(),
   })
-);
+  .superRefine(validateCreatedAtFilters);
 
 const getAssetInputSchema = z.object({
   id: z.string().trim().min(1),
@@ -201,20 +209,7 @@ const listAssetsInputSchema = z
       value.timezoneOffsetMinutes,
       context
     );
-  })
-  .transform((value) => ({
-    ...value,
-    createdAtFrom: normalizeDateOnlyFilter(
-      value.createdAtFrom,
-      "start",
-      value.timezoneOffsetMinutes
-    ),
-    createdAtTo: normalizeDateOnlyFilter(
-      value.createdAtTo,
-      "end",
-      value.timezoneOffsetMinutes
-    ),
-  }));
+  });
 
 const updateAssetInputSchema = z
   .object({
@@ -552,7 +547,11 @@ export const createMcpServer = (
     },
     withToolLogging("list_assets", async (input) => {
       try {
-        const result = await listAssets(bindings, input);
+        // schema 已去 transform，时间窗在此处规范化为 ISO（避免 MCP 空 properties bug）。
+        const result = await listAssets(
+          bindings,
+          normalizeCreatedAtFilters(input)
+        );
 
         return createToolResult(result);
       } catch (error) {
@@ -576,7 +575,10 @@ export const createMcpServer = (
     },
     withToolLogging("search_assets", async (input) => {
       try {
-        const result = await searchAssets(bindings, input);
+        const result = await searchAssets(
+          bindings,
+          normalizeCreatedAtFilters(input)
+        );
 
         return createToolResult(result);
       } catch (error) {
@@ -601,10 +603,15 @@ export const createMcpServer = (
     },
     withToolLogging("search_assets_for_context", async (input) => {
       try {
-        const policy = resolveContextRetrievalPolicy(input.profile, {
-          allowFallback: input.allowFallback,
+        const normalized = normalizeCreatedAtFilters(input);
+        const policy = resolveContextRetrievalPolicy(normalized.profile, {
+          allowFallback: normalized.allowFallback,
         });
-        const result = await searchAssetsForContext(bindings, input, policy);
+        const result = await searchAssetsForContext(
+          bindings,
+          normalized,
+          policy
+        );
 
         return createToolResult({
           ...result,
@@ -626,7 +633,10 @@ export const createMcpServer = (
         "request into several focused sub-queries or keywords — e.g. for " +
         '"should I buy a house": age, income, city, marital status; for ' +
         '"build me a website": preferred stack, coding style, project ' +
-        "conventions — then pass them all in `queries` (up to 5). Each memory's " +
+        "conventions — then pass them all in the `queries` array. `queries` " +
+        'MUST be a JSON array of 1-5 strings, e.g. ["age", "income", "city"]; ' +
+        'always an array, even for a single query (["..."]) — never a bare ' +
+        "string. Each memory's " +
         "visibility is respected. Call it once per task with all sub-queries " +
         "batched; avoid calling it repeatedly in a loop. " +
         "Optional time scoping: pass createdAtFrom/createdAtTo (ISO datetime " +
@@ -640,13 +650,15 @@ export const createMcpServer = (
     },
     withToolLogging("recall", async (input) => {
       try {
+        // schema 已去 transform，时间窗在此处规范化为 ISO（避免 MCP 空 properties bug）。
+        const { createdAtFrom, createdAtTo } = normalizeCreatedAtFilters(input);
         const result = await recallMemories(bindings, {
           queries: input.queries,
           domain: input.domain,
           limit: input.limit,
           order: input.order,
-          createdAtFrom: input.createdAtFrom,
-          createdAtTo: input.createdAtTo,
+          createdAtFrom,
+          createdAtTo,
         });
 
         return createToolResult(result);

@@ -39,7 +39,7 @@ const assetSearchFiltersRawSchema = z.object({
   collection: z.string().trim().min(1).max(120).optional(),
 });
 
-const normalizeCreatedAtFilters = <
+export const normalizeCreatedAtFilters = <
   T extends {
     timezoneOffsetMinutes?: number | undefined;
     createdAtFrom?: string | undefined;
@@ -61,7 +61,7 @@ const normalizeCreatedAtFilters = <
   ),
 });
 
-const validateCreatedAtFilters = (
+export const validateCreatedAtFilters = (
   value: {
     timezoneOffsetMinutes?: number | undefined;
     createdAtFrom?: string | undefined;
@@ -89,7 +89,10 @@ export const assetSearchFiltersSchema = assetSearchFiltersRawSchema
   })
   .transform(normalizeCreatedAtFilters);
 
-const assetSearchPayloadRawSchema = assetSearchFiltersRawSchema.extend({
+// 不带 .transform() 的原始 payload schema：MCP inputSchema 直接用它（或 .extend 后用），
+// 这样对外暴露的 JSON schema 保留 properties（带 transform 会退化为空 object，桥接层就不知道
+// queries/数组字段的形状）。规范化(normalize)改由 MCP handler 显式调用 normalizeCreatedAtFilters。
+export const assetSearchPayloadRawSchema = assetSearchFiltersRawSchema.extend({
   query: z
     .string()
     .trim()
