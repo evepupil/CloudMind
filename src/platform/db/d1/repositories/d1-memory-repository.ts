@@ -4,6 +4,7 @@ import type {
   CreateEdgeInput,
   CreateEpisodeInput,
   CreateStatementInput,
+  DuplicateStatementRef,
   EntityVectorRef,
   InvalidateEdgesInput,
   InvalidateStatementInput,
@@ -447,4 +448,104 @@ export class D1MemoryRepository implements MemoryRepository {
 
     return rows;
   }
+
+  public async findDriftedEdges(scopeId?: string): Promise<MemoryEdge[]> {
+    const scope = scopeId ?? DEFAULT_SCOPE;
+
+    // 活跃边但无任一活跃 statement 与其端点 (scope,src=subject,relation=predicate,dst=object) 对应。
+    // edge 与 statement 无 FK，靠端点相关子查询匹配（NOT EXISTS）。
+    const rows = await this.db
+      .select({
+        id: edges.id,
+        scopeId: edges.scopeId,
+        srcEntityId: edges.srcEntityId,
+        dstEntityId: edges.dstEntityId,
+        relation: edges.relation,
+      })
+      .from(edges)
+      .where(
+        and(
+          eq(edges.scopeId, scope),
+          isNull(edges.expiredAt),
+          sql`not exists (select 1 from ${statements} where ${statements.scopeId} = ${edges.scopeId} and ${statements.subjectEntityId} = ${edges.srcEntityId} and ${statements.predicate} = ${edges.relation} and ${statements.objectEntityId} = ${edges.dstEntityId} and ${statements.expiredAt} is null)`
+        )
+      );
+
+    return rows;
+  }
+
+  public async findDuplicateActiveStatements(
+    scopeId?: string
+  ): Promise<DuplicateStatementRef[]> {
+    const scope = scopeId ?? DEFAULT_SCOPE;
+
+    // 取本 scope 所有活跃陈述，在内存里按 (subject,predicate,object) 分组（数据量为个人级，安全）。
+    const rows = await this.db
+      .select({
+        id: statements.id,
+        subjectEntityId: statements.subjectEntityId,
+        predicate: statements.predicate,
+        objectEntityId: statements.objectEntityId,
+        objectLiteral: statements.objectLiteral,
+        createdAt: statements.createdAt,
+      })
+      .from(statements)
+      .where(and(eq(statements.scopeId, scope), isNull(statements.expiredAt)));
+
+    return groupDuplicateStatements(rows);
+  }
 }
+
+// 把活跃陈述按 (subject,predicate,object_entity|object_literal) 归组，
+// 每组保留 created_at 最早者为 retain，其余作为 duplicate 返回。
+const groupDuplicateStatements = (
+  rows: Array<{
+    id: string;
+    subjectEntityId: string;
+    predicate: string;
+    objectEntityId: string | null;
+    objectLiteral: string | null;
+    createdAt: string;
+  }>
+): DuplicateStatementRef[] => {
+  const groups = new Map<string, typeof rows>();
+
+  for (const row of rows) {
+    const key = JSON.stringify([
+      row.subjectEntityId,
+      row.predicate,
+      row.objectEntityId ?? "",
+      row.objectLiteral ?? "",
+    ]);
+    const group = groups.get(key);
+
+    if (group) {
+      group.push(row);
+    } else {
+      groups.set(key, [row]);
+    }
+  }
+
+  const duplicates: DuplicateStatementRef[] = [];
+
+  for (const group of groups.values()) {
+    if (group.length < 2) {
+      continue;
+    }
+
+    const sorted = [...group].sort((left, right) =>
+      left.createdAt.localeCompare(right.createdAt)
+    );
+    const retain = sorted[0];
+
+    if (!retain) {
+      continue;
+    }
+
+    for (const row of sorted.slice(1)) {
+      duplicates.push({ duplicateId: row.id, retainId: retain.id });
+    }
+  }
+
+  return duplicates;
+};

@@ -12,6 +12,7 @@ import { registerMcpRoutes } from "@/features/mcp/server/routes";
 import { registerMcpTokenRoutes } from "@/features/mcp-tokens/server/routes";
 import { registerSearchRoutes } from "@/features/search/server/routes";
 import { consumeWorkflowQueueMessage } from "@/features/workflows/server/queue-consumer";
+import { consumeScheduledEvent } from "@/features/workflows/server/scheduled-consumer";
 
 // 这里创建单个 HonoX 全栈应用，并挂载所有 API 路由。
 const app = createApp<AppEnv>({
@@ -38,5 +39,12 @@ export default {
       await consumeWorkflowQueueMessage(message.body as JobQueueMessage, env);
       message.ack();
     }
+  },
+  // Cron 触发的 sleep-time 维护（知识图谱一致性修复，后续叠加遗忘/整合/社区）。
+  scheduled: async (
+    controller: ScheduledController,
+    env: AppEnv["Bindings"]
+  ): Promise<void> => {
+    await consumeScheduledEvent(controller, env);
   },
 } satisfies ExportedHandler<AppEnv["Bindings"]>;

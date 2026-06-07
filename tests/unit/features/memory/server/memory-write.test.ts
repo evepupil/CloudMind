@@ -5,6 +5,7 @@ import type {
   CreateEdgeInput,
   CreateEpisodeInput,
   CreateStatementInput,
+  DuplicateStatementRef,
   EntityVectorRef,
   InvalidateEdgesInput,
   InvalidateStatementInput,
@@ -24,6 +25,7 @@ import {
 } from "@/features/memory/server/graph-extraction";
 import type { ReconcileJudge } from "@/features/memory/server/memory-reconcile";
 import { writeGraphToMemory } from "@/features/memory/server/memory-write";
+import { runMemoryRepair } from "@/features/memory/server/sleep-time";
 
 class FakeMemoryRepository implements MemoryRepository {
   public readonly entities = new Map<string, MemoryEntity>();
@@ -232,6 +234,84 @@ class FakeMemoryRepository implements MemoryRepository {
         episodeId: entry.episodeId ?? null,
         chunkIndex: entry.chunkIndex ?? null,
       }));
+  }
+
+  public async findDriftedEdges(scopeId?: string): Promise<MemoryEdge[]> {
+    const scope = scopeId ?? "default";
+    const active = [...this.statementRecords.values()].filter(
+      (statement) => statement.expiredAt === null
+    );
+
+    return this.edges
+      .filter(
+        (edge) =>
+          !edge.expired &&
+          (edge.scopeId ?? "default") === scope &&
+          !active.some(
+            (statement) =>
+              statement.scopeId === scope &&
+              statement.subjectEntityId === edge.srcEntityId &&
+              statement.predicate === edge.relation &&
+              statement.objectEntityId === edge.dstEntityId
+          )
+      )
+      .map((edge) => ({
+        id: edge.id,
+        scopeId: edge.scopeId ?? "default",
+        srcEntityId: edge.srcEntityId,
+        dstEntityId: edge.dstEntityId,
+        relation: edge.relation,
+      }));
+  }
+
+  public async findDuplicateActiveStatements(
+    scopeId?: string
+  ): Promise<DuplicateStatementRef[]> {
+    const scope = scopeId ?? "default";
+    const groups = new Map<string, MemoryStatement[]>();
+
+    for (const statement of this.statementRecords.values()) {
+      if (statement.scopeId !== scope || statement.expiredAt !== null) {
+        continue;
+      }
+
+      const key = JSON.stringify([
+        statement.subjectEntityId,
+        statement.predicate,
+        statement.objectEntityId ?? "",
+        statement.objectLiteral ?? "",
+      ]);
+      const group = groups.get(key);
+
+      if (group) {
+        group.push(statement);
+      } else {
+        groups.set(key, [statement]);
+      }
+    }
+
+    const duplicates: DuplicateStatementRef[] = [];
+
+    for (const group of groups.values()) {
+      if (group.length < 2) {
+        continue;
+      }
+
+      const sorted = [...group].sort((left, right) =>
+        left.createdAt.localeCompare(right.createdAt)
+      );
+      const retain = sorted[0];
+
+      if (!retain) {
+        continue;
+      }
+
+      for (const statement of sorted.slice(1)) {
+        duplicates.push({ duplicateId: statement.id, retainId: retain.id });
+      }
+    }
+
+    return duplicates;
   }
 }
 
@@ -577,5 +657,85 @@ describe("writeGraphToMemory reconciliation", () => {
     // DELETE 在创建新 statement/edge 前就 continue：只有旧边，且已失效。
     expect(repo.edges).toHaveLength(1);
     expect(repo.edges[0]?.expired).toBe(true);
+  });
+});
+
+describe("sleep-time repair detection", () => {
+  const livesInEntity = (city: string): ExtractedGraph => ({
+    entities: [
+      { name: "Alice", type: "person" },
+      { name: city, type: "place" },
+    ],
+    statements: [
+      {
+        subject: "Alice",
+        predicate: "lives in",
+        object: city,
+        objectIsEntity: true,
+        nlText: `Alice lives in ${city}`,
+        confidence: null,
+      },
+    ],
+  });
+
+  it("findDriftedEdges flags an active edge whose statement was expired", async () => {
+    const repo = new FakeMemoryRepository();
+    await writeGraphToMemory(
+      repo,
+      { assetId: "a1" },
+      livesInEntity("New York")
+    );
+
+    // 模拟旧 bug：只失效 statement，不动 edge → 产生漂移边。
+    const statementId = [...repo.statementRecords.values()][0]?.id;
+    expect(statementId).toBeDefined();
+    if (statementId) {
+      await repo.invalidateStatement({ statementId });
+    }
+
+    const drifted = await repo.findDriftedEdges();
+    expect(drifted).toHaveLength(1);
+    expect(drifted[0]?.relation).toBe("lives in");
+
+    // 修复后该边被失效。
+    const report = await runMemoryRepair(repo);
+    expect(report.driftedEdgesRepaired).toBe(1);
+    expect(repo.edges.every((edge) => edge.expired)).toBe(true);
+  });
+
+  it("does not flag an edge still backed by an active statement", async () => {
+    const repo = new FakeMemoryRepository();
+    await writeGraphToMemory(
+      repo,
+      { assetId: "a1" },
+      livesInEntity("New York")
+    );
+
+    expect(await repo.findDriftedEdges()).toHaveLength(0);
+  });
+
+  it("detects and archives duplicate active statements (keeping the earliest)", async () => {
+    const repo = new FakeMemoryRepository();
+    // 两次 ADD 同一实体宾语事实 → 两条相同活跃 statement。
+    await writeGraphToMemory(
+      repo,
+      { assetId: "a1" },
+      livesInEntity("New York")
+    );
+    await writeGraphToMemory(
+      repo,
+      { assetId: "a2" },
+      livesInEntity("New York")
+    );
+
+    const duplicates = await repo.findDuplicateActiveStatements();
+    expect(duplicates).toHaveLength(1);
+
+    const report = await runMemoryRepair(repo);
+    expect(report.duplicateStatementsArchived).toBe(1);
+    const active = [...repo.statementRecords.values()].filter(
+      (statement) => statement.expiredAt === null
+    );
+    expect(active).toHaveLength(1);
   });
 });

@@ -96,6 +96,12 @@ export interface MemoryProvenanceRef {
   chunkIndex: number | null;
 }
 
+// 重复陈述引用：sleep-time 去重时，把冗余陈述（duplicateId）归档并指向保留者（retainId）。
+export interface DuplicateStatementRef {
+  duplicateId: string;
+  retainId: string;
+}
+
 export interface CreateStatementInput {
   scopeId?: string | undefined;
   subjectEntityId: string;
@@ -187,4 +193,11 @@ export interface MemoryRepository {
     memoryType: MemoryKind,
     memoryIds: string[]
   ): Promise<MemoryProvenanceRef[]>;
+  // —— sleep-time 修复（T5）——
+  // 漂移边：仍活跃、但已无任一活跃 statement 与其 (scope,src,relation,dst) 对应的边。
+  findDriftedEdges(scopeId?: string | undefined): Promise<MemoryEdge[]>;
+  // 重复活跃陈述：同 (scope,subject,predicate,object) 的多条活跃陈述，保留最早、其余应归档。
+  findDuplicateActiveStatements(
+    scopeId?: string | undefined
+  ): Promise<DuplicateStatementRef[]>;
 }

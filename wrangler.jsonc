@@ -70,6 +70,11 @@
   "ai": {
     "binding": "AI"
   },
+  // sleep-time 维护：每日 03:00 UTC 触发 scheduled handler 跑知识图谱一致性修复
+  // （漂移边失效 + 重复 statement 去重）。仅 D1、幂等。
+  "triggers": {
+    "crons": ["0 3 * * *"]
+  },
   "vars": {
     "JWT_SECRET": "change-me-before-production"
   }
