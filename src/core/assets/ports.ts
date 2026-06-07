@@ -15,6 +15,9 @@ export interface CreateTextAssetInput {
   title?: string | undefined;
   content: string;
   sourceKind?: AssetSourceKind | undefined;
+  // 调用方显式 pin 的 AI 可见性（绝对语义）：提供时作为创建初值，并由 classify 步骤
+  // 保留不覆盖（见 workflow initialState.pinnedVisibility）。未提供时走自动分类。
+  aiVisibility?: AssetAiVisibility | undefined;
 }
 
 export interface CreateUrlAssetInput {

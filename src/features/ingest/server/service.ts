@@ -12,7 +12,10 @@ import type { VectorStore } from "@/core/vector/ports";
 import type { WebPageFetcher } from "@/core/web/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AppBindings } from "@/env";
-import type { AssetDetail } from "@/features/assets/model/types";
+import type {
+  AssetAiVisibility,
+  AssetDetail,
+} from "@/features/assets/model/types";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getBlobStoreFromBindings } from "@/platform/blob/r2/get-blob-store";
 import { getAssetIngestRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
@@ -73,6 +76,7 @@ interface IngestServiceDependencies {
     assetId: string,
     options?: {
       force?: boolean;
+      pinnedVisibility?: AssetAiVisibility;
     }
   ) => Promise<AssetDetail>;
   processUrlAsset: (
@@ -295,15 +299,27 @@ export const createIngestService = (
         const jobQueue = await dependencies.getJobQueue(bindings);
         const aiProvider = await dependencies.getAIProvider(bindings);
         const createdAsset = await repository.createTextAsset(input);
-        const result = await dependencies.processTextAsset(
-          repository,
-          workflowRepository,
-          blobStore,
-          vectorStore,
-          aiProvider,
-          jobQueue,
-          createdAsset.id
-        );
+        // 仅在显式 pin 时追加第 8 个 options 参数，未 pin 保持原 7 参调用形态。
+        const result = input.aiVisibility
+          ? await dependencies.processTextAsset(
+              repository,
+              workflowRepository,
+              blobStore,
+              vectorStore,
+              aiProvider,
+              jobQueue,
+              createdAsset.id,
+              { pinnedVisibility: input.aiVisibility }
+            )
+          : await dependencies.processTextAsset(
+              repository,
+              workflowRepository,
+              blobStore,
+              vectorStore,
+              aiProvider,
+              jobQueue,
+              createdAsset.id
+            );
 
         ingestLogger.info("ingest_completed", {
           durationMs: Date.now() - startedAt,
@@ -583,17 +599,22 @@ export const createIngestService = (
     },
 
     // remember：把一条高密度个人记忆写入（type=note + sourceKind=mcp），复用 note 流水线。
-    // 当前是 ingestTextAsset 的薄封装，作为未来轻量流水线 / 可见性门控 / 快写路径的锚点。
-    // 可见性当前由 classify 自动推导（敏感域→summary_only / 受限词→deny）；
-    // 写时显式 pin（含 sourceKind=mcp 默认更保守初值）留到 A3。
+    // 可见性默认由 classify 自动推导（敏感域→summary_only / 受限词→deny）；
+    // 调用方可显式 pin visibility，绝对覆盖自动分类（caller 完全说了算）。
     async rememberMemory(
       bindings: AppBindings | undefined,
-      input: { content: string; title?: string | undefined }
+      input: {
+        content: string;
+        title?: string | undefined;
+        visibility?: AssetAiVisibility | undefined;
+      }
     ): Promise<AssetDetail> {
       return service.ingestTextAsset(bindings, {
         title: input.title,
         content: input.content,
         sourceKind: "mcp",
+        // exactOptionalPropertyTypes：仅在显式 pin 时带 aiVisibility，不传 undefined。
+        ...(input.visibility ? { aiVisibility: input.visibility } : {}),
       });
     },
   };

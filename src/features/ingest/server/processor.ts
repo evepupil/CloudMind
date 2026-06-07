@@ -5,7 +5,10 @@ import type { JobQueue } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { WebPageFetcher } from "@/core/web/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
-import type { AssetDetail } from "@/features/assets/model/types";
+import type {
+  AssetAiVisibility,
+  AssetDetail,
+} from "@/features/assets/model/types";
 import { runNoteIngestWorkflow } from "@/features/workflows/server/note-ingest-workflow";
 import { runPdfIngestWorkflow } from "@/features/workflows/server/pdf-ingest-workflow";
 import { runUrlIngestWorkflow } from "@/features/workflows/server/url-ingest-workflow";
@@ -21,6 +24,8 @@ export const processTextAsset = async (
   assetId: string,
   options?: {
     force?: boolean;
+    // 调用方显式 pin 的可见性（绝对语义），透传进 workflow initialState 供 classify 保留。
+    pinnedVisibility?: AssetAiVisibility;
   }
 ): Promise<AssetDetail> => {
   return runNoteIngestWorkflow(

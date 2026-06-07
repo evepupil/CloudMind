@@ -1,7 +1,10 @@
 import { z } from "zod";
 import type { CreateAssetChunkInput } from "@/core/assets/ports";
 import { createLogger } from "@/core/logging/logger";
-import type { AssetDetail } from "@/features/assets/model/types";
+import type {
+  AssetAiVisibility,
+  AssetDetail,
+} from "@/features/assets/model/types";
 import {
   type ChunkEmbeddingPlanItem,
   cleanContentPreservingStructure,
@@ -23,6 +26,10 @@ import type {
 } from "./runtime";
 
 const logger = createLogger("workflow-steps");
+
+// 校验 workflow state 里注入的 pinnedVisibility 是合法可见性枚举（state 是 unknown）。
+const isAiVisibility = (value: unknown): value is AssetAiVisibility =>
+  value === "allow" || value === "summary_only" || value === "deny";
 
 const preparedChunkSchema = z.object({
   chunkIndex: z.number().int().nonnegative(),
@@ -241,12 +248,22 @@ export const createClassifyStep = (): WorkflowStepDefinition => ({
       summary: typeof summary === "string" ? summary : null,
     });
 
+    // 绝对 pin 语义：调用方在 initialState 注入 pinnedVisibility 时完全说了算，
+    // 覆盖自动推导（final = pin ?? classified）。未 pin 时走自动分类。
+    // 注：reprocess 不重新注入 pin，会回退自动分类——「持久化 pin 开关」留作后续。
+    // priority 仍按推导可见性计算：deny/summary_only 内容本就被检索硬过滤/降权，影响可忽略。
+    const pinnedVisibility = isAiVisibility(context.state.pinnedVisibility)
+      ? context.state.pinnedVisibility
+      : null;
+    const aiVisibility = pinnedVisibility ?? result.aiVisibility;
+    const finalResult = { ...result, aiVisibility };
+
     await context.services.assetRepository.updateAssetIndexing(
       context.asset.id,
       {
         sourceKind: result.sourceKind,
         domain: result.domain,
-        aiVisibility: result.aiVisibility,
+        aiVisibility,
         retrievalPriority: result.retrievalPriority,
         sourceHost: result.sourceHost,
         collectionKey: result.collectionKey,
@@ -257,19 +274,22 @@ export const createClassifyStep = (): WorkflowStepDefinition => ({
     return {
       output: {
         domain: result.domain,
-        aiVisibility: result.aiVisibility,
+        aiVisibility,
         retrievalPriority: result.retrievalPriority,
         collectionKey: result.collectionKey,
+        visibilityPinned: pinnedVisibility !== null,
       },
-      state: { classification: result },
+      state: { classification: finalResult },
       artifacts: [
         {
           artifactType: "classification",
           storageKind: "inline",
-          contentText: JSON.stringify(result),
+          contentText: JSON.stringify(finalResult),
           metadataJson: JSON.stringify({
             strategy: "heuristic_v3",
-            signals: result.signals,
+            signals: pinnedVisibility
+              ? [...result.signals, `visibility_pinned:${pinnedVisibility}`]
+              : result.signals,
           }),
         },
       ],

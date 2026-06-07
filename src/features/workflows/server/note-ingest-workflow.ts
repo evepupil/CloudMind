@@ -4,7 +4,10 @@ import type { BlobStore } from "@/core/blob/ports";
 import type { JobQueue } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
-import type { AssetDetail } from "@/features/assets/model/types";
+import type {
+  AssetAiVisibility,
+  AssetDetail,
+} from "@/features/assets/model/types";
 import { enqueueWorkflow, type WorkflowDefinition } from "./runtime";
 import { buildSharedIngestSteps } from "./shared-workflow-steps";
 
@@ -40,8 +43,15 @@ export const runNoteIngestWorkflow = async (
   triggerType: "ingest" | "reprocess",
   options?: {
     force?: boolean;
+    // 显式 pin 的可见性（绝对语义）：注入 workflow initialState，classify 步骤读取后保留不覆盖。
+    pinnedVisibility?: AssetAiVisibility;
   }
 ): Promise<AssetDetail> => {
+  // 仅在显式 pin 时注入 initialState，避免给未 pin 的运行写入空状态。
+  const initialState = options?.pinnedVisibility
+    ? { pinnedVisibility: options.pinnedVisibility }
+    : undefined;
+
   return enqueueWorkflow(
     createNoteIngestWorkflowDefinition(),
     assetId,
@@ -54,6 +64,7 @@ export const runNoteIngestWorkflow = async (
       aiProvider,
       jobQueue,
     },
-    options
+    options,
+    initialState
   );
 };

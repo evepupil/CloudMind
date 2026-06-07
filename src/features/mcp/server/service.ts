@@ -73,6 +73,8 @@ const saveAssetInputSchema = z
 const rememberInputSchema = z.object({
   content: z.string().trim().min(1).max(20000),
   title: z.string().trim().min(1).max(300).optional(),
+  // 显式 pin AI 可见性（绝对覆盖自动分类）：allow / summary_only / deny。
+  visibility: z.enum(["allow", "summary_only", "deny"]).optional(),
 });
 
 const recallInputSchema = z.object({
@@ -475,8 +477,11 @@ export const createMcpServer = (
         "later via CloudMind. Distill the salient point into a concise, " +
         "self-contained statement before saving (store the meaning, not a raw " +
         "transcript). Visibility is auto-classified — sensitive personal, " +
-        "finance, or health content is gated automatically (explicit visibility " +
-        "control is coming). Returns the stored memory snapshot.",
+        "finance, or health content is gated automatically. To override, set " +
+        "`visibility` explicitly: allow (AI may read the full text), " +
+        "summary_only (AI sees only the summary, never the raw content), or deny " +
+        "(excluded from AI retrieval entirely). An explicit value always wins " +
+        "over auto-classification. Returns the stored memory snapshot.",
       inputSchema: rememberInputSchema,
     },
     withToolLogging("remember", async (input) => {
@@ -484,6 +489,7 @@ export const createMcpServer = (
         const item = await rememberMemory(bindings, {
           content: input.content,
           title: normalizeOptionalString(input.title),
+          ...(input.visibility ? { visibility: input.visibility } : {}),
         });
 
         return createToolResult({ item });

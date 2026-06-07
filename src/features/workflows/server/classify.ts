@@ -77,6 +77,25 @@ const FINANCE_KEYWORDS = [
   "expense",
   "payment",
   "finance",
+  // 中文高信号财务词：命中即判 finance 域（进而 summary_only），避免中文敏感财务记忆漏门控。
+  "发票",
+  "收据",
+  "银行",
+  "报税",
+  "工资",
+  "薪资",
+  "薪水",
+  "预算",
+  "支出",
+  "报销",
+  "财务",
+  "收入",
+  "储蓄",
+  "存款",
+  "按揭",
+  "房贷",
+  "贷款",
+  "理财",
 ] as const;
 
 const HEALTH_KEYWORDS = [
@@ -88,6 +107,17 @@ const HEALTH_KEYWORDS = [
   "prescription",
   "sleep",
   "exercise",
+  // 中文健康/医疗词：命中即判 health 域（进而 summary_only）。
+  "医疗",
+  "健康",
+  "医院",
+  "诊断",
+  "症状",
+  "处方",
+  "病历",
+  "体检",
+  "用药",
+  "锻炼",
 ] as const;
 
 const PERSONAL_KEYWORDS = [
@@ -98,6 +128,14 @@ const PERSONAL_KEYWORDS = [
   "birthday",
   "memory",
   "personal",
+  // 中文私人生活词：命中即判 personal 域（进而 summary_only）。
+  "日记",
+  "家庭",
+  "家人",
+  "旅行",
+  "生日",
+  "私人",
+  "回忆",
 ] as const;
 
 const ARCHIVE_KEYWORDS = [
@@ -123,6 +161,16 @@ const RESTRICTED_KEYWORDS = [
   "ssn",
   "passport",
   "cvv",
+  // 中文高敏感凭证/证件词：命中即判 deny（绝不进语义检索）。
+  // 证件类用「号」后缀降低误伤（如「上传身份证照片」不含「号」不命中）。
+  "密码",
+  "口令",
+  "私钥",
+  "助记词",
+  "身份证号",
+  "护照号",
+  "银行卡号",
+  "信用卡号",
 ] as const;
 
 // 命中即判定为 summary_only（仅摘要可见）的私密关键词。
@@ -137,6 +185,23 @@ const PRIVATE_KEYWORDS = [
   "journal",
   "diagnosis",
   "invoice",
+  // 中文私密词：命中即判 summary_only（仅摘要可见，原文不进 chunk 通道）。
+  "工资",
+  "薪资",
+  "薪水",
+  "银行账户",
+  "银行账号",
+  "住址",
+  "家庭住址",
+  "手机号",
+  "电话号码",
+  "邮箱",
+  "简历",
+  "日记",
+  "诊断",
+  "发票",
+  "收入",
+  "存款",
 ] as const;
 
 const getSourceKind = (asset: AssetDetail): AssetSourceKind | null => {

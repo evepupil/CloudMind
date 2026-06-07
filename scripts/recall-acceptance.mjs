@@ -317,6 +317,8 @@ const run = async () => {
 };
 
 run().catch((error) => {
-  console.log(`ACCEPTANCE ERROR: ${error instanceof Error ? error.stack : error}`);
+  console.log(
+    `ACCEPTANCE ERROR: ${error instanceof Error ? error.stack : error}`
+  );
   process.exitCode = 1;
 });

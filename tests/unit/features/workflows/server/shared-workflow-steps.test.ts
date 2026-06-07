@@ -12,6 +12,7 @@ import type {
   WorkflowServices,
 } from "@/features/workflows/server/runtime";
 import {
+  createClassifyStep,
   createEmbedStep,
   createFinalizeStep,
 } from "@/features/workflows/server/shared-workflow-steps";
@@ -52,6 +53,7 @@ const createServices = (): WorkflowServices => {
     assetRepository: {
       completeAssetProcessing: vi.fn(),
       replaceAssetChunks: vi.fn(),
+      updateAssetIndexing: vi.fn(),
     } as unknown as AssetIngestRepository,
     workflowRepository: {} as WorkflowRepository,
     blobStore: {} as BlobStore,
@@ -132,5 +134,79 @@ describe("shared workflow steps", () => {
     expect(
       context.services.assetRepository.replaceAssetChunks
     ).not.toHaveBeenCalled();
+  });
+});
+
+describe("classify step visibility pin", () => {
+  it("auto-classifies sensitive Chinese content to summary_only without a pin", async () => {
+    const step = createClassifyStep();
+    const context = createContext({
+      normalizedContent:
+        "用户年收入约 50 万人民币，名下有一套按揭中的房产，另有约 80 万现金储蓄。",
+      summary: "财务概况",
+    });
+
+    const result = await step.execute(context);
+
+    expect(
+      context.services.assetRepository.updateAssetIndexing
+    ).toHaveBeenCalledWith(
+      "asset-1",
+      expect.objectContaining({ aiVisibility: "summary_only" })
+    );
+    expect(result.output?.aiVisibility).toBe("summary_only");
+    expect(result.output?.visibilityPinned).toBe(false);
+  });
+
+  it("lets an explicit allow pin override classify's summary_only gating", async () => {
+    const step = createClassifyStep();
+    const context = createContext({
+      normalizedContent:
+        "用户年收入约 50 万人民币，名下有一套按揭中的房产，另有约 80 万现金储蓄。",
+      pinnedVisibility: "allow",
+    });
+
+    const result = await step.execute(context);
+
+    expect(
+      context.services.assetRepository.updateAssetIndexing
+    ).toHaveBeenCalledWith(
+      "asset-1",
+      expect.objectContaining({ aiVisibility: "allow" })
+    );
+    expect(result.output?.aiVisibility).toBe("allow");
+    expect(result.output?.visibilityPinned).toBe(true);
+  });
+
+  it("lets an explicit deny pin gate otherwise-visible content", async () => {
+    const step = createClassifyStep();
+    const context = createContext({
+      normalizedContent: "A plain engineering note about typescript and hono.",
+      pinnedVisibility: "deny",
+    });
+
+    const result = await step.execute(context);
+
+    expect(
+      context.services.assetRepository.updateAssetIndexing
+    ).toHaveBeenCalledWith(
+      "asset-1",
+      expect.objectContaining({ aiVisibility: "deny" })
+    );
+    expect(result.output?.aiVisibility).toBe("deny");
+    expect(result.output?.visibilityPinned).toBe(true);
+  });
+
+  it("ignores an invalid pinned visibility and falls back to auto-classification", async () => {
+    const step = createClassifyStep();
+    const context = createContext({
+      normalizedContent: "A plain engineering note about typescript and hono.",
+      pinnedVisibility: "public",
+    });
+
+    const result = await step.execute(context);
+
+    expect(result.output?.aiVisibility).toBe("allow");
+    expect(result.output?.visibilityPinned).toBe(false);
   });
 });

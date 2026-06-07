@@ -351,7 +351,8 @@ export class D1AssetRepository implements AssetRepository {
       sourceKind,
       status: "pending",
       domain: "general",
-      aiVisibility: "allow",
+      // 显式 pin 时用 pin 值作初值，使 enqueue 后的快照即正确；classify 步骤会保留它。
+      aiVisibility: input.aiVisibility ?? "allow",
       retrievalPriority: 0,
       sourceHost: null,
       collectionKey: null,
