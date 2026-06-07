@@ -121,17 +121,6 @@ const assetDomainSchema = z.enum([
   "archive",
   "general",
 ]);
-const assetDocumentClassSchema = z.enum([
-  "reference_doc",
-  "design_doc",
-  "bug_note",
-  "paper",
-  "journal_entry",
-  "meeting_note",
-  "spec",
-  "howto",
-  "general_note",
-]);
 const assetSourceKindSchema = z.enum([
   "manual",
   "browser_extension",
@@ -151,10 +140,6 @@ const assetListRawQuerySchema = z.object({
   status: z.preprocess(emptyStringToUndefined, assetStatusSchema.optional()),
   type: z.preprocess(emptyStringToUndefined, assetTypeSchema.optional()),
   domain: z.preprocess(emptyStringToUndefined, assetDomainSchema.optional()),
-  documentClass: z.preprocess(
-    emptyStringToUndefined,
-    assetDocumentClassSchema.optional()
-  ),
   sourceKind: z.preprocess(
     emptyStringToUndefined,
     assetSourceKindSchema.optional()

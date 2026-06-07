@@ -1,14 +1,8 @@
-import type {
-  AssetAssertionKind,
-  AssetSummary,
-  FacetTermRef,
-} from "@/features/assets/model/types";
+import type { AssetSummary } from "@/features/assets/model/types";
 
-export type EvidenceLayer = "chunk" | "assertion" | "term" | "summary";
+export type EvidenceLayer = "chunk" | "summary";
 export type EvidenceMatchReasonCode =
   | "semantic_match"
-  | "assertion_match"
-  | "term_match"
   | "summary_match"
   | "profile_boosted"
   | "recent_boosted"
@@ -24,18 +18,14 @@ export interface EvidenceSourceView {
 export interface EvidenceIndexingView {
   matchedLayer: EvidenceLayer;
   domain: AssetSummary["domain"];
-  documentClass: AssetSummary["documentClass"] | null;
   sourceHost: string | null;
   collectionKey: string | null;
   aiVisibility: AssetSummary["aiVisibility"];
   sourceKind: AssetSummary["sourceKind"] | null;
-  topics: string[];
-  assertionKind?: AssetAssertionKind | null | undefined;
 }
 
 export interface EvidenceVisibilityView {
   aiVisibility: AssetSummary["aiVisibility"];
-  sensitivity: AssetSummary["sensitivity"];
 }
 
 export interface EvidenceMatchReason {
@@ -54,15 +44,9 @@ export interface EvidenceItem {
   visibility: EvidenceVisibilityView;
   text: string;
   snippet: string;
-  matchedTerms?: FacetTermRef[] | undefined;
   chunkId?: string | undefined;
   chunkIndex?: number | undefined;
   vectorId?: string | null | undefined;
-  assertionId?: string | undefined;
-  assertionIndex?: number | undefined;
-  assertionKind?: AssetAssertionKind | null | undefined;
-  confidence?: number | null | undefined;
-  sourceChunkIndex?: number | null | undefined;
   matchReasons: EvidenceMatchReason[];
 }
 

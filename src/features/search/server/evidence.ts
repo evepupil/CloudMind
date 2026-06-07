@@ -1,9 +1,7 @@
 import type {
-  AssetAssertionMatch,
   AssetChunkMatch,
   AssetSummary,
   AssetSummaryMatch,
-  AssetTermMatchItem,
 } from "@/features/assets/model/types";
 import type {
   EvidenceIndexingView,
@@ -13,47 +11,17 @@ import type {
 } from "@/features/search/model/evidence";
 import type { SearchResultItem } from "@/features/search/model/types";
 
-interface DescriptorTopicsView {
-  topics?: string[] | undefined;
-}
-
-export const parseDescriptorTopics = (
-  descriptorJson: string | null
-): string[] => {
-  if (!descriptorJson) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(descriptorJson) as DescriptorTopicsView | null;
-
-    if (!parsed || !Array.isArray(parsed.topics)) {
-      return [];
-    }
-
-    return parsed.topics.filter(
-      (topic: unknown): topic is string => typeof topic === "string"
-    );
-  } catch {
-    return [];
-  }
-};
-
 export const buildEvidenceIndexing = (
   asset: AssetSummary,
-  matchedLayer: EvidenceLayer,
-  assertionKind?: EvidenceIndexingView["assertionKind"]
+  matchedLayer: EvidenceLayer
 ): EvidenceIndexingView => {
   return {
     matchedLayer,
     domain: asset.domain,
-    documentClass: asset.documentClass ?? null,
     sourceHost: asset.sourceHost ?? null,
     collectionKey: asset.collectionKey,
     aiVisibility: asset.aiVisibility,
     sourceKind: asset.sourceKind ?? null,
-    topics: parseDescriptorTopics(asset.descriptorJson),
-    assertionKind: assertionKind ?? null,
   };
 };
 
@@ -69,7 +37,6 @@ const buildEvidenceSource = (asset: AssetSummary) => {
 const buildEvidenceVisibility = (asset: AssetSummary) => {
   return {
     aiVisibility: asset.aiVisibility,
-    sensitivity: asset.sensitivity,
   };
 };
 
@@ -136,75 +103,8 @@ export const buildSummaryEvidenceItem = (
   };
 };
 
-export const buildAssertionEvidenceItem = (
-  match: AssetAssertionMatch,
-  score: number
-): EvidenceItem => {
-  return {
-    id: `assertion:${match.id}`,
-    layer: "assertion",
-    score,
-    asset: match.asset,
-    source: buildEvidenceSource(match.asset),
-    indexing: buildEvidenceIndexing(match.asset, "assertion", match.kind),
-    visibility: buildEvidenceVisibility(match.asset),
-    text: match.text,
-    snippet: match.text,
-    assertionId: match.id,
-    assertionIndex: match.assertionIndex,
-    assertionKind: match.kind,
-    confidence: match.confidence,
-    sourceChunkIndex: match.sourceChunkIndex,
-    matchReasons: [
-      buildMatchReason(
-        "assertion_match",
-        "Assertion match",
-        "Matched the query against structured assertion text."
-      ),
-    ],
-  };
-};
-
-const formatMatchedTerms = (matchedTerms: AssetTermMatchItem["matchedTerms"]) =>
-  matchedTerms
-    .map((term) => `${term.facetKey}: ${term.facetValue}`)
-    .join(" · ");
-
-export const buildTermEvidenceItem = (
-  match: AssetTermMatchItem,
-  score: number
-): EvidenceItem => {
-  const matchedTermsText = formatMatchedTerms(match.matchedTerms);
-  const summaryText = match.asset.summary?.trim();
-  const evidenceText = summaryText
-    ? `${matchedTermsText}\n${summaryText}`
-    : matchedTermsText;
-
-  return {
-    id: `term:${match.asset.id}`,
-    layer: "term",
-    score,
-    asset: match.asset,
-    source: buildEvidenceSource(match.asset),
-    indexing: buildEvidenceIndexing(match.asset, "term"),
-    visibility: buildEvidenceVisibility(match.asset),
-    text: evidenceText,
-    snippet: matchedTermsText,
-    matchedTerms: match.matchedTerms,
-    matchReasons: [
-      buildMatchReason(
-        "term_match",
-        "Metadata term match",
-        "Matched the query through semantic topic, tag, or collection terms."
-      ),
-    ],
-  };
-};
-
 const EVIDENCE_LAYER_PRIORITY: Record<EvidenceLayer, number> = {
-  chunk: 4,
-  assertion: 3,
-  term: 2,
+  chunk: 2,
   summary: 1,
 };
 
@@ -296,48 +196,11 @@ const getDaysSinceReferenceDate = (
 const getLayerCoverageBonus = (matchedLayers: Set<EvidenceLayer>): number => {
   const layers = Array.from(matchedLayers);
 
-  if (
-    layers.includes("chunk") &&
-    layers.includes("assertion") &&
-    layers.includes("term") &&
-    layers.includes("summary")
-  ) {
-    return 0.13;
-  }
-
-  if (
-    layers.includes("chunk") &&
-    layers.includes("assertion") &&
-    layers.includes("summary")
-  ) {
-    return 0.12;
-  }
-
-  if (layers.includes("chunk") && layers.includes("term")) {
-    return 0.07;
-  }
-
-  if (layers.includes("assertion") && layers.includes("term")) {
-    return 0.05;
-  }
-
-  if (layers.includes("term") && layers.includes("summary")) {
-    return 0.04;
-  }
-
-  if (layers.includes("chunk") && layers.includes("assertion")) {
-    return 0.08;
-  }
-
   if (layers.includes("chunk") && layers.includes("summary")) {
     return 0.06;
   }
 
-  if (layers.includes("assertion") && layers.includes("summary")) {
-    return 0.04;
-  }
-
-  return layers.length > 1 ? 0.03 : 0;
+  return 0;
 };
 
 const getSupportingEvidenceBonus = (itemCount: number): number => {
@@ -570,36 +433,6 @@ export const toSearchResultItem = (
         vectorId: evidence.vectorId ?? null,
         asset: evidence.asset,
       },
-    };
-  }
-
-  if (evidence.layer === "assertion") {
-    return {
-      kind: "assertion",
-      score: evidence.score,
-      indexing: evidence.indexing,
-      assertion: {
-        id: evidence.assertionId ?? evidence.id,
-        assertionIndex: evidence.assertionIndex ?? 0,
-        kind: evidence.assertionKind ?? "fact",
-        text: evidence.text,
-        sourceChunkIndex: evidence.sourceChunkIndex ?? null,
-        sourceSpanJson: null,
-        confidence: evidence.confidence ?? null,
-        createdAt: evidence.asset.createdAt,
-        updatedAt: evidence.asset.updatedAt,
-        asset: evidence.asset,
-      },
-    };
-  }
-
-  if (evidence.layer === "term") {
-    return {
-      kind: "term",
-      score: evidence.score,
-      indexing: evidence.indexing,
-      asset: evidence.asset,
-      matchedTerms: evidence.matchedTerms ?? [],
     };
   }
 

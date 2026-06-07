@@ -33,7 +33,6 @@
   //   wrangler vectorize create cloudmind-asset-chunks --dimensions=1024 --metric=cosine
   //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=aiVisibility --type=string
   //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=domain --type=string
-  //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=documentClass --type=string
   //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=sourceKind --type=string
   //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=sourceHost --type=string
   //   wrangler vectorize create-metadata-index cloudmind-asset-chunks --property-name=collectionKey --type=string

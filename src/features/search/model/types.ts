@@ -1,8 +1,6 @@
 import type {
-  AssetAssertionMatch,
   AssetChunkMatch,
   AssetSummary,
-  FacetTermRef,
 } from "@/features/assets/model/types";
 import type {
   EvidenceIndexingView,
@@ -29,26 +27,7 @@ export interface SearchSummaryResultItem {
   indexing: SearchResultIndexingView;
 }
 
-export interface SearchAssertionResultItem {
-  kind: "assertion";
-  score: number;
-  assertion: AssetAssertionMatch;
-  indexing: SearchResultIndexingView;
-}
-
-export interface SearchTermResultItem {
-  kind: "term";
-  score: number;
-  asset: AssetSummary;
-  matchedTerms: FacetTermRef[];
-  indexing: SearchResultIndexingView;
-}
-
-export type SearchResultItem =
-  | SearchChunkResultItem
-  | SearchTermResultItem
-  | SearchSummaryResultItem
-  | SearchAssertionResultItem;
+export type SearchResultItem = SearchChunkResultItem | SearchSummaryResultItem;
 
 export interface SearchPagination {
   page: number;

@@ -4,10 +4,8 @@ import type { EvidenceItem } from "@/features/search/model/evidence";
 // 使同为通道内最高分时 chunk 胜出，从而修正"蹭关键词的 assertion 压过真正语义 chunk"的旧缺陷。
 export const FUSION_CHANNEL_WEIGHTS = {
   chunk: 1.0,
-  // FTS5/BM25 词面 chunk 通道：略低于 dense，但高于 summary/term，作为中文/精确关键词的召回补充。
+  // FTS5/BM25 词面 chunk 通道：略低于 dense，但高于 summary，作为中文/精确关键词的召回补充。
   lexicalChunk: 0.9,
-  assertion: 0.92,
-  term: 0.88,
   summary: 0.85,
 } as const;
 

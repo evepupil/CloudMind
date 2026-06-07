@@ -18,17 +18,6 @@ const assetDomainSchema = z.enum([
   "archive",
   "general",
 ]);
-const assetDocumentClassSchema = z.enum([
-  "reference_doc",
-  "design_doc",
-  "bug_note",
-  "paper",
-  "journal_entry",
-  "meeting_note",
-  "spec",
-  "howto",
-  "general_note",
-]);
 const assetSourceKindSchema = z.enum([
   "manual",
   "browser_extension",
@@ -40,7 +29,6 @@ const assetSourceKindSchema = z.enum([
 const assetSearchFiltersRawSchema = z.object({
   type: assetTypeSchema.optional(),
   domain: assetDomainSchema.optional(),
-  documentClass: assetDocumentClassSchema.optional(),
   sourceKind: assetSourceKindSchema.optional(),
   timezoneOffsetMinutes: timezoneOffsetMinutesSchema,
   createdAtFrom: createdAtFilterInputSchema,

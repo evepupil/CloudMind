@@ -18,8 +18,6 @@ import type { McpTokenRecord } from "@/features/mcp-tokens/model/types";
 import { hashMcpTokenValue } from "@/features/mcp-tokens/server/token-secret";
 import type { SearchResult } from "@/features/search/model/types";
 import * as searchService from "@/features/search/server/service";
-import * as termAssetService from "@/features/search/server/term-asset-service";
-import * as termSearchService from "@/features/search/server/term-service";
 import * as workflowService from "@/features/workflows/server/service";
 
 vi.mock("@/features/assets/server/service", () => {
@@ -51,18 +49,6 @@ vi.mock("@/features/search/server/service", () => {
   return {
     searchAssets: vi.fn(),
     searchAssetsForContext: vi.fn(),
-  };
-});
-
-vi.mock("@/features/search/server/term-service", () => {
-  return {
-    searchTerms: vi.fn(),
-  };
-});
-
-vi.mock("@/features/search/server/term-asset-service", () => {
-  return {
-    searchAssetsByTerms: vi.fn(),
   };
 });
 
@@ -140,12 +126,10 @@ const createAssetDetail = (
     sourceKind: "manual",
     status: "ready",
     domain: "general",
-    sensitivity: "internal",
     aiVisibility: "allow",
     retrievalPriority: 0,
     collectionKey: "inbox:notes",
     capturedAt: "2026-03-20T00:00:00.000Z",
-    descriptorJson: null,
     createdAt: "2026-03-20T00:00:00.000Z",
     updatedAt: "2026-03-20T00:02:00.000Z",
     contentText: "CloudMind asset body",
@@ -168,25 +152,6 @@ const createAssetDetail = (
   };
 };
 
-const createTermSearchResult = () => {
-  return {
-    items: [
-      {
-        kind: "topic" as const,
-        term: "cloudmind",
-        normalized: "cloudmind",
-        score: 0.93,
-      },
-      {
-        kind: "collection" as const,
-        term: "journal/2026/03",
-        normalized: "journal/2026/03",
-        score: 0.87,
-      },
-    ],
-  };
-};
-
 const createSearchResult = (): SearchResult => {
   return {
     items: [
@@ -196,13 +161,10 @@ const createSearchResult = (): SearchResult => {
         indexing: {
           matchedLayer: "chunk",
           domain: "general",
-          documentClass: "general_note",
           sourceHost: null,
           collectionKey: "inbox:notes",
           aiVisibility: "allow",
           sourceKind: "manual",
-          topics: ["mcp"],
-          assertionKind: null,
         },
         chunk: {
           id: "chunk-1",
@@ -219,12 +181,10 @@ const createSearchResult = (): SearchResult => {
             sourceKind: "manual",
             status: "ready",
             domain: "general",
-            sensitivity: "internal",
             aiVisibility: "allow",
             retrievalPriority: 0,
             collectionKey: "inbox:notes",
             capturedAt: "2026-03-20T00:00:00.000Z",
-            descriptorJson: null,
             createdAt: "2026-03-20T00:00:00.000Z",
             updatedAt: "2026-03-20T00:01:00.000Z",
           },
@@ -251,17 +211,13 @@ const createSearchResult = (): SearchResult => {
           indexing: {
             matchedLayer: "chunk",
             domain: "general",
-            documentClass: "general_note",
             sourceHost: null,
             collectionKey: "inbox:notes",
             aiVisibility: "allow",
             sourceKind: "manual",
-            topics: ["mcp"],
-            assertionKind: null,
           },
           visibility: {
             aiVisibility: "allow",
-            sensitivity: "internal",
           },
           matchReasons: [
             {
@@ -279,12 +235,10 @@ const createSearchResult = (): SearchResult => {
             sourceKind: "manual",
             status: "ready",
             domain: "general",
-            sensitivity: "internal",
             aiVisibility: "allow",
             retrievalPriority: 0,
             collectionKey: "inbox:notes",
             capturedAt: "2026-03-20T00:00:00.000Z",
-            descriptorJson: null,
             createdAt: "2026-03-20T00:00:00.000Z",
             updatedAt: "2026-03-20T00:01:00.000Z",
           },
@@ -302,12 +256,10 @@ const createSearchResult = (): SearchResult => {
           sourceKind: "manual",
           status: "ready",
           domain: "general",
-          sensitivity: "internal",
           aiVisibility: "allow",
           retrievalPriority: 0,
           collectionKey: "inbox:notes",
           capturedAt: "2026-03-20T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-20T00:00:00.000Z",
           updatedAt: "2026-03-20T00:01:00.000Z",
         },
@@ -336,17 +288,13 @@ const createSearchResult = (): SearchResult => {
           indexing: {
             matchedLayer: "chunk",
             domain: "general",
-            documentClass: "general_note",
             sourceHost: null,
             collectionKey: "inbox:notes",
             aiVisibility: "allow",
             sourceKind: "manual",
-            topics: ["mcp"],
-            assertionKind: null,
           },
           visibility: {
             aiVisibility: "allow",
-            sensitivity: "internal",
           },
           matchReasons: [
             {
@@ -364,12 +312,10 @@ const createSearchResult = (): SearchResult => {
             sourceKind: "manual",
             status: "ready",
             domain: "general",
-            sensitivity: "internal",
             aiVisibility: "allow",
             retrievalPriority: 0,
             collectionKey: "inbox:notes",
             capturedAt: "2026-03-20T00:00:00.000Z",
-            descriptorJson: null,
             createdAt: "2026-03-20T00:00:00.000Z",
             updatedAt: "2026-03-20T00:01:00.000Z",
           },
@@ -393,17 +339,13 @@ const createSearchResult = (): SearchResult => {
             indexing: {
               matchedLayer: "chunk",
               domain: "general",
-              documentClass: "general_note",
               sourceHost: null,
               collectionKey: "inbox:notes",
               aiVisibility: "allow",
               sourceKind: "manual",
-              topics: ["mcp"],
-              assertionKind: null,
             },
             visibility: {
               aiVisibility: "allow",
-              sensitivity: "internal",
             },
             matchReasons: [
               {
@@ -421,12 +363,10 @@ const createSearchResult = (): SearchResult => {
               sourceKind: "manual",
               status: "ready",
               domain: "general",
-              sensitivity: "internal",
               aiVisibility: "allow",
               retrievalPriority: 0,
               collectionKey: "inbox:notes",
               capturedAt: "2026-03-20T00:00:00.000Z",
-              descriptorJson: null,
               createdAt: "2026-03-20T00:00:00.000Z",
               updatedAt: "2026-03-20T00:01:00.000Z",
             },
@@ -476,17 +416,13 @@ const createAskLibraryResult = (): AskLibraryResult => {
           indexing: {
             matchedLayer: "chunk",
             domain: "engineering",
-            documentClass: "design_doc",
             sourceHost: "developers.cloudflare.com",
             collectionKey: "site:developers.cloudflare.com",
             aiVisibility: "allow",
             sourceKind: "manual",
-            topics: ["mcp", "cloudflare"],
-            assertionKind: null,
           },
           visibility: {
             aiVisibility: "allow",
-            sensitivity: "internal",
           },
           matchReasons: [
             {
@@ -504,14 +440,11 @@ const createAskLibraryResult = (): AskLibraryResult => {
             sourceKind: "manual",
             status: "ready",
             domain: "engineering",
-            sensitivity: "internal",
             aiVisibility: "allow",
             retrievalPriority: 0,
-            documentClass: "design_doc",
             sourceHost: "developers.cloudflare.com",
             collectionKey: "site:developers.cloudflare.com",
             capturedAt: "2026-03-20T00:00:00.000Z",
-            descriptorJson: null,
             createdAt: "2026-03-20T00:00:00.000Z",
             updatedAt: "2026-03-20T00:01:00.000Z",
           },
@@ -529,14 +462,11 @@ const createAskLibraryResult = (): AskLibraryResult => {
           sourceKind: "manual",
           status: "ready",
           domain: "engineering",
-          sensitivity: "internal",
           aiVisibility: "allow",
           retrievalPriority: 0,
-          documentClass: "design_doc",
           sourceHost: "developers.cloudflare.com",
           collectionKey: "site:developers.cloudflare.com",
           capturedAt: "2026-03-20T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-20T00:00:00.000Z",
           updatedAt: "2026-03-20T00:01:00.000Z",
         },
@@ -565,17 +495,13 @@ const createAskLibraryResult = (): AskLibraryResult => {
           indexing: {
             matchedLayer: "chunk",
             domain: "engineering",
-            documentClass: "design_doc",
             sourceHost: "developers.cloudflare.com",
             collectionKey: "site:developers.cloudflare.com",
             aiVisibility: "allow",
             sourceKind: "manual",
-            topics: ["mcp", "cloudflare"],
-            assertionKind: null,
           },
           visibility: {
             aiVisibility: "allow",
-            sensitivity: "internal",
           },
           matchReasons: [
             {
@@ -593,14 +519,11 @@ const createAskLibraryResult = (): AskLibraryResult => {
             sourceKind: "manual",
             status: "ready",
             domain: "engineering",
-            sensitivity: "internal",
             aiVisibility: "allow",
             retrievalPriority: 0,
-            documentClass: "design_doc",
             sourceHost: "developers.cloudflare.com",
             collectionKey: "site:developers.cloudflare.com",
             capturedAt: "2026-03-20T00:00:00.000Z",
-            descriptorJson: null,
             createdAt: "2026-03-20T00:00:00.000Z",
             updatedAt: "2026-03-20T00:01:00.000Z",
           },
@@ -624,17 +547,13 @@ const createAskLibraryResult = (): AskLibraryResult => {
             indexing: {
               matchedLayer: "chunk",
               domain: "engineering",
-              documentClass: "design_doc",
               sourceHost: "developers.cloudflare.com",
               collectionKey: "site:developers.cloudflare.com",
               aiVisibility: "allow",
               sourceKind: "manual",
-              topics: ["mcp", "cloudflare"],
-              assertionKind: null,
             },
             visibility: {
               aiVisibility: "allow",
-              sensitivity: "internal",
             },
             matchReasons: [
               {
@@ -652,14 +571,11 @@ const createAskLibraryResult = (): AskLibraryResult => {
               sourceKind: "manual",
               status: "ready",
               domain: "engineering",
-              sensitivity: "internal",
               aiVisibility: "allow",
               retrievalPriority: 0,
-              documentClass: "design_doc",
               sourceHost: "developers.cloudflare.com",
               collectionKey: "site:developers.cloudflare.com",
               capturedAt: "2026-03-20T00:00:00.000Z",
-              descriptorJson: null,
               createdAt: "2026-03-20T00:00:00.000Z",
               updatedAt: "2026-03-20T00:01:00.000Z",
             },
@@ -775,8 +691,6 @@ describe("mcp routes", () => {
     expect(result.tools.map((tool) => tool.name)).toEqual([
       "save_asset",
       "list_assets",
-      "search_terms",
-      "search_assets_by_terms",
       "search_assets",
       "search_assets_for_context",
       "get_asset",
@@ -794,12 +708,6 @@ describe("mcp routes", () => {
       result.tools.map((tool) => [tool.name, tool])
     );
 
-    expect(toolsByName.search_terms?.description).toContain(
-      "metadata term pool"
-    );
-    expect(toolsByName.search_assets_by_terms?.description).toContain(
-      "metadata-driven asset discovery"
-    );
     expect(toolsByName.search_assets?.description).toContain(
       "groupedEvidence as the primary view"
     );
@@ -815,87 +723,6 @@ describe("mcp routes", () => {
     expect(toolsByName.ask_library_for_context?.description).toContain(
       "Prefer search_assets* plus get_asset"
     );
-  });
-
-  it("search_terms reuses the term search service", async () => {
-    const app = createApp();
-    const result = createTermSearchResult();
-
-    vi.mocked(termSearchService.searchTerms).mockResolvedValue(result);
-    const connected = await createConnectedClient(app);
-
-    client = connected.client;
-    transport = connected.transport;
-
-    const call = await client.callTool({
-      name: "search_terms",
-      arguments: {
-        query: "cloudmind deploy",
-        kinds: ["topic", "collection"],
-        topK: 5,
-      },
-    });
-
-    expect(getStructuredContent(call)).toEqual(result);
-    expect(termSearchService.searchTerms).toHaveBeenCalledWith(env, {
-      query: "cloudmind deploy",
-      kinds: ["topic", "collection"],
-      topK: 5,
-    });
-  });
-
-  it("search_assets_by_terms reuses the existing term asset service", async () => {
-    const app = createApp();
-    const result = {
-      terms: createTermSearchResult().items,
-      items: [
-        {
-          asset: createAssetDetail({
-            id: "asset-terms-1",
-            title: "CloudMind roadmap",
-            aiVisibility: "summary_only",
-          }),
-          matchedTerms: [
-            {
-              facetKey: "topic" as const,
-              facetValue: "cloudmind",
-            },
-          ],
-        },
-      ],
-      pagination: {
-        page: 1,
-        pageSize: 10,
-        total: 1,
-        totalPages: 1,
-      },
-    };
-
-    vi.mocked(termAssetService.searchAssetsByTerms).mockResolvedValue(result);
-    const connected = await createConnectedClient(app);
-
-    client = connected.client;
-    transport = connected.transport;
-
-    const call = await client.callTool({
-      name: "search_assets_by_terms",
-      arguments: {
-        query: "cloudmind roadmap",
-        kinds: ["topic"],
-        topK: 5,
-        page: 1,
-        pageSize: 10,
-      },
-    });
-
-    expect(getStructuredContent(call)).toEqual(result);
-    expect(termAssetService.searchAssetsByTerms).toHaveBeenCalledWith(env, {
-      query: "cloudmind roadmap",
-      kinds: ["topic"],
-      topK: 5,
-      page: 1,
-      pageSize: 10,
-    });
   });
 
   it("save_asset ingests text content through the existing ingest service", async () => {
@@ -922,67 +749,6 @@ describe("mcp routes", () => {
       title: "MCP note",
       content: "Saved from MCP",
       sourceKind: "mcp",
-    });
-  });
-
-  it("save_asset forwards optional text enrichment with enum-backed fields", async () => {
-    const app = createApp();
-    const item = createAssetDetail();
-
-    vi.mocked(ingestService.ingestTextAsset).mockResolvedValue(item);
-    const connected = await createConnectedClient(app);
-
-    client = connected.client;
-    transport = connected.transport;
-
-    const result = await client.callTool({
-      name: "save_asset",
-      arguments: {
-        type: "text",
-        title: "MCP enriched note",
-        content: "Saved from MCP with enrichment",
-        enrichment: {
-          summary: "Client summary",
-          domain: "engineering",
-          documentClass: "design_doc",
-          descriptor: {
-            topics: ["mcp", "workflow"],
-            collectionKey: "project/cloudmind",
-            signals: ["seeded_by_client"],
-          },
-          facets: [
-            {
-              facetKey: "topic",
-              facetValue: "mcp",
-              facetLabel: "mcp",
-            },
-          ],
-        },
-      },
-    });
-
-    expect(getStructuredContent(result)).toEqual({ item });
-    expect(ingestService.ingestTextAsset).toHaveBeenCalledWith(env, {
-      title: "MCP enriched note",
-      content: "Saved from MCP with enrichment",
-      sourceKind: "mcp",
-      enrichment: {
-        summary: "Client summary",
-        domain: "engineering",
-        documentClass: "design_doc",
-        descriptor: {
-          topics: ["mcp", "workflow"],
-          collectionKey: "project/cloudmind",
-          signals: ["seeded_by_client"],
-        },
-        facets: [
-          {
-            facetKey: "topic",
-            facetValue: "mcp",
-            facetLabel: "mcp",
-          },
-        ],
-      },
     });
   });
 
@@ -1043,7 +809,6 @@ describe("mcp routes", () => {
         pageSize: 10,
         timezoneOffsetMinutes: 0,
         domain: "engineering",
-        documentClass: "design_doc",
         sourceKind: "manual",
         sourceHost: "developers.cloudflare.com",
         topic: "mcp",
@@ -1076,7 +841,6 @@ describe("mcp routes", () => {
       pageSize: 10,
       timezoneOffsetMinutes: 0,
       domain: "engineering",
-      documentClass: "design_doc",
       sourceKind: "manual",
       sourceHost: "developers.cloudflare.com",
       topic: "mcp",
@@ -1125,7 +889,6 @@ describe("mcp routes", () => {
         allowFallback: false,
         timezoneOffsetMinutes: 0,
         domain: "engineering",
-        documentClass: "bug_note",
         sourceKind: "mcp",
         sourceHost: "github.com",
         topic: "vectorize",
@@ -1177,7 +940,6 @@ describe("mcp routes", () => {
         allowFallback: false,
         timezoneOffsetMinutes: 0,
         domain: "engineering",
-        documentClass: "bug_note",
         sourceKind: "mcp",
         sourceHost: "github.com",
         topic: "vectorize",
@@ -1282,7 +1044,6 @@ describe("mcp routes", () => {
       arguments: {
         status: "ready",
         domain: "engineering",
-        documentClass: "design_doc",
         sourceKind: "manual",
         deleted: "only",
         aiVisibility: "allow",
@@ -1376,7 +1137,6 @@ describe("mcp routes", () => {
     expect(assetService.listAssets).toHaveBeenCalledWith(env, {
       status: "ready",
       domain: "engineering",
-      documentClass: "design_doc",
       sourceKind: "manual",
       deleted: "only",
       aiVisibility: "allow",

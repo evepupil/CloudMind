@@ -118,15 +118,8 @@ export const generateAssetSummary = async (
   input: {
     title?: string | null | undefined;
     content: string;
-    enrichmentSummary?: string | null | undefined;
   }
 ): Promise<string> => {
-  const providedSummary = input.enrichmentSummary?.trim();
-
-  if (providedSummary) {
-    return providedSummary;
-  }
-
   let result:
     | {
         text: string;
@@ -342,9 +335,6 @@ const buildChunkVectorMetadata = (
     scopeId: "default",
   };
 
-  if (asset.documentClass) {
-    metadata.documentClass = asset.documentClass;
-  }
   if (asset.sourceKind) {
     metadata.sourceKind = asset.sourceKind;
   }

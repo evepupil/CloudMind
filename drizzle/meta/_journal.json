@@ -92,6 +92,13 @@
       "when": 1780757972402,
       "tag": "0012_good_wallop",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1780802238584,
+      "tag": "0013_wave_b_l1_slim",
+      "breakpoints": true
     }
   ]
 }

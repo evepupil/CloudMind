@@ -284,8 +284,6 @@ Available MCP tools:
 | --- | --- |
 | `save_asset` | Save a text note or URL and trigger processing |
 | `list_assets` | List assets with filters and pagination |
-| `search_terms` | Discover indexed topics, tags, and collections |
-| `search_assets_by_terms` | Search assets through metadata term expansion |
 | `search_assets` | Run evidence-rich semantic retrieval |
 | `search_assets_for_context` | Run retrieval with context-aware profiles |
 | `get_asset` | Fetch one asset detail by ID |

@@ -17,14 +17,11 @@ const createAssetDetail = (
     sourceKind: "manual",
     status: "ready",
     domain: "engineering",
-    sensitivity: "internal",
     aiVisibility: "allow",
     retrievalPriority: 0,
-    documentClass: "design_doc",
     sourceHost: "github.com",
     collectionKey: "cloudmind/notes",
     capturedAt: "2026-03-28T10:00:00.000Z",
-    descriptorJson: null,
     createdAt: "2026-03-28T10:00:00.000Z",
     updatedAt: "2026-03-28T10:10:00.000Z",
     contentText: "CloudMind keeps workflow inspection outside the detail page.",
@@ -43,8 +40,6 @@ const createAssetDetail = (
     },
     jobs: [],
     chunks: [],
-    facets: [],
-    assertions: [],
     ...overrides,
   };
 };
@@ -69,12 +64,12 @@ const workflowDetail: WorkflowRunDetail = {
       id: "step-1",
       runId: "run-1",
       assetId: "asset-1",
-      stepKey: "derive_facets",
-      stepType: "derive_facets",
+      stepKey: "classify",
+      stepType: "classify",
       status: "succeeded",
       attempt: 1,
       inputJson: null,
-      outputJson: '{"facetCount":6}',
+      outputJson: '{"domain":"engineering"}',
       errorMessage: null,
       startedAt: "2026-03-28T10:01:20.000Z",
       finishedAt: "2026-03-28T10:01:30.000Z",
@@ -127,7 +122,7 @@ describe("AssetWorkflowsPage", () => {
     expect(html).toContain("Workflow Inspection");
     expect(html).toContain('href="/assets/asset-1"');
     expect(html).toContain('href="/assets/asset-1/workflows"');
-    expect(html).toContain("Derive Facets");
+    expect(html).toContain("Classify");
     expect(html).toContain("artifact-1");
     expect(html).toContain("Workflow inspection should live on its own page.");
   });

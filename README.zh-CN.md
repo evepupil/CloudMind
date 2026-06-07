@@ -282,8 +282,6 @@ POST /mcp
 | --- | --- |
 | `save_asset` | 保存文本笔记或 URL，并触发处理 |
 | `list_assets` | 按过滤条件分页列出资产 |
-| `search_terms` | 搜索已索引的 topics、tags、collections |
-| `search_assets_by_terms` | 通过元数据 term expansion 搜索资产 |
 | `search_assets` | 执行带证据结构的语义检索 |
 | `search_assets_for_context` | 按上下文 profile 执行检索 |
 | `get_asset` | 按 ID 获取资产详情 |

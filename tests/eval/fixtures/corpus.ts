@@ -6,7 +6,6 @@ import type {
   AssetSearchInput,
   AssetSearchRepository,
   ChunkMatchQuery,
-  SearchAssetAssertionInput,
   SearchAssetSummaryInput,
 } from "@/core/assets/ports";
 import type {
@@ -15,18 +14,13 @@ import type {
   VectorStore,
 } from "@/core/vector/ports";
 import type {
-  AssetAssertionMatch,
   AssetChunkMatch,
   AssetDomain,
   AssetListResult,
   AssetSearchFilters,
   AssetSummary,
   AssetSummaryMatch,
-  AssetTermMatchItem,
-  FacetTermRef,
 } from "@/features/assets/model/types";
-import type { SearchAssetsByTermsResult } from "@/features/search/server/term-asset-service";
-import type { SearchTermItem } from "@/features/search/server/term-service";
 import {
   containsAnyToken,
   cosineSimilarity,
@@ -41,8 +35,6 @@ export interface CorpusAsset {
   domain: AssetDomain;
   aiVisibility?: AssetSummary["aiVisibility"] | undefined;
   chunks: string[];
-  assertions?: string[] | undefined;
-  topics?: string[] | undefined;
   capturedAt?: string | undefined;
 }
 
@@ -57,8 +49,6 @@ export const CORPUS: CorpusAsset[] = [
       "Cloudflare D1 is a serverless SQLite database that runs at the edge with Drizzle ORM and migrations.",
       "D1 supports the SQLite FTS5 full text search module and the trigram tokenizer for CJK content.",
     ],
-    assertions: ["D1 is a serverless SQLite database on Cloudflare."],
-    topics: ["d1", "cloudflare"],
   },
   {
     id: "cf-vectorize",
@@ -69,7 +59,6 @@ export const CORPUS: CorpusAsset[] = [
       "Cloudflare Vectorize is a vector index that supports native metadata filtering applied before topK and cosine similarity.",
       "Vectorize namespaces partition vectors and metadata indexes must be declared before upserting vectors.",
     ],
-    topics: ["vectorize", "cloudflare"],
   },
   {
     id: "cf-r2",
@@ -79,7 +68,6 @@ export const CORPUS: CorpusAsset[] = [
     chunks: [
       "Cloudflare R2 is object storage that is S3 compatible and charges no egress fees for stored files and blobs.",
     ],
-    topics: ["r2", "storage"],
   },
   {
     id: "rag-basics",
@@ -90,7 +78,6 @@ export const CORPUS: CorpusAsset[] = [
       "Retrieval augmented generation, RAG, retrieves relevant chunks via embeddings and grounds the language model answer in sources.",
       "A RAG pipeline splits documents into chunks, embeds them, stores vectors, and retrieves the top results for a query.",
     ],
-    topics: ["rag", "retrieval"],
   },
   {
     id: "bge-m3",
@@ -100,7 +87,6 @@ export const CORPUS: CorpusAsset[] = [
     chunks: [
       "bge-m3 is a multilingual embedding model with 1024 dimensions supporting dense, sparse, and colbert multi vector retrieval.",
     ],
-    topics: ["embeddings", "model"],
   },
   {
     id: "mcp-server",
@@ -110,7 +96,6 @@ export const CORPUS: CorpusAsset[] = [
     chunks: [
       "The Model Context Protocol, MCP, defines a stateless remote server that exposes tools to AI clients over HTTP.",
     ],
-    topics: ["mcp", "tools"],
   },
   {
     id: "rrf-fusion",
@@ -120,7 +105,6 @@ export const CORPUS: CorpusAsset[] = [
     chunks: [
       "Reciprocal rank fusion, RRF, combines multiple ranked lists into one hybrid search ranking using reciprocal ranks and is scale free.",
     ],
-    topics: ["fusion", "hybrid"],
   },
   {
     id: "ts-strict",
@@ -130,7 +114,6 @@ export const CORPUS: CorpusAsset[] = [
     chunks: [
       "TypeScript strict mode enables noUncheckedIndexedAccess and exactOptionalPropertyTypes and verbatimModuleSyntax for safer compiler checks.",
     ],
-    topics: ["typescript"],
   },
   {
     id: "memory-layer",
@@ -141,8 +124,6 @@ export const CORPUS: CorpusAsset[] = [
       "An AI memory layer adds a write path that extracts facts and entities into a knowledge graph, unlike plain RAG over chunks.",
       "Systems like mem0, Zep, and Letta model episodic and semantic memory with temporal validity and consolidation.",
     ],
-    assertions: ["A memory layer differs from RAG by adding a write path."],
-    topics: ["memory", "graph"],
   },
   {
     id: "cf-queues",
@@ -152,7 +133,6 @@ export const CORPUS: CorpusAsset[] = [
     chunks: [
       "Cloudflare Queues enable async processing with producers and consumers, batching messages and retrying on failure.",
     ],
-    topics: ["queues", "cloudflare"],
   },
   {
     id: "reranker",
@@ -162,7 +142,6 @@ export const CORPUS: CorpusAsset[] = [
     chunks: [
       "A cross encoder reranker like bge-reranker-base scores query document relevance and reorders the top candidates after recall.",
     ],
-    topics: ["reranker", "relevance"],
   },
   {
     id: "zh-vector",
@@ -173,7 +152,6 @@ export const CORPUS: CorpusAsset[] = [
       "向量检索通过嵌入模型把文本变成向量，用余弦相似度做语义搜索和召回。",
       "多语言嵌入模型可以同时处理中文和英文的语义召回。",
     ],
-    topics: ["向量", "检索"],
   },
   {
     id: "zh-memory",
@@ -184,7 +162,6 @@ export const CORPUS: CorpusAsset[] = [
       "个人记忆层把事实抽取成知识图谱，带时间维度，可以整合与遗忘，主打私有部署。",
       "记忆层和普通检索的区别在于有写路径，可以更新和遗忘记忆。",
     ],
-    topics: ["记忆", "图谱"],
   },
   {
     id: "zh-coffee",
@@ -194,7 +171,6 @@ export const CORPUS: CorpusAsset[] = [
     chunks: [
       "手冲咖啡建议水温九十二度，研磨度中细，粉水比大约一比十五，先闷蒸再注水。",
     ],
-    topics: ["咖啡"],
   },
   {
     id: "zh-fitness",
@@ -202,7 +178,6 @@ export const CORPUS: CorpusAsset[] = [
     summary: "力量训练的复合动作与恢复。",
     domain: "personal",
     chunks: ["力量训练以复合动作为主，比如深蹲和硬拉，注意蛋白质摄入和恢复。"],
-    topics: ["健身"],
   },
 ];
 
@@ -218,12 +193,10 @@ const toAssetSummary = (asset: CorpusAsset): AssetSummary => ({
   sourceKind: "manual",
   status: "ready",
   domain: asset.domain,
-  sensitivity: "internal",
   aiVisibility: asset.aiVisibility ?? "allow",
   retrievalPriority: 0,
   collectionKey: "inbox:notes",
   capturedAt: asset.capturedAt ?? ISO,
-  descriptorJson: null,
   createdAt: asset.capturedAt ?? ISO,
   updatedAt: asset.capturedAt ?? ISO,
 });
@@ -237,16 +210,12 @@ interface BuiltCorpus {
   chunkByVectorId: Map<string, AssetChunkMatch>;
   chunkVectors: ChunkVector[];
   summaries: AssetSummaryMatch[];
-  assertions: AssetAssertionMatch[];
-  termAssets: Array<{ asset: AssetSummary; terms: FacetTermRef[] }>;
 }
 
 const buildCorpus = (corpus: CorpusAsset[]): BuiltCorpus => {
   const chunkByVectorId = new Map<string, AssetChunkMatch>();
   const chunkVectors: ChunkVector[] = [];
   const summaries: AssetSummaryMatch[] = [];
-  const assertions: AssetAssertionMatch[] = [];
-  const termAssets: Array<{ asset: AssetSummary; terms: FacetTermRef[] }> = [];
 
   for (const corpusAsset of corpus) {
     const asset = toAssetSummary(corpusAsset);
@@ -266,36 +235,9 @@ const buildCorpus = (corpus: CorpusAsset[]): BuiltCorpus => {
     });
 
     summaries.push({ asset, summary: asset.summary ?? "" });
-
-    (corpusAsset.assertions ?? []).forEach((text, index) => {
-      assertions.push({
-        id: `${asset.id}-a${index}`,
-        assertionIndex: index,
-        kind: "fact",
-        text,
-        sourceChunkIndex: null,
-        sourceSpanJson: null,
-        confidence: 0.8,
-        createdAt: ISO,
-        updatedAt: ISO,
-        asset,
-      });
-    });
-
-    const topics = corpusAsset.topics ?? [];
-
-    if (topics.length > 0) {
-      termAssets.push({
-        asset,
-        terms: topics.map((value) => ({
-          facetKey: "topic",
-          facetValue: value,
-        })),
-      });
-    }
   }
 
-  return { chunkByVectorId, chunkVectors, summaries, assertions, termAssets };
+  return { chunkByVectorId, chunkVectors, summaries };
 };
 
 const matchesFilters = (
@@ -324,7 +266,7 @@ const matchesFilters = (
   return true;
 };
 
-// 这里让词面/term 通道也尊重硬过滤（domain/type/sourceKind），用于过滤正确性金标准。
+// 这里让词面通道也尊重硬过滤（domain/type/sourceKind），用于过滤正确性金标准。
 const matchesQueryFilters = (
   asset: AssetSummary,
   filters: AssetSearchFilters
@@ -343,7 +285,7 @@ const matchesQueryFilters = (
 };
 
 // 这里把检索管线拆成可单独度量的阶段：
-//   lexical  仅词面（summary/assertion/term/FTS chunk）
+//   lexical  仅词面（summary/FTS chunk）
 //   dense    仅向量语义
 //   fused    跨通道融合（min-max 归一化）
 //   reranked 融合后再 cross-encoder 重排 + MMR
@@ -367,16 +309,6 @@ export interface EvalDependencies {
   getAssetRepository: () => AssetSearchRepository;
   getVectorStore: () => VectorStore;
   getAIProvider: () => AIProvider;
-  searchAssetsByTerms: (
-    bindings: unknown,
-    input: {
-      query: string;
-      filters?: unknown;
-      topK?: number | undefined;
-      page?: number | undefined;
-      pageSize?: number | undefined;
-    }
-  ) => Promise<SearchAssetsByTermsResult>;
 }
 
 // 这里把语料组装成 createSearchService 可直接消费的依赖集合。
@@ -428,24 +360,6 @@ export const buildEvalDependencies = (
         .filter((match) =>
           containsAnyToken(`${match.asset.title} ${match.summary}`, tokens)
         )
-        .slice(0, input.limit);
-    },
-
-    async searchAssetAssertions(
-      input: SearchAssetAssertionInput
-    ): Promise<AssetAssertionMatch[]> {
-      if (!stage.lexical) {
-        return [];
-      }
-
-      const tokens = queryTokens(input.query);
-
-      return built.assertions
-        .filter((match) =>
-          input.aiVisibility.includes(match.asset.aiVisibility)
-        )
-        .filter((match) => matchesQueryFilters(match.asset, input))
-        .filter((match) => containsAnyToken(match.text, tokens))
         .slice(0, input.limit);
     },
 
@@ -533,70 +447,9 @@ export const buildEvalDependencies = (
       : {}),
   };
 
-  const searchAssetsByTerms: EvalDependencies["searchAssetsByTerms"] = async (
-    _bindings,
-    input
-  ) => {
-    if (!stage.lexical) {
-      return {
-        terms: [],
-        items: [],
-        pagination: {
-          page: 1,
-          pageSize: input.pageSize ?? 20,
-          total: 0,
-          totalPages: 0,
-        },
-      };
-    }
-
-    const filters = (input.filters ?? {}) as AssetSearchFilters;
-    const tokens = queryTokens(input.query);
-    const terms: SearchTermItem[] = [];
-    const items: AssetTermMatchItem[] = [];
-
-    for (const entry of built.termAssets) {
-      if (!matchesQueryFilters(entry.asset, filters)) {
-        continue;
-      }
-
-      const matched = entry.terms.filter((term) =>
-        tokens.some(
-          (token) =>
-            term.facetValue.includes(token) || token.includes(term.facetValue)
-        )
-      );
-
-      if (matched.length > 0) {
-        items.push({ asset: entry.asset, matchedTerms: matched });
-
-        for (const term of matched) {
-          terms.push({
-            kind: term.facetKey,
-            term: term.facetValue,
-            normalized: term.facetValue,
-            score: 0.9,
-          });
-        }
-      }
-    }
-
-    return {
-      terms,
-      items,
-      pagination: {
-        page: 1,
-        pageSize: input.pageSize ?? 20,
-        total: items.length,
-        totalPages: items.length === 0 ? 0 : 1,
-      },
-    };
-  };
-
   return {
     getAssetRepository: () => repository,
     getVectorStore: () => vectorStore,
     getAIProvider: () => aiProvider,
-    searchAssetsByTerms,
   };
 };

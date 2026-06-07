@@ -96,12 +96,10 @@ const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
     sourceKind: "manual",
     status: "pending",
     domain: "general",
-    sensitivity: "internal",
     aiVisibility: "allow",
     retrievalPriority: 0,
     collectionKey: "inbox:notes",
     capturedAt: "2026-03-19T00:00:00.000Z",
-    descriptorJson: null,
     createdAt: "2026-03-19T00:00:00.000Z",
     updatedAt: "2026-03-19T00:00:00.000Z",
     contentText: "Default content",
@@ -266,14 +264,11 @@ class InMemoryAssetRepository implements AssetRepository {
     input: {
       sourceKind?: AssetSourceKind | null | undefined;
       domain?: AssetDetail["domain"] | undefined;
-      sensitivity?: AssetDetail["sensitivity"] | undefined;
       aiVisibility?: AssetDetail["aiVisibility"] | undefined;
       retrievalPriority?: number | undefined;
-      documentClass?: AssetDetail["documentClass"] | null | undefined;
       sourceHost?: AssetDetail["sourceHost"] | null | undefined;
       collectionKey?: string | null | undefined;
       capturedAt?: string | null | undefined;
-      descriptorJson?: string | null | undefined;
     }
   ): Promise<void> {
     this.assertId(id);
@@ -285,14 +280,9 @@ class InMemoryAssetRepository implements AssetRepository {
           ? input.sourceKind
           : this.asset.sourceKind,
       domain: input.domain ?? this.asset.domain,
-      sensitivity: input.sensitivity ?? this.asset.sensitivity,
       aiVisibility: input.aiVisibility ?? this.asset.aiVisibility,
       retrievalPriority:
         input.retrievalPriority ?? this.asset.retrievalPriority,
-      documentClass:
-        input.documentClass !== undefined
-          ? input.documentClass
-          : this.asset.documentClass,
       sourceHost:
         input.sourceHost !== undefined
           ? input.sourceHost
@@ -305,59 +295,7 @@ class InMemoryAssetRepository implements AssetRepository {
         input.capturedAt !== undefined
           ? input.capturedAt
           : this.asset.capturedAt,
-      descriptorJson:
-        input.descriptorJson !== undefined
-          ? input.descriptorJson
-          : this.asset.descriptorJson,
     };
-  }
-
-  public async replaceAssetFacets(
-    id: string,
-    facets: Array<{
-      facetKey: string;
-      facetValue: string;
-      facetLabel: string;
-      sortOrder?: number | undefined;
-    }>
-  ): Promise<void> {
-    this.assertId(id);
-    this.asset.facets = facets.map((facet, index) => ({
-      id: `facet-${index + 1}`,
-      facetKey: facet.facetKey as NonNullable<
-        AssetDetail["facets"]
-      >[number]["facetKey"],
-      facetValue: facet.facetValue,
-      facetLabel: facet.facetLabel,
-      sortOrder: facet.sortOrder ?? index,
-    }));
-  }
-
-  public async replaceAssetAssertions(
-    id: string,
-    assertions: Array<{
-      assertionIndex: number;
-      kind: string;
-      text: string;
-      sourceChunkIndex?: number | null | undefined;
-      sourceSpanJson?: string | null | undefined;
-      confidence?: number | null | undefined;
-    }>
-  ): Promise<void> {
-    this.assertId(id);
-    this.asset.assertions = assertions.map((assertion, index) => ({
-      id: `assertion-${index + 1}`,
-      assertionIndex: assertion.assertionIndex,
-      kind: assertion.kind as NonNullable<
-        AssetDetail["assertions"]
-      >[number]["kind"],
-      text: assertion.text,
-      sourceChunkIndex: assertion.sourceChunkIndex ?? null,
-      sourceSpanJson: assertion.sourceSpanJson ?? null,
-      confidence: assertion.confidence ?? null,
-      createdAt: "2026-03-19T00:01:00.000Z",
-      updatedAt: "2026-03-19T00:01:00.000Z",
-    }));
   }
 
   public async failAssetProcessing(id: string, message: string): Promise<void> {
@@ -912,15 +850,6 @@ describe("processTextAsset", () => {
     const aiProvider = new ScriptedAIProvider([
       "AI summary for the CloudMind note.",
       "CloudMind 入库链路改造",
-      JSON.stringify({
-        assertions: [
-          {
-            kind: "summary_point",
-            text: "CloudMind is connecting ingest and retrieval into one flow.",
-            confidence: 0.92,
-          },
-        ],
-      }),
     ]);
     const workflowRepository = new InMemoryWorkflowRepository();
     const jobQueue = new InMemoryJobQueue();
@@ -950,7 +879,7 @@ describe("processTextAsset", () => {
 
     expect(result.summary).toBe("AI summary for the CloudMind note.");
     expect(result.title).toBe("CloudMind 入库链路改造");
-    expect(aiProvider.generateTextCalls).toHaveLength(3);
+    expect(aiProvider.generateTextCalls).toHaveLength(2);
   });
 
   it("uses AI summary when text assets do not provide enrichment summary", async () => {
@@ -992,7 +921,7 @@ describe("processTextAsset", () => {
     const result = await repository.getAssetById("asset-1");
 
     expect(result.summary).toBe("AI summary for the CloudMind note.");
-    expect(aiProvider.generateTextCalls).toHaveLength(3);
+    expect(aiProvider.generateTextCalls).toHaveLength(2);
   });
 
   it("fails the workflow when AI summary generation returns empty text", async () => {
@@ -1100,7 +1029,6 @@ describe("processTextAsset", () => {
     ]);
     expect(result.processedAt).toBe("2026-03-19T00:02:00.000Z");
     expect(result.domain).toBe("general");
-    expect(result.sensitivity).toBe("internal");
     expect(result.aiVisibility).toBe("allow");
     expect(result.retrievalPriority).toBe(10);
     expect(result.collectionKey).toBe("inbox:notes");
@@ -1123,10 +1051,7 @@ describe("processTextAsset", () => {
     expect(workflowRepository.steps.map((step) => step.stepKey)).toEqual([
       "clean_content",
       "summarize",
-      "derive_descriptor",
-      "derive_access_policy",
-      "derive_facets",
-      "derive_assertions",
+      "classify",
       "extract_entities",
       "persist_content",
       "chunk",
@@ -1145,11 +1070,7 @@ describe("processTextAsset", () => {
         storageKind: "inline",
       }),
       expect.objectContaining({
-        artifactType: "descriptor",
-        storageKind: "inline",
-      }),
-      expect.objectContaining({
-        artifactType: "access_policy",
+        artifactType: "classification",
         storageKind: "inline",
       }),
       expect.objectContaining({
@@ -1158,394 +1079,14 @@ describe("processTextAsset", () => {
         r2Key: "assets/asset-1/content/content.txt",
       }),
     ]);
-    expect(getArtifactContent(workflowRepository, "descriptor")).toMatchObject({
+    expect(
+      getArtifactContent(workflowRepository, "classification")
+    ).toMatchObject({
       domain: "general",
       collectionKey: "inbox:notes",
-      strategy: "heuristic_v2",
-    });
-    expect(
-      getArtifactContent(workflowRepository, "access_policy")
-    ).toMatchObject({
-      sensitivity: "internal",
       aiVisibility: "allow",
       retrievalPriority: 10,
-      strategy: "heuristic_v1",
     });
-  });
-
-  it("accepts validated enrichment and preserves system facets while merging semantic facets", async () => {
-    const repository = new InMemoryAssetRepository(
-      createAsset({
-        contentText:
-          "CloudMind workflow notes about queues, search, and MCP context.",
-      })
-    );
-    const blobStore = new InMemoryBlobStore();
-    const vectorStore = new InMemoryVectorStore();
-    const aiProvider = new ConfigurableAIProvider(
-      "AI summary for the architecture note."
-    );
-    const workflowRepository = new InMemoryWorkflowRepository();
-    const jobQueue = new InMemoryJobQueue();
-
-    const enqueued = await processTextAsset(
-      repository,
-      workflowRepository,
-      blobStore,
-      vectorStore,
-      aiProvider,
-      jobQueue,
-      "asset-1",
-      {
-        enrichment: {
-          summary: "Client-authored summary for CloudMind workflow design.",
-          domain: "engineering",
-          documentClass: "design_doc",
-          descriptor: {
-            topics: ["workflow", "mcp", "search"],
-            collectionKey: "project/cloudmind",
-            signals: ["seeded_by_client", "manual_reviewed"],
-          },
-          facets: [
-            {
-              facetKey: "domain",
-              facetValue: "product",
-              facetLabel: "product",
-              sortOrder: 1,
-            },
-            {
-              facetKey: "topic",
-              facetValue: " workflow ",
-              facetLabel: " workflow ",
-              sortOrder: 10,
-            },
-            {
-              facetKey: "collection",
-              facetValue: "project/cloudmind",
-              facetLabel: "project/cloudmind",
-              sortOrder: 11,
-            },
-            {
-              facetKey: "tag",
-              facetValue: "manual-review",
-              facetLabel: "manual-review",
-              sortOrder: 12,
-            },
-            {
-              facetKey: "topic",
-              facetValue: "document",
-              facetLabel: "document",
-              sortOrder: 13,
-            },
-          ],
-        },
-      }
-    );
-
-    expect(enqueued.status).toBe("processing");
-
-    await drainWorkflowQueue(
-      jobQueue,
-      repository,
-      workflowRepository,
-      blobStore,
-      vectorStore,
-      aiProvider
-    );
-
-    const result = await repository.getAssetById("asset-1");
-    const descriptor = getArtifactContent(workflowRepository, "descriptor");
-    const domainFacets =
-      result.facets?.filter((facet) => facet.facetKey === "domain") ?? [];
-    const workflowTopics =
-      result.facets?.filter(
-        (facet) => facet.facetKey === "topic" && facet.facetValue === "workflow"
-      ) ?? [];
-    const collectionFacets =
-      result.facets?.filter(
-        (facet) =>
-          facet.facetKey === "collection" &&
-          facet.facetValue === "project/cloudmind"
-      ) ?? [];
-    const genericTopics =
-      result.facets?.filter(
-        (facet) => facet.facetKey === "topic" && facet.facetValue === "document"
-      ) ?? [];
-
-    expect(result.summary).toBe(
-      "Client-authored summary for CloudMind workflow design."
-    );
-    expect(result.domain).toBe("engineering");
-    expect(result.documentClass).toBe("design_doc");
-    expect(result.collectionKey).toBe("project/cloudmind");
-    expect(result.facets).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          facetKey: "domain",
-          facetValue: "engineering",
-        }),
-        expect.objectContaining({
-          facetKey: "document_class",
-          facetValue: "design_doc",
-        }),
-        expect.objectContaining({
-          facetKey: "asset_type",
-          facetValue: "note",
-        }),
-        expect.objectContaining({
-          facetKey: "source_kind",
-          facetValue: "manual",
-        }),
-        expect.objectContaining({
-          facetKey: "ai_visibility",
-          facetValue: "allow",
-        }),
-        expect.objectContaining({
-          facetKey: "sensitivity",
-          facetValue: "internal",
-        }),
-        expect.objectContaining({
-          facetKey: "year",
-          facetValue: "2026",
-        }),
-        expect.objectContaining({
-          facetKey: "topic",
-          facetValue: "workflow",
-        }),
-        expect.objectContaining({
-          facetKey: "topic",
-          facetValue: "mcp",
-        }),
-        expect.objectContaining({
-          facetKey: "topic",
-          facetValue: "search",
-        }),
-        expect.objectContaining({
-          facetKey: "collection",
-          facetValue: "project/cloudmind",
-        }),
-        expect.objectContaining({
-          facetKey: "tag",
-          facetValue: "manual-review",
-        }),
-      ])
-    );
-    expect(domainFacets).toHaveLength(1);
-    expect(workflowTopics).toHaveLength(1);
-    expect(collectionFacets).toHaveLength(1);
-    expect(genericTopics).toHaveLength(0);
-    expect(result.facets).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          facetKey: "domain",
-          facetValue: "product",
-        }),
-      ])
-    );
-    expect(descriptor).toMatchObject({
-      domain: "engineering",
-      documentClass: "design_doc",
-      collectionKey: "project/cloudmind",
-      topics: ["workflow", "mcp", "search"],
-      signals: ["seeded_by_client", "manual_reviewed"],
-    });
-  });
-
-  it("uses AI enrichment semantic hints first and keeps heuristic fallback", async () => {
-    const repository = new InMemoryAssetRepository(
-      createAsset({
-        contentText:
-          "TypeScript repository architecture with API design and queue workers.",
-      })
-    );
-    const blobStore = new InMemoryBlobStore();
-    const vectorStore = new InMemoryVectorStore();
-    const aiProvider = new ConfigurableAIProvider(
-      "AI summary for the architecture note."
-    );
-    const workflowRepository = new InMemoryWorkflowRepository();
-    const jobQueue = new InMemoryJobQueue();
-
-    const enqueued = await processTextAsset(
-      repository,
-      workflowRepository,
-      blobStore,
-      vectorStore,
-      aiProvider,
-      jobQueue,
-      "asset-1",
-      {
-        enrichment: {
-          descriptor: {
-            topics: ["agent-memory"],
-            tags: ["reuse-first"],
-          },
-        },
-      }
-    );
-
-    expect(enqueued.status).toBe("processing");
-    expect(jobQueue.messages).toHaveLength(1);
-
-    await drainWorkflowQueue(
-      jobQueue,
-      repository,
-      workflowRepository,
-      blobStore,
-      vectorStore,
-      aiProvider
-    );
-
-    const result = await repository.getAssetById("asset-1");
-    const descriptor = getArtifactContent(workflowRepository, "descriptor");
-
-    expect(result.status).toBe("ready");
-    expect(result.summary).toBe("AI summary for the architecture note.");
-    expect(result.domain).toBe("general");
-    expect(result.documentClass).toBe("general_note");
-    expect(descriptor).toMatchObject({
-      domain: "general",
-      documentClass: "general_note",
-      topics: ["agent-memory"],
-      tags: ["reuse-first"],
-    });
-  });
-
-  it("uses AI assertions when extraction succeeds", async () => {
-    const repository = new InMemoryAssetRepository(
-      createAsset({
-        contentText:
-          "CloudMind will adopt queue-first ingest. The system must preserve raw assets. Retrieval quality improved after chunk tuning.",
-      })
-    );
-    const blobStore = new InMemoryBlobStore();
-    const vectorStore = new InMemoryVectorStore();
-    const aiProvider = new ScriptedAIProvider([
-      "AI summary for assertion extraction.",
-      "AI summary for assertion extraction.",
-      JSON.stringify({
-        assertions: [
-          {
-            kind: "decision",
-            text: "CloudMind will adopt queue-first ingest.",
-            confidence: 0.93,
-          },
-          {
-            kind: "constraint",
-            text: "The system must preserve raw assets.",
-            confidence: 0.91,
-          },
-        ],
-      }),
-    ]);
-    const workflowRepository = new InMemoryWorkflowRepository();
-    const jobQueue = new InMemoryJobQueue();
-
-    const enqueued = await processTextAsset(
-      repository,
-      workflowRepository,
-      blobStore,
-      vectorStore,
-      aiProvider,
-      jobQueue,
-      "asset-1"
-    );
-
-    expect(enqueued.status).toBe("processing");
-
-    await drainWorkflowQueue(
-      jobQueue,
-      repository,
-      workflowRepository,
-      blobStore,
-      vectorStore,
-      aiProvider
-    );
-
-    const result = await repository.getAssetById("asset-1");
-
-    expect(result.assertions).toEqual([
-      expect.objectContaining({
-        assertionIndex: 0,
-        kind: "decision",
-        text: "CloudMind will adopt queue-first ingest.",
-        confidence: 0.93,
-      }),
-      expect.objectContaining({
-        assertionIndex: 1,
-        kind: "constraint",
-        text: "The system must preserve raw assets.",
-        confidence: 0.91,
-      }),
-    ]);
-  });
-
-  it("falls back to heuristic assertions when AI extraction fails", async () => {
-    const repository = new InMemoryAssetRepository(
-      createAsset({
-        contentText:
-          "CloudMind will adopt queue-first ingest. The system must preserve raw assets. Retrieval quality improved after chunk tuning.",
-      })
-    );
-    const blobStore = new InMemoryBlobStore();
-    const vectorStore = new InMemoryVectorStore();
-    const aiProvider = new ScriptedAIProvider([
-      "AI summary for assertion extraction.",
-      "AI summary for assertion extraction.",
-      new Error("Assertion extraction unavailable"),
-    ]);
-    const workflowRepository = new InMemoryWorkflowRepository();
-    const jobQueue = new InMemoryJobQueue();
-
-    const enqueued = await processTextAsset(
-      repository,
-      workflowRepository,
-      blobStore,
-      vectorStore,
-      aiProvider,
-      jobQueue,
-      "asset-1"
-    );
-
-    expect(enqueued.status).toBe("processing");
-
-    await drainWorkflowQueue(
-      jobQueue,
-      repository,
-      workflowRepository,
-      blobStore,
-      vectorStore,
-      aiProvider
-    );
-
-    const result = await repository.getAssetById("asset-1");
-
-    expect(result.assertions).toEqual([
-      expect.objectContaining({
-        assertionIndex: 0,
-        kind: "summary_point",
-        text: "AI summary for assertion extraction.",
-        confidence: 0.92,
-      }),
-      expect.objectContaining({
-        assertionIndex: 1,
-        kind: "decision",
-        text: "CloudMind will adopt queue-first ingest.",
-        confidence: 0.78,
-      }),
-      expect.objectContaining({
-        assertionIndex: 2,
-        kind: "constraint",
-        text: "The system must preserve raw assets.",
-        confidence: 0.78,
-      }),
-      expect.objectContaining({
-        assertionIndex: 3,
-        kind: "fact",
-        text: "Retrieval quality improved after chunk tuning.",
-        confidence: 0.78,
-      }),
-    ]);
   });
 
   it("marks the asset and job as failed when content is empty", async () => {
@@ -1640,110 +1181,6 @@ describe("processTextAsset", () => {
 });
 
 describe("processUrlAsset", () => {
-  it("uses AI descriptor enrichment for URL assets before heuristic fallback", async () => {
-    const repository = new InMemoryAssetRepository(
-      createAsset({
-        id: "asset-url-ai-descriptor",
-        type: "url",
-        title: "CloudMind roadmap",
-        contentText: null,
-        sourceUrl: "https://example.com/cloudmind-roadmap",
-      })
-    );
-    const blobStore = new InMemoryBlobStore();
-    const vectorStore = new InMemoryVectorStore([
-      {
-        id: "term:topic:retrieval",
-        score: 0.93,
-        metadataJson: JSON.stringify({
-          kind: "topic",
-          term: "retrieval",
-          normalized: "retrieval",
-        }),
-      },
-      {
-        id: "term:tag:memory-layer",
-        score: 0.91,
-        metadataJson: JSON.stringify({
-          kind: "tag",
-          term: "memory-layer",
-          normalized: "memory-layer",
-        }),
-      },
-      {
-        id: "term:catalog:product/roadmap",
-        score: 0.9,
-        metadataJson: JSON.stringify({
-          kind: "catalog",
-          term: "product/roadmap",
-          normalized: "product/roadmap",
-        }),
-      },
-    ]);
-    const aiProvider = new ScriptedAIProvider([
-      "AI summary for the CloudMind roadmap page.",
-      JSON.stringify({
-        domain: "product",
-        documentClass: "spec",
-        topics: ["semantic retrieval"],
-        tags: ["memory layer"],
-        catalog: "product roadmap",
-        signals: ["ai_descriptor_generated"],
-      }),
-    ]);
-    const webPageFetcher = new InMemoryWebPageFetcher({
-      title: "CloudMind Roadmap",
-      sourceUrl: "https://example.com/cloudmind-roadmap",
-      rawContent:
-        "Title: CloudMind Roadmap\n" +
-        "Markdown Content:\n" +
-        "CloudMind roadmap for semantic retrieval, MCP memory, and launch planning.",
-      content:
-        "CloudMind roadmap for semantic retrieval, MCP memory, and launch planning.",
-      fetchedAt: "2026-03-19T00:00:30.000Z",
-      provider: "jina_reader",
-    });
-    const workflowRepository = new InMemoryWorkflowRepository();
-    const jobQueue = new InMemoryJobQueue();
-
-    const enqueued = await processUrlAsset(
-      repository,
-      workflowRepository,
-      blobStore,
-      vectorStore,
-      aiProvider,
-      jobQueue,
-      webPageFetcher,
-      "asset-url-ai-descriptor"
-    );
-
-    expect(enqueued.status).toBe("processing");
-
-    await drainWorkflowQueue(
-      jobQueue,
-      repository,
-      workflowRepository,
-      blobStore,
-      vectorStore,
-      aiProvider,
-      webPageFetcher
-    );
-
-    const result = await repository.getAssetById("asset-url-ai-descriptor");
-
-    expect(result.domain).toBe("product");
-    expect(result.documentClass).toBe("spec");
-    expect(result.collectionKey).toBe("product/roadmap");
-    expect(getArtifactContent(workflowRepository, "descriptor")).toMatchObject({
-      domain: "product",
-      documentClass: "spec",
-      collectionKey: "product/roadmap",
-      topics: ["retrieval"],
-      tags: ["memory-layer"],
-      signals: ["ai_descriptor_generated"],
-    });
-  });
-
   it("fetches URL content, stores blobs, and promotes the asset to ready", async () => {
     const repository = new InMemoryAssetRepository(
       createAsset({
@@ -1810,7 +1247,6 @@ describe("processUrlAsset", () => {
       "Cloudflare Workers runtime guide for building APIs with D1 and R2."
     );
     expect(result.domain).toBe("engineering");
-    expect(result.sensitivity).toBe("public");
     expect(result.aiVisibility).toBe("allow");
     expect(result.retrievalPriority).toBe(50);
     expect(result.collectionKey).toBe("site:developers.cloudflare.com");
@@ -1839,10 +1275,7 @@ describe("processUrlAsset", () => {
       "load_source",
       "clean_content",
       "summarize",
-      "derive_descriptor",
-      "derive_access_policy",
-      "derive_facets",
-      "derive_assertions",
+      "classify",
       "extract_entities",
       "persist_content",
       "chunk",
@@ -1857,11 +1290,7 @@ describe("processUrlAsset", () => {
         contentText: "AI summary for the Cloudflare Workers page.",
       }),
       expect.objectContaining({
-        artifactType: "descriptor",
-        storageKind: "inline",
-      }),
-      expect.objectContaining({
-        artifactType: "access_policy",
+        artifactType: "classification",
         storageKind: "inline",
       }),
       expect.objectContaining({
@@ -1870,15 +1299,12 @@ describe("processUrlAsset", () => {
         r2Key: "assets/asset-url-1/content/content.txt",
       }),
     ]);
-    expect(getArtifactContent(workflowRepository, "descriptor")).toMatchObject({
+    expect(
+      getArtifactContent(workflowRepository, "classification")
+    ).toMatchObject({
       domain: "engineering",
       collectionKey: "site:developers.cloudflare.com",
       sourceHost: "developers.cloudflare.com",
-    });
-    expect(
-      getArtifactContent(workflowRepository, "access_policy")
-    ).toMatchObject({
-      sensitivity: "public",
       aiVisibility: "allow",
       retrievalPriority: 50,
     });
@@ -2011,68 +1437,6 @@ describe("processUrlAsset", () => {
 });
 
 describe("processPdfAsset", () => {
-  it("keeps heuristic descriptor fallback when PDF AI enrichment generation fails", async () => {
-    const repository = new InMemoryAssetRepository(
-      createAsset({
-        id: "asset-pdf-ai-fallback",
-        type: "pdf",
-        title: "CloudMind Whitepaper",
-        contentText: null,
-        rawR2Key: "assets/asset-pdf-ai-fallback/raw/cloudmind.pdf",
-        mimeType: "application/pdf",
-      })
-    );
-    const pdfBody = await loadPdfFixture("hello-cloudmind.pdf");
-    const blobStore = new InMemoryBlobStore([
-      {
-        key: "assets/asset-pdf-ai-fallback/raw/cloudmind.pdf",
-        body: pdfBody,
-        size: pdfBody.byteLength,
-        contentType: "application/pdf",
-      },
-    ]);
-    const vectorStore = new InMemoryVectorStore();
-    const aiProvider = new ScriptedAIProvider([
-      "AI summary for the CloudMind PDF.",
-      new Error("AI descriptor unavailable"),
-    ]);
-    const workflowRepository = new InMemoryWorkflowRepository();
-    const jobQueue = new InMemoryJobQueue();
-
-    const enqueued = await processPdfAsset(
-      repository,
-      workflowRepository,
-      blobStore,
-      vectorStore,
-      aiProvider,
-      jobQueue,
-      "asset-pdf-ai-fallback"
-    );
-
-    expect(enqueued.status).toBe("processing");
-
-    await drainWorkflowQueue(
-      jobQueue,
-      repository,
-      workflowRepository,
-      blobStore,
-      vectorStore,
-      aiProvider
-    );
-
-    const result = await repository.getAssetById("asset-pdf-ai-fallback");
-
-    expect(result.domain).toBe("research");
-    expect(result.documentClass).toBe("paper");
-    expect(result.collectionKey).toBe("library:pdf");
-    expect(getArtifactContent(workflowRepository, "descriptor")).toMatchObject({
-      domain: "research",
-      documentClass: "paper",
-      collectionKey: "library:pdf",
-      strategy: "heuristic_v2",
-    });
-  });
-
   it("extracts real text from the PDF in R2 and promotes the asset to ready", async () => {
     const repository = new InMemoryAssetRepository(
       createAsset({
@@ -2129,7 +1493,6 @@ describe("processPdfAsset", () => {
     expect(result.contentText).toBe("Hello CloudMind PDF");
     expect(result.contentR2Key).toBe("assets/asset-pdf-1/content/content.txt");
     expect(result.domain).toBe("research");
-    expect(result.sensitivity).toBe("internal");
     expect(result.aiVisibility).toBe("allow");
     expect(result.retrievalPriority).toBe(30);
     expect(result.collectionKey).toBe("library:pdf");
@@ -2160,10 +1523,7 @@ describe("processPdfAsset", () => {
       "load_source",
       "clean_content",
       "summarize",
-      "derive_descriptor",
-      "derive_access_policy",
-      "derive_facets",
-      "derive_assertions",
+      "classify",
       "extract_entities",
       "persist_content",
       "chunk",
@@ -2182,11 +1542,7 @@ describe("processPdfAsset", () => {
         storageKind: "inline",
       }),
       expect.objectContaining({
-        artifactType: "descriptor",
-        storageKind: "inline",
-      }),
-      expect.objectContaining({
-        artifactType: "access_policy",
+        artifactType: "classification",
         storageKind: "inline",
       }),
       expect.objectContaining({
@@ -2195,15 +1551,11 @@ describe("processPdfAsset", () => {
         r2Key: "assets/asset-pdf-1/content/content.txt",
       }),
     ]);
-    expect(getArtifactContent(workflowRepository, "descriptor")).toMatchObject({
+    expect(
+      getArtifactContent(workflowRepository, "classification")
+    ).toMatchObject({
       domain: "research",
       collectionKey: "library:pdf",
-      strategy: "heuristic_v2",
-    });
-    expect(
-      getArtifactContent(workflowRepository, "access_policy")
-    ).toMatchObject({
-      sensitivity: "internal",
       aiVisibility: "allow",
       retrievalPriority: 30,
     });

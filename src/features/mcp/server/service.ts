@@ -23,12 +23,6 @@ import {
   askLibraryForContext,
 } from "@/features/chat/server/service";
 import {
-  assetDocumentClassValues,
-  assetDomainValues,
-  assetFacetKeyValues,
-  textAssetEnrichmentSchema,
-} from "@/features/ingest/model/enrichment";
-import {
   ingestTextAsset,
   ingestUrlAsset,
   reprocessAsset,
@@ -44,8 +38,6 @@ import {
   searchAssets,
   searchAssetsForContext,
 } from "@/features/search/server/service";
-import { searchAssetsByTerms } from "@/features/search/server/term-asset-service";
-import { searchTerms } from "@/features/search/server/term-service";
 import {
   getWorkflowRunDetail,
   listWorkflowRunsByAssetId,
@@ -57,14 +49,6 @@ const saveAssetInputSchema = z
     title: z.string().trim().min(1).max(300).optional(),
     content: z.string().trim().min(1).optional(),
     url: z.string().url().optional(),
-    enrichment: textAssetEnrichmentSchema
-      .optional()
-      .describe(
-        "Optional indexing enrichment for text assets. " +
-          `Allowed domain: ${assetDomainValues.join(", ")}. ` +
-          `Allowed documentClass: ${assetDocumentClassValues.join(", ")}. ` +
-          `Allowed facets[].facetKey: ${assetFacetKeyValues.join(", ")}.`
-      ),
   })
   .superRefine((value, context) => {
     if (value.type === "text" && !value.content) {
@@ -82,40 +66,9 @@ const saveAssetInputSchema = z
         path: ["url"],
       });
     }
-
-    if (value.type === "url" && value.enrichment !== undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          'Field "enrichment" is currently supported only for type "text".',
-        path: ["enrichment"],
-      });
-    }
   });
 
 const searchAssetsInputSchema = assetSearchPayloadSchema;
-
-const searchTermsInputSchema = z.object({
-  query: z.string().trim().min(1),
-  kinds: z
-    .array(z.enum(["topic", "tag", "collection"]))
-    .min(1)
-    .max(3)
-    .optional(),
-  topK: z.number().int().positive().max(20).optional(),
-});
-
-const searchAssetsByTermsInputSchema = z.object({
-  query: z.string().trim().min(1),
-  kinds: z
-    .array(z.enum(["topic", "tag", "collection"]))
-    .min(1)
-    .max(3)
-    .optional(),
-  topK: z.number().int().positive().max(20).optional(),
-  page: z.number().int().positive().optional(),
-  pageSize: z.number().int().positive().max(50).optional(),
-});
 
 const searchAssetsForContextInputSchema = assetSearchPayloadSchema.and(
   z.object({
@@ -143,19 +96,6 @@ const listAssetsInputSchema = z
         "health",
         "archive",
         "general",
-      ])
-      .optional(),
-    documentClass: z
-      .enum([
-        "reference_doc",
-        "design_doc",
-        "bug_note",
-        "paper",
-        "journal_entry",
-        "meeting_note",
-        "spec",
-        "howto",
-        "general_note",
       ])
       .optional(),
     sourceKind: z
@@ -461,8 +401,7 @@ export const createMcpServer = (
       description:
         "Save a text note or URL into the CloudMind library and trigger processing. " +
         "Returns the current asset snapshot immediately after enqueue, so some " +
-        "derived fields may continue updating while processing runs. " +
-        "For type=text, you may pass optional enrichment to suggest summary, domain, documentClass, descriptor, and facets using CloudMind enum values.",
+        "derived fields may continue updating while processing runs.",
       inputSchema: saveAssetInputSchema,
     },
     withToolLogging("save_asset", async (input) => {
@@ -478,7 +417,6 @@ export const createMcpServer = (
             title: normalizeOptionalString(input.title),
             content,
             sourceKind: "mcp",
-            enrichment: input.enrichment,
           });
 
           return createToolResult({ item });
@@ -508,56 +446,12 @@ export const createMcpServer = (
     {
       title: "List Assets",
       description:
-        "List assets in the CloudMind library with optional filters and pagination, including domain, document class, source kind, AI visibility, created-at range, source host, topic, tag, and collection.",
+        "List assets in the CloudMind library with optional filters and pagination, including domain, source kind, AI visibility, created-at range, source host, topic, tag, and collection.",
       inputSchema: listAssetsInputSchema,
     },
     withToolLogging("list_assets", async (input) => {
       try {
         const result = await listAssets(bindings, input);
-
-        return createToolResult(result);
-      } catch (error) {
-        return createToolErrorResult(getErrorMessage(error));
-      }
-    })
-  );
-
-  server.registerTool(
-    "search_terms",
-    {
-      title: "Search Terms",
-      description:
-        "Search existing topic, tag, and collection terms by semantic similarity " +
-        "from the metadata term pool. Use this when you want to discover which " +
-        "indexed terms already exist before filtering or reverse lookup.",
-      inputSchema: searchTermsInputSchema,
-    },
-    withToolLogging("search_terms", async (input) => {
-      try {
-        const result = await searchTerms(bindings, input);
-
-        return createToolResult(result);
-      } catch (error) {
-        return createToolErrorResult(getErrorMessage(error));
-      }
-    })
-  );
-
-  server.registerTool(
-    "search_assets_by_terms",
-    {
-      title: "Search Assets By Terms",
-      description:
-        "Search assets by first finding semantically matching topic, tag, or " +
-        "collection terms, then reverse-looking up assets that carry those terms. " +
-        "Returns the matched terms and the associated assets with per-asset " +
-        "term hit details. Use this for metadata-driven asset discovery when " +
-        "you want to find assets by what they are about rather than by content keywords.",
-      inputSchema: searchAssetsByTermsInputSchema,
-    },
-    withToolLogging("search_assets_by_terms", async (input) => {
-      try {
-        const result = await searchAssetsByTerms(bindings, input);
 
         return createToolResult(result);
       } catch (error) {
@@ -573,7 +467,7 @@ export const createMcpServer = (
       description:
         "Search the library with semantic retrieval and return evidence-rich " +
         "results for retrieval-first workflows. " +
-        "Supports optional hard filters such as type, domain, document class, source kind, source host, topic, tag, collection, and created-at range. " +
+        "Supports optional hard filters such as type, domain, source kind, source host, topic, tag, collection, and created-at range. " +
         `${groupedEvidenceGuidance} ` +
         `${retrievalFirstGuidance} ` +
         cloudMindInvocationGuidance,
@@ -597,7 +491,7 @@ export const createMcpServer = (
       description:
         "Search the library with context-aware retrieval weighting for AI " +
         "clients in retrieval-first workflows. " +
-        "Supports optional hard filters such as type, domain, document class, source kind, source host, topic, tag, collection, and created-at range. " +
+        "Supports optional hard filters such as type, domain, source kind, source host, topic, tag, collection, and created-at range. " +
         `${groupedEvidenceGuidance} ` +
         `${retrievalFirstGuidance} ` +
         `${cloudMindInvocationGuidance} ` +

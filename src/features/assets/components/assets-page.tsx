@@ -1,6 +1,5 @@
 import type {
   AssetAiVisibility,
-  AssetDocumentClass,
   AssetDomain,
   AssetListQuery,
   AssetListResult,
@@ -42,22 +41,6 @@ const assetDomainOptions: Array<{ label: string; value: AssetDomain | "" }> = [
   { label: "General", value: "general" },
 ];
 
-const assetDocumentClassOptions: Array<{
-  label: string;
-  value: AssetDocumentClass | "";
-}> = [
-  { label: "All document classes", value: "" },
-  { label: "Reference Doc", value: "reference_doc" },
-  { label: "Design Doc", value: "design_doc" },
-  { label: "Bug Note", value: "bug_note" },
-  { label: "Paper", value: "paper" },
-  { label: "Journal Entry", value: "journal_entry" },
-  { label: "Meeting Note", value: "meeting_note" },
-  { label: "Spec", value: "spec" },
-  { label: "How-to", value: "howto" },
-  { label: "General Note", value: "general_note" },
-];
-
 const assetSourceKindOptions: Array<{
   label: string;
   value: AssetSourceKind | "";
@@ -79,10 +62,6 @@ const assetAiVisibilityOptions: Array<{
   { label: "Summary Only", value: "summary_only" },
   { label: "Deny", value: "deny" },
 ];
-
-interface AssetDescriptorView {
-  topics?: string[] | undefined;
-}
 
 const formatDate = (value: string): string => {
   return new Date(value).toLocaleString("zh-CN", {
@@ -109,41 +88,12 @@ const formatLabel = (value: string): string => {
     .join(" ");
 };
 
-const parseDescriptorJson = (
-  descriptorJson: string | null
-): AssetDescriptorView | null => {
-  if (!descriptorJson) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(descriptorJson);
-
-    if (!parsed || typeof parsed !== "object") {
-      return null;
-    }
-
-    return {
-      topics: Array.isArray(parsed.topics)
-        ? parsed.topics.filter(
-            (topic: unknown): topic is string => typeof topic === "string"
-          )
-        : [],
-    };
-  } catch {
-    return null;
-  }
-};
-
 const buildAssetTags = (asset: AssetSummary): string[] => {
-  const descriptor = parseDescriptorJson(asset.descriptorJson);
   const tags = [
     asset.domain,
-    asset.documentClass ?? null,
     asset.aiVisibility,
     asset.sourceKind,
     asset.sourceHost,
-    ...(descriptor?.topics ?? []),
   ].filter((value): value is string => Boolean(value?.trim()));
 
   return Array.from(new Set(tags));
@@ -162,10 +112,6 @@ const buildFilterSummary = (filters: AssetListQuery): string => {
 
   if (filters.domain) {
     segments.push(`domain: ${filters.domain}`);
-  }
-
-  if (filters.documentClass) {
-    segments.push(`document: ${filters.documentClass}`);
   }
 
   if (filters.sourceKind) {
@@ -224,10 +170,6 @@ export const AssetsPage = ({
 
   if (filters.domain) {
     currentParams.set("domain", filters.domain);
-  }
-
-  if (filters.documentClass) {
-    currentParams.set("documentClass", filters.documentClass);
   }
 
   if (filters.sourceKind) {
@@ -380,22 +322,6 @@ export const AssetsPage = ({
               class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
             >
               {assetDomainOptions.map((option) => (
-                <option key={option.label} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label class="grid gap-2">
-            <span class="text-[13px] font-semibold text-[#37352f]">
-              Document Class
-            </span>
-            <select
-              name="documentClass"
-              defaultValue={filters.documentClass ?? ""}
-              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
-            >
-              {assetDocumentClassOptions.map((option) => (
                 <option key={option.label} value={option.value}>
                   {option.label}
                 </option>

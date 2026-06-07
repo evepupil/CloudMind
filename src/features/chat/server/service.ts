@@ -34,7 +34,6 @@ import { chatPromptRegistry } from "./prompts";
 import {
   buildGroundingContexts,
   compareGroundingContexts,
-  getAssertionGroundingContexts,
   getSummaryGroundingContexts,
 } from "./retrieval";
 
@@ -124,10 +123,7 @@ const buildIndexingSummary = (
       contexts.map((context) => context.asset.domain),
       4
     ),
-    documentClasses: collectUniqueLimited(
-      contexts.map((context) => context.asset.documentClass ?? null),
-      4
-    ),
+    documentClasses: [],
     sourceKinds: collectUniqueLimited(
       contexts.map((context) => context.asset.sourceKind ?? null),
       4
@@ -140,10 +136,7 @@ const buildIndexingSummary = (
       contexts.map((context) => context.asset.collectionKey),
       4
     ),
-    topics: collectUniqueLimited(
-      contexts.flatMap((context) => context.indexing.topics),
-      6
-    ),
+    topics: [],
   };
 };
 
@@ -712,15 +705,6 @@ const selectGroundingContexts = (
       continue;
     }
 
-    if (
-      existingForAsset.some(
-        (selectedContext) =>
-          selectedContext.layer === "assertion" && context.layer === "summary"
-      )
-    ) {
-      continue;
-    }
-
     const contentKey = [
       context.asset.id,
       context.layer,
@@ -878,22 +862,15 @@ export const createChatService = (
         retrievalLimit,
         contextPolicy
       );
-      const assertionContexts = await getAssertionGroundingContexts(
-        repository,
-        question,
-        retrievalLimit,
-        contextPolicy
-      );
 
       if (!queryVector) {
-        const lexicalContexts = [...assertionContexts, ...summaryContexts].sort(
-          (left, right) =>
-            compareGroundingContexts(
-              question,
-              left,
-              right,
-              getContextSelectionScore
-            )
+        const lexicalContexts = [...summaryContexts].sort((left, right) =>
+          compareGroundingContexts(
+            question,
+            left,
+            right,
+            getContextSelectionScore
+          )
         );
         const selectedLexicalContexts = selectGroundingContexts(
           question,
@@ -1033,7 +1010,6 @@ export const createChatService = (
         );
       const allGroundingContexts = [
         ...groundingContexts,
-        ...assertionContexts,
         ...summaryContexts,
       ].sort((left, right) =>
         compareGroundingContexts(

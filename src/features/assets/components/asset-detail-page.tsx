@@ -17,65 +17,6 @@ const formatDate = (value: string | null): string => {
   });
 };
 
-interface AssetDescriptorView {
-  assetType?: string | null | undefined;
-  sourceKind?: string | null | undefined;
-  domain?: string | null | undefined;
-  documentClass?: string | null | undefined;
-  topics?: string[] | undefined;
-  collectionKey?: string | null | undefined;
-  capturedAt?: string | null | undefined;
-  sourceHost?: string | null | undefined;
-  language?: string | null | undefined;
-  mimeType?: string | null | undefined;
-  signals?: string[] | undefined;
-}
-
-const parseDescriptorJson = (
-  descriptorJson: string | null
-): AssetDescriptorView | null => {
-  if (!descriptorJson) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(descriptorJson);
-
-    if (!parsed || typeof parsed !== "object") {
-      return null;
-    }
-
-    return {
-      assetType: typeof parsed.assetType === "string" ? parsed.assetType : null,
-      sourceKind:
-        typeof parsed.sourceKind === "string" ? parsed.sourceKind : null,
-      domain: typeof parsed.domain === "string" ? parsed.domain : null,
-      documentClass:
-        typeof parsed.documentClass === "string" ? parsed.documentClass : null,
-      topics: Array.isArray(parsed.topics)
-        ? parsed.topics.filter(
-            (topic: unknown): topic is string => typeof topic === "string"
-          )
-        : [],
-      collectionKey:
-        typeof parsed.collectionKey === "string" ? parsed.collectionKey : null,
-      capturedAt:
-        typeof parsed.capturedAt === "string" ? parsed.capturedAt : null,
-      sourceHost:
-        typeof parsed.sourceHost === "string" ? parsed.sourceHost : null,
-      language: typeof parsed.language === "string" ? parsed.language : null,
-      mimeType: typeof parsed.mimeType === "string" ? parsed.mimeType : null,
-      signals: Array.isArray(parsed.signals)
-        ? parsed.signals.filter(
-            (signal: unknown): signal is string => typeof signal === "string"
-          )
-        : [],
-    };
-  } catch {
-    return null;
-  }
-};
-
 const formatLabel = (value: string): string => {
   return value
     .split("_")
@@ -136,7 +77,6 @@ export const AssetDetailPage = ({
   }
 
   const isReprocessable = canReprocessAsset(item.type);
-  const descriptor = parseDescriptorJson(item.descriptorJson);
 
   return (
     <PageShell
@@ -171,7 +111,6 @@ export const AssetDetailPage = ({
             <div class="mt-4 flex flex-wrap gap-2">
               {[
                 item.domain,
-                item.documentClass ?? null,
                 item.aiVisibility,
                 item.sourceKind,
                 item.sourceHost,
@@ -190,33 +129,23 @@ export const AssetDetailPage = ({
 
           <article class="rounded-lg border border-[#e8e8e7] bg-white p-6">
             <h2 class="mt-0 text-[22px]">Layered Index</h2>
-            <div class="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3 mb-[18px]">
+            <div class="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
               {[
                 {
                   label: "Domain",
                   value: item.domain,
                 },
                 {
-                  label: "Document Class",
-                  value:
-                    item.documentClass ?? descriptor?.documentClass ?? "N/A",
-                },
-                {
                   label: "Source Host",
-                  value: item.sourceHost ?? descriptor?.sourceHost ?? "N/A",
+                  value: item.sourceHost ?? "N/A",
                 },
                 {
                   label: "Collection",
-                  value:
-                    item.collectionKey ?? descriptor?.collectionKey ?? "N/A",
+                  value: item.collectionKey ?? "N/A",
                 },
                 {
                   label: "AI Visibility",
                   value: item.aiVisibility,
-                },
-                {
-                  label: "Sensitivity",
-                  value: item.sensitivity,
                 },
               ].map((entry) => (
                 <div
@@ -231,49 +160,6 @@ export const AssetDetailPage = ({
                   </div>
                 </div>
               ))}
-            </div>
-
-            <div class="grid gap-3.5">
-              <div>
-                <h3 class="m-0 mb-2.5 text-[16px]">Topics</h3>
-                {descriptor?.topics?.length ? (
-                  <div class="flex flex-wrap gap-2">
-                    {descriptor.topics.map((topic) => (
-                      <span
-                        key={topic}
-                        class="px-2 py-0.5 text-[12px] bg-[#e8f0fa] text-[#2383e2] rounded"
-                      >
-                        {formatLabel(topic)}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p class="m-0 text-[#787774]">No topic signals yet.</p>
-                )}
-              </div>
-
-              <div>
-                <h3 class="m-0 mb-2.5 text-[16px]">Facets</h3>
-                {item.facets?.length ? (
-                  <div class="grid gap-2.5">
-                    {item.facets.map((facet) => (
-                      <div
-                        key={facet.id}
-                        class="rounded-md bg-[#fafaf9] border border-[#ededec] px-4 py-3.5"
-                      >
-                        <div class="text-[#9b9a97] text-[12px] font-bold uppercase tracking-[0.08em]">
-                          {formatLabel(facet.facetKey)}
-                        </div>
-                        <div class="mt-1.5 text-[#37352f] font-bold">
-                          {facet.facetLabel}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p class="m-0 text-[#787774]">No facet records yet.</p>
-                )}
-              </div>
             </div>
           </article>
 
@@ -305,37 +191,6 @@ export const AssetDetailPage = ({
                   </article>
                 ))}
               </div>
-            )}
-          </article>
-
-          <article class="rounded-lg border border-[#e8e8e7] bg-white p-6">
-            <h2 class="mt-0 text-[22px]">Assertions</h2>
-            {item.assertions?.length ? (
-              <div class="grid gap-3">
-                {item.assertions.map((assertion) => (
-                  <article
-                    key={assertion.id}
-                    class="rounded-md bg-[#fafaf9] border border-[#ededec] p-4"
-                  >
-                    <div class="flex flex-wrap justify-between gap-3 mb-2">
-                      <span class="text-[#9b9a97] text-[12px] font-extrabold uppercase tracking-[0.08em]">
-                        {formatLabel(assertion.kind)}
-                      </span>
-                      <span class="text-[#787774] text-[13px]">
-                        Confidence:{" "}
-                        {typeof assertion.confidence === "number"
-                          ? assertion.confidence.toFixed(2)
-                          : "N/A"}
-                      </span>
-                    </div>
-                    <p class="m-0 text-[#787774] leading-[1.8]">
-                      {assertion.text}
-                    </p>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <p class="mb-0 text-[#787774]">No assertion records yet.</p>
             )}
           </article>
         </div>

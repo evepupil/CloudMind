@@ -5,20 +5,8 @@ import type { JobQueue } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
-import {
-  type TextAssetEnrichmentInput,
-  textAssetEnrichmentSchema,
-} from "@/features/ingest/model/enrichment";
 import { enqueueWorkflow, type WorkflowDefinition } from "./runtime";
 import { buildSharedIngestSteps } from "./shared-workflow-steps";
-
-const getTextAssetEnrichment = (
-  state: Record<string, unknown>
-): TextAssetEnrichmentInput | null => {
-  const parsed = textAssetEnrichmentSchema.safeParse(state.enrichment);
-
-  return parsed.success ? parsed.data : null;
-};
 
 export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => ({
   type: "note_ingest_v1",
@@ -36,15 +24,7 @@ export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => ({
       },
     },
     summarize: {
-      getEnrichment: getTextAssetEnrichment,
       generateTitle: true,
-    },
-    deriveDescriptor: {
-      createEnrichment: (context) =>
-        Promise.resolve(getTextAssetEnrichment(context.state)),
-    },
-    deriveFacets: {
-      getEnrichment: getTextAssetEnrichment,
     },
   }),
 });
@@ -60,7 +40,6 @@ export const runNoteIngestWorkflow = async (
   triggerType: "ingest" | "reprocess",
   options?: {
     force?: boolean;
-    enrichment?: TextAssetEnrichmentInput;
   }
 ): Promise<AssetDetail> => {
   return enqueueWorkflow(
@@ -75,11 +54,6 @@ export const runNoteIngestWorkflow = async (
       aiProvider,
       jobQueue,
     },
-    options,
-    options?.enrichment
-      ? {
-          enrichment: options.enrichment,
-        }
-      : undefined
+    options
   );
 };

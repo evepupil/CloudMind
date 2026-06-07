@@ -1,28 +1,19 @@
 import type {
   AssetAiVisibility,
-  AssetAssertionKind,
-  AssetAssertionMatch,
   AssetChunkMatch,
   AssetDetail,
-  AssetDocumentClass,
   AssetDomain,
-  AssetFacetKey,
-  AssetFacetTermQuery,
-  AssetFacetTermResult,
   AssetListQuery,
   AssetListResult,
   AssetSearchFilters,
-  AssetSensitivity,
   AssetSourceKind,
   AssetSummaryMatch,
 } from "@/features/assets/model/types";
-import type { TextAssetEnrichmentInput } from "@/features/ingest/model/enrichment";
 
 export interface CreateTextAssetInput {
   title?: string | undefined;
   content: string;
   sourceKind?: AssetSourceKind | undefined;
-  enrichment?: TextAssetEnrichmentInput | undefined;
 }
 
 export interface CreateUrlAssetInput {
@@ -56,12 +47,6 @@ export interface SearchAssetSummaryInput extends AssetSearchFilters {
   aiVisibility: AssetAiVisibility[];
 }
 
-export interface SearchAssetAssertionInput extends AssetSearchFilters {
-  query: string;
-  limit: number;
-  aiVisibility: AssetAiVisibility[];
-}
-
 export interface CompleteAssetProcessingInput {
   summary: string;
   contentText?: string | null;
@@ -79,22 +64,6 @@ export interface CreateAssetChunkInput {
   embeddingDim?: number | null | undefined;
 }
 
-export interface CreateAssetFacetInput {
-  facetKey: AssetFacetKey;
-  facetValue: string;
-  facetLabel: string;
-  sortOrder?: number | undefined;
-}
-
-export interface CreateAssetAssertionInput {
-  assertionIndex: number;
-  kind: AssetAssertionKind;
-  text: string;
-  sourceChunkIndex?: number | null | undefined;
-  sourceSpanJson?: string | null | undefined;
-  confidence?: number | null | undefined;
-}
-
 export interface UpdateAssetMetadataInput {
   title?: string | undefined;
   summary?: string | null | undefined;
@@ -104,14 +73,11 @@ export interface UpdateAssetMetadataInput {
 export interface UpdateAssetIndexingInput {
   sourceKind?: AssetSourceKind | null | undefined;
   domain?: AssetDomain | undefined;
-  sensitivity?: AssetSensitivity | undefined;
   aiVisibility?: AssetAiVisibility | undefined;
   retrievalPriority?: number | undefined;
-  documentClass?: AssetDocumentClass | null | undefined;
   sourceHost?: string | null | undefined;
   collectionKey?: string | null | undefined;
   capturedAt?: string | null | undefined;
-  descriptorJson?: string | null | undefined;
 }
 
 // 这里定义资产读取侧接口，供列表与详情等读模型复用。
@@ -133,12 +99,6 @@ export interface AssetSearchRepository {
   searchAssetSummaries(
     input: SearchAssetSummaryInput
   ): Promise<AssetSummaryMatch[]>;
-  searchAssetAssertions?(
-    input: SearchAssetAssertionInput
-  ): Promise<AssetAssertionMatch[]>;
-  getAssetsByFacetTerms?(
-    input: AssetFacetTermQuery
-  ): Promise<AssetFacetTermResult>;
 }
 
 // 这里保留采集与处理链路需要的写侧接口。
@@ -156,14 +116,6 @@ export interface AssetIngestRepository {
   replaceAssetChunks(
     assetId: string,
     chunks: CreateAssetChunkInput[]
-  ): Promise<void>;
-  replaceAssetFacets?(
-    assetId: string,
-    facets: CreateAssetFacetInput[]
-  ): Promise<void>;
-  replaceAssetAssertions?(
-    assetId: string,
-    assertions: CreateAssetAssertionInput[]
   ): Promise<void>;
   updateAssetIndexing(
     id: string,

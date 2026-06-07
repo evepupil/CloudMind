@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-import { textAssetEnrichmentSchema } from "@/features/ingest/model/enrichment";
-
 export const ingestTextPayloadSchema = z.object({
   title: z.string().trim().max(200, "Title is too long").optional(),
   content: z
@@ -9,7 +7,6 @@ export const ingestTextPayloadSchema = z.object({
     .trim()
     .min(1, "Content is required")
     .max(20000, "Content is too long"),
-  enrichment: textAssetEnrichmentSchema.optional(),
 });
 
 export const ingestUrlPayloadSchema = z.object({

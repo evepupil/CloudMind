@@ -23,44 +23,8 @@ export type AssetDomain =
   | "archive"
   | "general";
 
-// 这里区分敏感级别，供 AI 可见性与后续权限边界复用。
-export type AssetSensitivity = "public" | "internal" | "private" | "restricted";
-
 // 这里表达 AI 在读取资产时的可见范围。
 export type AssetAiVisibility = "allow" | "summary_only" | "deny";
-
-// 这里描述资产级文档形态，用于补足 domain 粒度。
-export type AssetDocumentClass =
-  | "reference_doc"
-  | "design_doc"
-  | "bug_note"
-  | "paper"
-  | "journal_entry"
-  | "meeting_note"
-  | "spec"
-  | "howto"
-  | "general_note";
-
-// 这里约束 facet 维度，避免切面无限扩张。
-export type AssetFacetKey =
-  | "domain"
-  | "document_class"
-  | "asset_type"
-  | "source_kind"
-  | "collection"
-  | "source_host"
-  | "year"
-  | "topic"
-  | "tag"
-  | "ai_visibility"
-  | "sensitivity";
-
-// 这里先限制 assertion 类型，保证第一版稳定可控。
-export type AssetAssertionKind =
-  | "fact"
-  | "decision"
-  | "constraint"
-  | "summary_point";
 
 // 这里统一异步任务状态，便于详情页和重试能力复用。
 export type IngestJobStatus = "queued" | "running" | "succeeded" | "failed";
@@ -82,7 +46,6 @@ export type AssetDeletedFilter = "exclude" | "only" | "include";
 export interface AssetSearchFilters {
   type?: AssetType | undefined;
   domain?: AssetDomain | undefined;
-  documentClass?: AssetDocumentClass | undefined;
   sourceKind?: AssetSourceKind | undefined;
   timezoneOffsetMinutes?: number | undefined;
   createdAtFrom?: string | undefined;
@@ -124,14 +87,11 @@ export interface AssetSummary {
   sourceKind: AssetSourceKind | null;
   status: AssetStatus;
   domain: AssetDomain;
-  sensitivity: AssetSensitivity;
   aiVisibility: AssetAiVisibility;
   retrievalPriority: number;
-  documentClass?: AssetDocumentClass | null | undefined;
   sourceHost?: string | null | undefined;
   collectionKey: string | null;
   capturedAt: string | null;
-  descriptorJson: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -173,57 +133,6 @@ export interface AssetSummaryMatch {
   summary: string;
 }
 
-export interface AssetFacetSummary {
-  id: string;
-  facetKey: AssetFacetKey;
-  facetValue: string;
-  facetLabel: string;
-  sortOrder: number;
-}
-
-export interface AssetAssertionSummary {
-  id: string;
-  assertionIndex: number;
-  kind: AssetAssertionKind;
-  text: string;
-  sourceChunkIndex: number | null;
-  sourceSpanJson: string | null;
-  confidence: number | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface AssetAssertionMatch extends AssetAssertionSummary {
-  asset: AssetSummary;
-}
-
-// term 反查：记录单个 term 命中信息。
-export interface FacetTermRef {
-  facetKey: "topic" | "tag" | "collection";
-  facetValue: string;
-}
-
-// term 反查：带分页的查询输入。
-export interface AssetFacetTermQuery {
-  terms: FacetTermRef[];
-  aiVisibility?: AssetAiVisibility[] | undefined;
-  filters?: AssetSearchFilters | undefined;
-  page?: number | undefined;
-  pageSize?: number | undefined;
-}
-
-// term 反查：单个资产的 term 命中结果。
-export interface AssetTermMatchItem {
-  asset: AssetSummary;
-  matchedTerms: FacetTermRef[];
-}
-
-// term 反查：完整查询结果。
-export interface AssetFacetTermResult {
-  items: AssetTermMatchItem[];
-  pagination: PaginationInfo;
-}
-
 // 这里定义详情页与详情 API 需要的完整资产结构。
 export interface AssetDetail extends AssetSummary {
   contentText: string | null;
@@ -237,6 +146,4 @@ export interface AssetDetail extends AssetSummary {
   source: AssetSourceInfo | null;
   jobs: IngestJobSummary[];
   chunks: AssetChunkSummary[];
-  facets?: AssetFacetSummary[] | undefined;
-  assertions?: AssetAssertionSummary[] | undefined;
 }

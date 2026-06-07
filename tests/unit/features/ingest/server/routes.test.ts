@@ -29,12 +29,10 @@ const createAssetDetail = (
     sourceKind: "manual",
     status: "ready",
     domain: "general",
-    sensitivity: "internal",
     aiVisibility: "allow",
     retrievalPriority: 0,
     collectionKey: "inbox:notes",
     capturedAt: "2026-03-19T00:00:00.000Z",
-    descriptorJson: null,
     createdAt: "2026-03-19T00:00:00.000Z",
     updatedAt: "2026-03-19T00:02:00.000Z",
     contentText: "CloudMind note body",
@@ -117,68 +115,6 @@ describe("ingest routes", () => {
     expect(ingestService.ingestTextAsset).toHaveBeenCalledWith(env, {
       title: "Research note",
       content: "CloudMind route test content",
-    });
-  });
-
-  it("POST /api/ingest/text forwards optional enrichment to the ingest service", async () => {
-    const app = createApp();
-    const item = createAssetDetail();
-
-    vi.mocked(ingestService.ingestTextAsset).mockResolvedValue(item);
-
-    const response = await app.request(
-      "/api/ingest/text",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          title: "Structured note",
-          content: "CloudMind should keep this text.",
-          enrichment: {
-            summary: "User provided summary",
-            domain: "engineering",
-            documentClass: "design_doc",
-            descriptor: {
-              topics: ["workflow", "mcp"],
-              collectionKey: "project/cloudmind",
-              signals: ["manual_seed"],
-            },
-            facets: [
-              {
-                facetKey: "topic",
-                facetValue: "workflow",
-                facetLabel: "workflow",
-              },
-            ],
-          },
-        }),
-      },
-      env
-    );
-
-    expect(response.status).toBe(201);
-    expect(ingestService.ingestTextAsset).toHaveBeenCalledWith(env, {
-      title: "Structured note",
-      content: "CloudMind should keep this text.",
-      enrichment: {
-        summary: "User provided summary",
-        domain: "engineering",
-        documentClass: "design_doc",
-        descriptor: {
-          topics: ["workflow", "mcp"],
-          collectionKey: "project/cloudmind",
-          signals: ["manual_seed"],
-        },
-        facets: [
-          {
-            facetKey: "topic",
-            facetValue: "workflow",
-            facetLabel: "workflow",
-          },
-        ],
-      },
     });
   });
 

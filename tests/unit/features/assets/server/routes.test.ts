@@ -38,12 +38,10 @@ const createAssetDetail = (
     sourceKind: "manual",
     status: "ready",
     domain: "general",
-    sensitivity: "internal",
     aiVisibility: "allow",
     retrievalPriority: 0,
     collectionKey: "inbox:notes",
     capturedAt: "2026-03-19T00:00:00.000Z",
-    descriptorJson: null,
     createdAt: "2026-03-19T00:00:00.000Z",
     updatedAt: "2026-03-19T00:02:00.000Z",
     contentText: "CloudMind note body",
@@ -94,30 +92,7 @@ describe("asset routes", () => {
     const item = createAssetDetail({
       id: "asset-route-detail",
       title: "Route detail asset",
-      documentClass: "design_doc",
       sourceHost: "developers.cloudflare.com",
-      facets: [
-        {
-          id: "facet-1",
-          facetKey: "domain",
-          facetValue: "engineering",
-          facetLabel: "engineering",
-          sortOrder: 0,
-        },
-      ],
-      assertions: [
-        {
-          id: "assertion-1",
-          assertionIndex: 0,
-          kind: "summary_point",
-          text: "CloudMind uses layered indexing to structure retrieval.",
-          sourceChunkIndex: null,
-          sourceSpanJson: null,
-          confidence: 0.92,
-          createdAt: "2026-03-19T00:01:00.000Z",
-          updatedAt: "2026-03-19T00:01:00.000Z",
-        },
-      ],
     });
     const env = { APP_NAME: "cloudmind-test" };
 
@@ -557,7 +532,7 @@ describe("asset routes", () => {
     });
 
     const response = await app.request(
-      "/api/assets?status=ready&type=url&domain=engineering&documentClass=howto&sourceKind=manual&aiVisibility=allow&timezoneOffsetMinutes=-480&createdAtFrom=2026-03-01&createdAtTo=2026-03-01&sourceHost=developers.cloudflare.com&topic=cloudmind&tag=mvp&collection=journal/2026/03&query=cloudflare&page=2&pageSize=10",
+      "/api/assets?status=ready&type=url&domain=engineering&sourceKind=manual&aiVisibility=allow&timezoneOffsetMinutes=-480&createdAtFrom=2026-03-01&createdAtTo=2026-03-01&sourceHost=developers.cloudflare.com&topic=cloudmind&tag=mvp&collection=journal/2026/03&query=cloudflare&page=2&pageSize=10",
       undefined,
       env
     );
@@ -581,7 +556,6 @@ describe("asset routes", () => {
       status: "ready",
       type: "url",
       domain: "engineering",
-      documentClass: "howto",
       sourceKind: "manual",
       aiVisibility: "allow",
       timezoneOffsetMinutes: -480,

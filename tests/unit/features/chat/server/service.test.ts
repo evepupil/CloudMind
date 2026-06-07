@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AIProvider } from "@/core/ai/ports";
 import type { AssetSearchRepository } from "@/core/assets/ports";
@@ -61,12 +61,10 @@ class InMemorySearchRepository implements AssetSearchRepository {
           sourceKind: "manual" as const,
           status: "ready" as const,
           domain: "engineering" as const,
-          sensitivity: "internal" as const,
           aiVisibility: index === 1 ? ("deny" as const) : ("allow" as const),
           retrievalPriority: 10,
           collectionKey: "inbox:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-19T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         },
@@ -100,12 +98,10 @@ class InMemorySearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "product",
-          sensitivity: "private",
           aiVisibility: "summary_only",
           retrievalPriority: 24,
           collectionKey: "inbox:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-19T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         },
@@ -161,12 +157,10 @@ class DeniedOnlySearchRepository implements AssetSearchRepository {
           sourceKind: "manual" as const,
           status: "ready" as const,
           domain: "personal" as const,
-          sensitivity: "restricted" as const,
           aiVisibility: "deny" as const,
           retrievalPriority: -30,
           collectionKey: "inbox:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-19T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         },
@@ -244,12 +238,10 @@ class SummaryOnlySearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "engineering",
-          sensitivity: "private",
           aiVisibility: "summary_only",
           retrievalPriority: 28,
           collectionKey: "inbox:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-19T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         },
@@ -310,12 +302,10 @@ class ContextRankingSearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "personal",
-          sensitivity: "private",
           aiVisibility: "allow",
           retrievalPriority: 0,
           collectionKey: "inbox:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-19T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         },
@@ -335,12 +325,10 @@ class ContextRankingSearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "engineering",
-          sensitivity: "internal",
           aiVisibility: "allow",
           retrievalPriority: 0,
           collectionKey: "inbox:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-19T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         },
@@ -401,12 +389,10 @@ class WeakContextSearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "engineering",
-          sensitivity: "internal",
           aiVisibility: "allow",
           retrievalPriority: 0,
           collectionKey: "inbox:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-19T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         },
@@ -468,12 +454,10 @@ class NoisySourceSearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "engineering",
-          sensitivity: "internal",
           aiVisibility: "allow",
           retrievalPriority: 16,
           collectionKey: "ops:runbooks",
           capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-19T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         },
@@ -506,12 +490,10 @@ class NoisySourceSearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "engineering",
-          sensitivity: "internal",
           aiVisibility: "summary_only",
           retrievalPriority: 16,
           collectionKey: "ops:runbooks",
           capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-19T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         },
@@ -527,12 +509,10 @@ class NoisySourceSearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "personal",
-          sensitivity: "private",
           aiVisibility: "summary_only",
           retrievalPriority: -20,
           collectionKey: "personal:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-19T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         },
@@ -577,12 +557,10 @@ class AssertionFailureSearchRepository implements AssetSearchRepository {
         sourceKind: "manual" as const,
         status: "ready" as const,
         domain: "engineering" as const,
-        sensitivity: "internal" as const,
         aiVisibility: "allow" as const,
         retrievalPriority: 14,
         collectionKey: "engineering:notes",
         capturedAt: "2026-03-19T00:00:00.000Z",
-        descriptorJson: null,
         createdAt: "2026-03-19T00:00:00.000Z",
         updatedAt: "2026-03-19T00:00:00.000Z",
       },
@@ -600,10 +578,6 @@ class AssertionFailureSearchRepository implements AssetSearchRepository {
 
   public async searchAssetSummaries(): Promise<AssetSummaryMatch[]> {
     return [];
-  }
-
-  public async searchAssetAssertions(): Promise<never> {
-    throw new Error("D1_ERROR: too many SQL variables");
   }
 }
 
@@ -643,12 +617,10 @@ class QueryRelevanceSearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "engineering",
-          sensitivity: "internal",
           aiVisibility: "allow",
           retrievalPriority: 10,
           collectionKey: "architecture:adrs",
           capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-19T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         },
@@ -669,12 +641,10 @@ class QueryRelevanceSearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "engineering",
-          sensitivity: "internal",
           aiVisibility: "allow",
           retrievalPriority: 8,
           collectionKey: "engineering:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-19T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         },
@@ -1165,50 +1135,6 @@ describe("chat service", () => {
       collections: ["ops:runbooks"],
       topics: [],
     });
-  });
-
-  it("askLibrary keeps answering when assertion lexical search fails", async () => {
-    const repository = new AssertionFailureSearchRepository();
-    const vectorStore = new InMemoryVectorStore([
-      {
-        id: "stable-1:0",
-        score: 0.93,
-      },
-    ]);
-    const aiProvider: AIProvider = {
-      createEmbeddings: vi.fn(async () => ({
-        embeddings: [[0.31, 0.22, 0.13]],
-      })),
-      generateText: vi.fn(async () => ({
-        text: "CloudMind splits metadata in D1 and semantic recall in Vectorize [S1].",
-      })),
-    };
-    const service = createChatService({
-      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
-      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
-      getAiProvider: getAiProviderMock.mockResolvedValue(aiProvider),
-    });
-
-    const result = await service.askLibrary(
-      { APP_NAME: "cloudmind-test" },
-      {
-        question:
-          "Can you explain the D1 and Vectorize tradeoff in CloudMind using a longer natural language query that would previously blow up lexical assertion search?",
-        topK: 2,
-      }
-    );
-
-    expect(result.answer).toContain("D1");
-    expect(result.sources).toEqual([
-      {
-        sourceType: "chunk",
-        assetId: "asset-stable-1",
-        chunkId: "stable-chunk-1",
-        title: "D1 Vectorize Tradeoffs",
-        sourceUrl: null,
-        snippet: "D1 and Vectorize tradeoff preview",
-      },
-    ]);
   });
 
   it("askLibrary retries when the model replies with insufficient-context text despite strong evidence", async () => {

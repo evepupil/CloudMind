@@ -175,9 +175,7 @@ export const AskPage = ({
                       <span class="px-2 py-0.5 text-[12px] bg-[#f1f1f0] text-[#787774] rounded">
                         {source.sourceType === "chunk"
                           ? `Chunk ${index + 1}`
-                          : source.sourceType === "term"
-                            ? `Term match ${index + 1}`
-                            : `Summary ${index + 1}`}
+                          : `Summary ${index + 1}`}
                       </span>
                     </div>
                     <p class="m-0 text-[14px] leading-relaxed text-[#787774]">

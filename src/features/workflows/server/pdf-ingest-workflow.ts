@@ -5,7 +5,6 @@ import type { JobQueue } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
-import { generateWorkflowDescriptorEnrichment } from "@/features/ingest/server/auto-enrichment";
 import { extractPdfText } from "@/features/ingest/server/pdf-extractor";
 import { enqueueWorkflow, type WorkflowDefinition } from "./runtime";
 import { buildSharedIngestSteps } from "./shared-workflow-steps";
@@ -78,27 +77,6 @@ export const createPdfIngestWorkflowDefinition = (): WorkflowDefinition => ({
           }
 
           return content;
-        },
-      },
-      deriveDescriptor: {
-        createEnrichment: async (context) => {
-          const content = context.state.normalizedContent;
-          const summary = context.state.summary;
-
-          if (typeof content !== "string") {
-            return undefined;
-          }
-
-          return generateWorkflowDescriptorEnrichment(
-            context.services.aiProvider,
-            context.services.vectorStore,
-            {
-              title: context.asset.title,
-              content,
-              summary: typeof summary === "string" ? summary : undefined,
-              sourceKind: context.asset.sourceKind ?? undefined,
-            }
-          );
         },
       },
       persistContent: {

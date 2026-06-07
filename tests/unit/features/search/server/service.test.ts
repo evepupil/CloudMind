@@ -23,7 +23,6 @@ class InMemorySearchRepository implements AssetSearchRepository {
     | {
         aiVisibility?: AssetAiVisibility[] | undefined;
         domain?: string | undefined;
-        documentClass?: string | undefined;
         sourceKind?: string | undefined;
         sourceHost?: string | undefined;
         topic?: string | undefined;
@@ -40,7 +39,6 @@ class InMemorySearchRepository implements AssetSearchRepository {
     limit: number;
     aiVisibility: AssetAiVisibility[];
     domain?: string | undefined;
-    documentClass?: string | undefined;
     sourceKind?: string | undefined;
     sourceHost?: string | undefined;
     topic?: string | undefined;
@@ -69,7 +67,6 @@ class InMemorySearchRepository implements AssetSearchRepository {
     query?: {
       aiVisibility?: AssetAiVisibility[] | undefined;
       domain?: string | undefined;
-      documentClass?: string | undefined;
       sourceKind?: string | undefined;
       sourceHost?: string | undefined;
       topic?: string | undefined;
@@ -96,13 +93,11 @@ class InMemorySearchRepository implements AssetSearchRepository {
           sourceKind: "manual" as const,
           status: "ready" as const,
           domain: "engineering" as const,
-          sensitivity: "internal" as const,
           aiVisibility:
             index === 1 ? ("summary_only" as const) : ("allow" as const),
           retrievalPriority: 10,
           collectionKey: "inbox:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-19T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         },
@@ -123,7 +118,6 @@ class InMemorySearchRepository implements AssetSearchRepository {
     limit: number;
     aiVisibility: AssetAiVisibility[];
     domain?: string | undefined;
-    documentClass?: string | undefined;
     sourceKind?: string | undefined;
     sourceHost?: string | undefined;
     topic?: string | undefined;
@@ -145,12 +139,10 @@ class InMemorySearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "product",
-          sensitivity: "private",
           aiVisibility: "summary_only",
           retrievalPriority: 25,
           collectionKey: "inbox:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-19T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         },
@@ -230,12 +222,10 @@ class MixedDomainSearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "personal",
-          sensitivity: "private",
           aiVisibility: "allow",
           retrievalPriority: 0,
           collectionKey: "inbox:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-19T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         },
@@ -255,12 +245,10 @@ class MixedDomainSearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "engineering",
-          sensitivity: "internal",
           aiVisibility: "allow",
           retrievalPriority: 0,
           collectionKey: "inbox:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-19T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         },
@@ -274,70 +262,6 @@ class MixedDomainSearchRepository implements AssetSearchRepository {
     aiVisibility: AssetAiVisibility[];
   }): Promise<AssetSummaryMatch[]> {
     return [];
-  }
-}
-
-class AssertionFailureSearchRepository implements AssetSearchRepository {
-  public async searchAssets(
-    _input: AssetSearchInput
-  ): Promise<AssetListResult> {
-    return {
-      items: [],
-      pagination: {
-        page: 1,
-        pageSize: 20,
-        total: 0,
-        totalPages: 0,
-      },
-    };
-  }
-
-  public async getChunkMatchesByVectorIds(
-    _vectorIds: string[],
-    _query?: {
-      aiVisibility?: AssetAiVisibility[] | undefined;
-    }
-  ): Promise<AssetChunkMatch[]> {
-    return [
-      {
-        id: "chunk-d1-1",
-        chunkIndex: 0,
-        textPreview: "D1 and Vectorize tradeoff preview",
-        contentText:
-          "D1 stores structured metadata while Vectorize handles semantic recall.",
-        vectorId: "asset-d1-1:0",
-        asset: {
-          id: "asset-d1-1",
-          type: "note",
-          title: "D1 Vectorize Tradeoffs",
-          summary: "Tradeoff note",
-          sourceUrl: null,
-          sourceKind: "manual",
-          status: "ready",
-          domain: "engineering",
-          sensitivity: "internal",
-          aiVisibility: "allow",
-          retrievalPriority: 12,
-          collectionKey: "engineering:notes",
-          capturedAt: "2026-03-19T00:00:00.000Z",
-          descriptorJson: null,
-          createdAt: "2026-03-19T00:00:00.000Z",
-          updatedAt: "2026-03-19T00:00:00.000Z",
-        },
-      },
-    ];
-  }
-
-  public async searchAssetSummaries(_input: {
-    query: string;
-    limit: number;
-    aiVisibility: AssetAiVisibility[];
-  }): Promise<AssetSummaryMatch[]> {
-    return [];
-  }
-
-  public async searchAssetAssertions(): Promise<never> {
-    throw new Error("D1_ERROR: too many SQL variables");
   }
 }
 
@@ -373,12 +297,10 @@ class DuplicateAssetSearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "engineering",
-          sensitivity: "internal",
           aiVisibility: "allow",
           retrievalPriority: 20,
           collectionKey: "engineering:notes",
           capturedAt: "2026-03-24T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-24T00:00:00.000Z",
           updatedAt: "2026-03-24T00:00:00.000Z",
         },
@@ -398,12 +320,10 @@ class DuplicateAssetSearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "engineering",
-          sensitivity: "internal",
           aiVisibility: "allow",
           retrievalPriority: 20,
           collectionKey: "engineering:notes",
           capturedAt: "2026-03-24T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-24T00:00:00.000Z",
           updatedAt: "2026-03-24T00:00:00.000Z",
         },
@@ -423,12 +343,10 @@ class DuplicateAssetSearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "engineering",
-          sensitivity: "internal",
           aiVisibility: "allow",
           retrievalPriority: 0,
           collectionKey: "engineering:notes",
           capturedAt: "2026-02-01T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-02-01T00:00:00.000Z",
           updatedAt: "2026-02-01T00:00:00.000Z",
         },
@@ -479,12 +397,10 @@ class HardFilterAwareSearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "personal",
-          sensitivity: "private",
           aiVisibility: "allow",
           retrievalPriority: 0,
           collectionKey: "personal:notes",
           capturedAt: "2026-03-24T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-24T00:00:00.000Z",
           updatedAt: "2026-03-24T00:00:00.000Z",
         },
@@ -504,12 +420,10 @@ class HardFilterAwareSearchRepository implements AssetSearchRepository {
           sourceKind: "manual",
           status: "ready",
           domain: "engineering",
-          sensitivity: "internal",
           aiVisibility: "allow",
           retrievalPriority: 0,
           collectionKey: "engineering:notes",
           capturedAt: "2026-03-24T00:00:00.000Z",
-          descriptorJson: null,
           createdAt: "2026-03-24T00:00:00.000Z",
           updatedAt: "2026-03-24T00:00:00.000Z",
         },
@@ -543,21 +457,9 @@ describe("search service", () => {
   const getAssetRepositoryMock = vi.fn();
   const getVectorStoreMock = vi.fn();
   const getAIProviderMock = vi.fn();
-  const searchAssetsByTermsMock = vi.fn();
-  const emptyTermResult = {
-    terms: [],
-    items: [],
-    pagination: {
-      page: 1,
-      pageSize: 20,
-      total: 0,
-      totalPages: 0,
-    },
-  };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    searchAssetsByTermsMock.mockResolvedValue(emptyTermResult);
   });
 
   it("searchAssets performs semantic retrieval and preserves match order", async () => {
@@ -572,7 +474,6 @@ describe("search service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
       getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
-      searchAssetsByTerms: searchAssetsByTermsMock,
     });
 
     const result = await service.searchAssets(
@@ -735,7 +636,6 @@ describe("search service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
       getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
-      searchAssetsByTerms: searchAssetsByTermsMock,
     });
 
     const result = await service.searchAssets(
@@ -764,13 +664,7 @@ describe("search service", () => {
       result.items.every((item) =>
         item.kind === "chunk"
           ? item.chunk.asset.aiVisibility === "allow"
-          : item.kind === "assertion"
-            ? ["allow", "summary_only"].includes(
-                item.assertion.asset.aiVisibility
-              )
-            : item.kind === "term"
-              ? ["allow", "summary_only"].includes(item.asset.aiVisibility)
-              : item.asset.aiVisibility === "summary_only"
+          : item.asset.aiVisibility === "summary_only"
       )
     ).toBe(true);
   });
@@ -789,7 +683,6 @@ describe("search service", () => {
           embeddings: [],
         })),
       } satisfies AIProvider),
-      searchAssetsByTerms: searchAssetsByTermsMock,
     });
 
     const result = await service.searchAssets(
@@ -882,7 +775,6 @@ describe("search service", () => {
         ])
       ),
       getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
-      searchAssetsByTerms: searchAssetsByTermsMock,
     });
 
     const result = await service.searchAssetsForContext(
@@ -930,7 +822,6 @@ describe("search service", () => {
         ])
       ),
       getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
-      searchAssetsByTerms: searchAssetsByTermsMock,
     });
 
     const result = await service.searchAssetsForContext(
@@ -954,13 +845,7 @@ describe("search service", () => {
     expect(result.items).toHaveLength(2);
     expect(
       result.items.map((item) =>
-        item.kind === "chunk"
-          ? item.chunk.asset.domain
-          : item.kind === "assertion"
-            ? item.assertion.asset.domain
-            : item.kind === "term"
-              ? item.asset.domain
-              : item.asset.domain
+        item.kind === "chunk" ? item.chunk.asset.domain : item.asset.domain
       )
     ).toEqual(["engineering", "personal"]);
     expect(result.resultScope).toBe("fallback_expanded");
@@ -987,7 +872,6 @@ describe("search service", () => {
         ])
       ),
       getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
-      searchAssetsByTerms: searchAssetsByTermsMock,
     });
 
     const result = await service.searchAssets(
@@ -1037,199 +921,6 @@ describe("search service", () => {
     ).toBe(true);
   });
 
-  it("searchAssets keeps working when assertion lexical search fails", async () => {
-    const repository = new AssertionFailureSearchRepository();
-    const service = createSearchService({
-      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
-      getVectorStore: getVectorStoreMock.mockResolvedValue(
-        new FixedVectorStore([
-          {
-            id: "asset-d1-1:0",
-            score: 0.93,
-          },
-        ])
-      ),
-      getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
-      searchAssetsByTerms: searchAssetsByTermsMock,
-    });
-
-    const result = await service.searchAssets(
-      { APP_NAME: "cloudmind-test" },
-      {
-        query:
-          "Can you explain the D1 and Vectorize tradeoff in CloudMind using a long natural language query that used to trigger lexical assertion SQL errors?",
-        page: 1,
-        pageSize: 5,
-      }
-    );
-
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0]?.kind).toBe("chunk");
-    expect(
-      result.items[0]?.kind === "chunk" ? result.items[0].chunk.asset.id : null
-    ).toBe("asset-d1-1");
-  });
-
-  it("searchAssets fuses metadata term hits into the main result stream", async () => {
-    const repository = new InMemorySearchRepository();
-    const vectorStore = new FixedVectorStore([]);
-    const service = createSearchService({
-      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
-      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
-      getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
-      searchAssetsByTerms: searchAssetsByTermsMock.mockResolvedValue({
-        terms: [
-          {
-            kind: "topic",
-            term: "cloudmind",
-            normalized: "cloudmind",
-            score: 0.92,
-          },
-        ],
-        items: [
-          {
-            asset: {
-              id: "asset-term-1",
-              type: "note",
-              title: "CloudMind Metadata Plan",
-              summary: "Plan for metadata-term retrieval fusion.",
-              sourceUrl: null,
-              sourceKind: "manual",
-              status: "ready",
-              domain: "engineering",
-              sensitivity: "internal",
-              aiVisibility: "allow",
-              retrievalPriority: 15,
-              collectionKey: "engineering:notes",
-              capturedAt: "2026-03-24T00:00:00.000Z",
-              descriptorJson: null,
-              createdAt: "2026-03-24T00:00:00.000Z",
-              updatedAt: "2026-03-24T00:00:00.000Z",
-            },
-            matchedTerms: [
-              {
-                facetKey: "topic",
-                facetValue: "cloudmind",
-              },
-            ],
-          },
-        ],
-        pagination: {
-          page: 1,
-          pageSize: 5,
-          total: 1,
-          totalPages: 1,
-        },
-      }),
-    });
-
-    const result = await service.searchAssets(
-      { APP_NAME: "cloudmind-test" },
-      {
-        query: "cloudmind metadata",
-        page: 1,
-        pageSize: 5,
-      }
-    );
-
-    expect(result.items.some((item) => item.kind === "term")).toBe(true);
-    expect(
-      result.groupedEvidence.some((group) => group.asset.id === "asset-term-1")
-    ).toBe(true);
-    expect(result.evidence.items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: "term:asset-term-1",
-          layer: "term",
-          matchedTerms: [
-            {
-              facetKey: "topic",
-              facetValue: "cloudmind",
-            },
-          ],
-          matchReasons: expect.arrayContaining([
-            expect.objectContaining({
-              code: "term_match",
-            }),
-          ]),
-        }),
-      ])
-    );
-  });
-
-  it("searchAssets keeps chunk evidence primary when a term hit recalls the same asset", async () => {
-    const repository = new DuplicateAssetSearchRepository();
-    const service = createSearchService({
-      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
-      getVectorStore: getVectorStoreMock.mockResolvedValue(
-        new FixedVectorStore([
-          {
-            id: "asset-a:0",
-            score: 0.94,
-          },
-        ])
-      ),
-      getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
-      searchAssetsByTerms: searchAssetsByTermsMock.mockResolvedValue({
-        terms: [
-          {
-            kind: "topic",
-            term: "asset-a",
-            normalized: "asset-a",
-            score: 0.95,
-          },
-        ],
-        items: [
-          {
-            asset: {
-              id: "asset-a",
-              type: "note",
-              title: "Asset A",
-              summary: "Primary asset summary",
-              sourceUrl: null,
-              sourceKind: "manual",
-              status: "ready",
-              domain: "engineering",
-              sensitivity: "internal",
-              aiVisibility: "allow",
-              retrievalPriority: 20,
-              collectionKey: "engineering:notes",
-              capturedAt: "2026-03-24T00:00:00.000Z",
-              descriptorJson: null,
-              createdAt: "2026-03-24T00:00:00.000Z",
-              updatedAt: "2026-03-24T00:00:00.000Z",
-            },
-            matchedTerms: [
-              {
-                facetKey: "topic",
-                facetValue: "asset-a",
-              },
-            ],
-          },
-        ],
-        pagination: {
-          page: 1,
-          pageSize: 5,
-          total: 1,
-          totalPages: 1,
-        },
-      }),
-    });
-
-    const result = await service.searchAssets(
-      { APP_NAME: "cloudmind-test" },
-      {
-        query: "asset a retrieval",
-        page: 1,
-        pageSize: 5,
-      }
-    );
-
-    expect(result.groupedEvidence[0]?.asset.id).toBe("asset-a");
-    expect(result.groupedEvidence[0]?.matchedLayers).toEqual(["chunk", "term"]);
-    expect(result.groupedEvidence[0]?.primaryEvidence.layer).toBe("chunk");
-  });
-
   it("searchAssets issues a single Vectorize query with a native metadata filter (no over-fetch ladder)", async () => {
     const repository = new HardFilterAwareSearchRepository();
     const searchInputs: VectorSearchInput[] = [];
@@ -1246,7 +937,6 @@ describe("search service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
       getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
-      searchAssetsByTerms: searchAssetsByTermsMock,
     });
 
     const result = await service.searchAssets(
@@ -1277,14 +967,13 @@ describe("search service", () => {
     ).toBe("engineering");
   });
 
-  it("searchAssets forwards hard filters to chunk, summary, and term retrieval", async () => {
+  it("searchAssets forwards hard filters to chunk and summary retrieval", async () => {
     const repository = new InMemorySearchRepository();
     const vectorStore = new InMemoryVectorStore();
     const service = createSearchService({
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
       getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
-      searchAssetsByTerms: searchAssetsByTermsMock,
     });
 
     await service.searchAssets(
@@ -1294,7 +983,6 @@ describe("search service", () => {
         page: 1,
         pageSize: 5,
         domain: "engineering",
-        documentClass: "design_doc",
         sourceKind: "manual",
         sourceHost: "developers.cloudflare.com",
         topic: "cloudmind",
@@ -1309,7 +997,6 @@ describe("search service", () => {
       expect.objectContaining({
         query: "cloudmind filters",
         domain: "engineering",
-        documentClass: "design_doc",
         sourceKind: "manual",
         sourceHost: "developers.cloudflare.com",
         topic: "cloudmind",
@@ -1322,7 +1009,6 @@ describe("search service", () => {
     expect(repository.chunkMatchQueries[0]).toEqual({
       aiVisibility: ["allow"],
       domain: "engineering",
-      documentClass: "design_doc",
       sourceKind: "manual",
       sourceHost: "developers.cloudflare.com",
       topic: "cloudmind",
@@ -1331,30 +1017,9 @@ describe("search service", () => {
       createdAtFrom: "2026-01-01T00:00:00.000Z",
       createdAtTo: "2026-12-31T23:59:59.999Z",
     });
-    expect(searchAssetsByTermsMock).toHaveBeenCalledWith(
-      { APP_NAME: "cloudmind-test" },
-      {
-        query: "cloudmind filters",
-        filters: {
-          domain: "engineering",
-          documentClass: "design_doc",
-          sourceKind: "manual",
-          sourceHost: "developers.cloudflare.com",
-          topic: "cloudmind",
-          tag: "mvp",
-          collection: "project/cloudmind",
-          createdAtFrom: "2026-01-01T00:00:00.000Z",
-          createdAtTo: "2026-12-31T23:59:59.999Z",
-          type: undefined,
-        },
-        topK: 5,
-        page: 1,
-        pageSize: 5,
-      }
-    );
   });
 
-  it("ranks a semantic chunk above a keyword-grazing assertion (RRF, not raw-score sort)", async () => {
+  it("ranks a semantic chunk above a lexical chunk via RRF (not raw-score sort)", async () => {
     const makeAsset = (id: string) => ({
       id,
       type: "note" as const,
@@ -1364,12 +1029,10 @@ describe("search service", () => {
       sourceKind: "manual" as const,
       status: "ready" as const,
       domain: "engineering" as const,
-      sensitivity: "internal" as const,
       aiVisibility: "allow" as const,
       retrievalPriority: 0,
       collectionKey: "engineering:notes",
       capturedAt: "2026-03-24T00:00:00.000Z",
-      descriptorJson: null,
       createdAt: "2026-03-24T00:00:00.000Z",
       updatedAt: "2026-03-24T00:00:00.000Z",
     });
@@ -1395,24 +1058,8 @@ describe("search service", () => {
       async searchAssetSummaries() {
         return [];
       },
-      async searchAssetAssertions() {
-        return [
-          {
-            id: "assert-b",
-            assertionIndex: 0,
-            kind: "fact",
-            text: "vectorize metadata filtering",
-            sourceChunkIndex: null,
-            sourceSpanJson: null,
-            confidence: 0.9,
-            createdAt: "2026-03-24T00:00:00.000Z",
-            updatedAt: "2026-03-24T00:00:00.000Z",
-            asset: makeAsset("asset-b"),
-          },
-        ];
-      },
     };
-    // 中等相关度的 chunk（cosine 0.55）：旧的"原始分硬排序"会被 assertion 的高 floor 分压过。
+    // 中等相关度的 chunk（cosine 0.55）：旧的"原始分硬排序"会被高 floor 分压过。
     const vectorStore: VectorStore = {
       upsert: vi.fn(async () => undefined),
       deleteByIds: vi.fn(async () => undefined),
@@ -1422,7 +1069,6 @@ describe("search service", () => {
       getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
       getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
       getAIProvider: getAIProviderMock.mockResolvedValue(embeddingProvider),
-      searchAssetsByTerms: searchAssetsByTermsMock,
     });
 
     const result = await service.searchAssets(
@@ -1430,12 +1076,8 @@ describe("search service", () => {
       { query: "vectorize metadata filtering", page: 1, pageSize: 5 }
     );
 
-    // RRF：rank-1 的语义 chunk（权重 1.0）胜过 rank-1 的蹭关键词 assertion（权重 0.92）。
+    // RRF：rank-1 的语义 chunk（权重 1.0）作为该资产卡片的主证据。
     expect(result.groupedEvidence[0]?.asset.id).toBe("asset-a");
     expect(result.groupedEvidence[0]?.primaryEvidence.layer).toBe("chunk");
-    const assertionRank = result.groupedEvidence.findIndex(
-      (group) => group.asset.id === "asset-b"
-    );
-    expect(assertionRank).toBeGreaterThan(0);
   });
 });

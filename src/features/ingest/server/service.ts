@@ -13,10 +13,6 @@ import type { WebPageFetcher } from "@/core/web/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
 import type { AppBindings } from "@/env";
 import type { AssetDetail } from "@/features/assets/model/types";
-import {
-  type TextAssetEnrichmentInput,
-  textAssetEnrichmentSchema,
-} from "@/features/ingest/model/enrichment";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getBlobStoreFromBindings } from "@/platform/blob/r2/get-blob-store";
 import { getAssetIngestRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
@@ -24,11 +20,6 @@ import { getWorkflowRepositoryFromBindings } from "@/platform/db/d1/repositories
 import { getJobQueueFromBindings } from "@/platform/queue/cloudflare/get-job-queue";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 import { getWebPageFetcherFromBindings } from "@/platform/web/jina/get-web-page-fetcher";
-import { inferAIProviderName } from "./ai-observability";
-import {
-  generateAutoTextEnrichment,
-  standardizeProvidedTextEnrichment,
-} from "./auto-enrichment";
 import {
   processPdfAsset,
   processTextAsset,
@@ -82,7 +73,6 @@ interface IngestServiceDependencies {
     assetId: string,
     options?: {
       force?: boolean;
-      enrichment?: TextAssetEnrichmentInput;
     }
   ) => Promise<AssetDetail>;
   processUrlAsset: (
@@ -111,11 +101,7 @@ interface IngestServiceDependencies {
     vectorStore: VectorStore,
     aiProvider: AIProvider,
     jobQueue: JobQueue,
-    assetId: string,
-    options?: {
-      force?: boolean;
-      enrichment?: TextAssetEnrichmentInput;
-    }
+    assetId: string
   ) => Promise<AssetDetail>;
   getProcessUrlAssetForced: (
     repository: AssetIngestRepository,
@@ -156,8 +142,7 @@ const defaultDependencies: IngestServiceDependencies = {
     vectorStore,
     aiProvider,
     jobQueue,
-    assetId,
-    options
+    assetId
   ) =>
     processTextAsset(
       repository,
@@ -167,14 +152,7 @@ const defaultDependencies: IngestServiceDependencies = {
       aiProvider,
       jobQueue,
       assetId,
-      options?.enrichment
-        ? {
-            force: true,
-            enrichment: options.enrichment,
-          }
-        : {
-            force: true,
-          }
+      { force: true }
     ),
   getProcessUrlAssetForced: (
     repository,
@@ -221,48 +199,6 @@ const defaultDependencies: IngestServiceDependencies = {
 };
 const ingestLogger = createLogger("ingest");
 
-const parsePersistedTextEnrichment = (
-  stateJson: string | null
-): TextAssetEnrichmentInput | undefined => {
-  if (!stateJson) {
-    return undefined;
-  }
-
-  try {
-    const parsedState = JSON.parse(stateJson) as {
-      enrichment?: unknown;
-    };
-    const parsedEnrichment = textAssetEnrichmentSchema.safeParse(
-      parsedState.enrichment
-    );
-
-    if (!parsedEnrichment.success) {
-      return undefined;
-    }
-
-    return parsedEnrichment.data;
-  } catch {
-    return undefined;
-  }
-};
-
-const getLatestPersistedTextEnrichment = async (
-  workflowRepository: WorkflowRepository,
-  assetId: string
-): Promise<TextAssetEnrichmentInput | undefined> => {
-  const runs = await workflowRepository.listWorkflowRunsByAssetId(assetId);
-
-  for (const run of runs) {
-    const enrichment = parsePersistedTextEnrichment(run.stateJson);
-
-    if (enrichment) {
-      return enrichment;
-    }
-  }
-
-  return undefined;
-};
-
 const reprocessExistingAsset = async (
   dependencies: IngestServiceDependencies,
   bindings: AppBindings | undefined,
@@ -280,26 +216,6 @@ const reprocessExistingAsset = async (
           dependencies.getAIProvider(bindings),
           dependencies.getJobQueue(bindings),
         ]);
-
-      const enrichment = await getLatestPersistedTextEnrichment(
-        workflowRepository,
-        asset.id
-      );
-
-      if (enrichment) {
-        return dependencies.getProcessTextAssetForced(
-          repository,
-          workflowRepository,
-          blobStore,
-          vectorStore,
-          aiProvider,
-          jobQueue,
-          asset.id,
-          {
-            enrichment,
-          }
-        );
-      }
 
       return dependencies.getProcessTextAssetForced(
         repository,
@@ -378,90 +294,16 @@ export const createIngestService = (
           await dependencies.getWorkflowRepository(bindings);
         const jobQueue = await dependencies.getJobQueue(bindings);
         const aiProvider = await dependencies.getAIProvider(bindings);
-        let resolvedEnrichment = input.enrichment;
-
-        if (resolvedEnrichment) {
-          resolvedEnrichment = await standardizeProvidedTextEnrichment(
-            aiProvider,
-            vectorStore,
-            {
-              title: input.title,
-              content: input.content,
-              sourceKind: input.sourceKind,
-              enrichment: resolvedEnrichment,
-            }
-          ).catch((error) => {
-            ingestLogger.warn(
-              "provided_enrichment_standardization_skipped",
-              {
-                aiProvider: inferAIProviderName(aiProvider),
-                sourceKind: input.sourceKind ?? "manual",
-                fallbackStrategy: "keep_original",
-              },
-              { error }
-            );
-
-            return resolvedEnrichment;
-          });
-        } else {
-          resolvedEnrichment = await generateAutoTextEnrichment(
-            aiProvider,
-            vectorStore,
-            {
-              title: input.title,
-              content: input.content,
-            }
-          ).catch(() => undefined);
-
-          if (!resolvedEnrichment) {
-            try {
-              const fallbackAiProvider = getAIProviderFromBindings(bindings);
-
-              if (fallbackAiProvider !== aiProvider) {
-                resolvedEnrichment = await generateAutoTextEnrichment(
-                  fallbackAiProvider,
-                  vectorStore,
-                  {
-                    title: input.title,
-                    content: input.content,
-                  }
-                ).catch(() => undefined);
-              }
-            } catch (error) {
-              ingestLogger.warn("Fallback AI enrichment also failed", {
-                assetTitle: input.title,
-                error: String(error),
-              });
-            }
-          }
-        }
-        const createdAsset = await repository.createTextAsset({
-          ...input,
-          enrichment: resolvedEnrichment,
-        });
-
-        const result = resolvedEnrichment
-          ? await dependencies.processTextAsset(
-              repository,
-              workflowRepository,
-              blobStore,
-              vectorStore,
-              aiProvider,
-              jobQueue,
-              createdAsset.id,
-              {
-                enrichment: resolvedEnrichment,
-              }
-            )
-          : await dependencies.processTextAsset(
-              repository,
-              workflowRepository,
-              blobStore,
-              vectorStore,
-              aiProvider,
-              jobQueue,
-              createdAsset.id
-            );
+        const createdAsset = await repository.createTextAsset(input);
+        const result = await dependencies.processTextAsset(
+          repository,
+          workflowRepository,
+          blobStore,
+          vectorStore,
+          aiProvider,
+          jobQueue,
+          createdAsset.id
+        );
 
         ingestLogger.info("ingest_completed", {
           durationMs: Date.now() - startedAt,
@@ -469,11 +311,6 @@ export const createIngestService = (
           assetType: result.type,
           sourceKind: result.sourceKind,
           status: result.status,
-          enrichmentSource: input.enrichment
-            ? "client"
-            : resolvedEnrichment
-              ? "auto"
-              : "none",
         });
 
         return result;
@@ -484,7 +321,6 @@ export const createIngestService = (
             durationMs: Date.now() - startedAt,
             assetType: "text",
             sourceKind: input.sourceKind,
-            hasClientEnrichment: Boolean(input.enrichment),
           },
           { error }
         );

@@ -16,7 +16,6 @@ import type { SearchResult } from "@/features/search/model/types";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
-import { scoreAssetAssertionMatch } from "./assertion-scoring";
 import {
   applyContextPolicyScore,
   getContextResultScope,
@@ -24,21 +23,16 @@ import {
 } from "./context-policy";
 import {
   annotateEvidenceMatchReasons,
-  buildAssertionEvidenceItem,
   buildChunkEvidenceItem,
   buildEvidencePacket,
   buildGroupedEvidence,
   buildSummaryEvidenceItem,
-  buildTermEvidenceItem,
   flattenGroupedEvidence,
   toSearchResultItem,
 } from "./evidence";
 import { FUSION_CHANNEL_WEIGHTS, normalizeChannelScores } from "./fusion";
 import { rerankEvidence } from "./rerank";
 import { scoreAssetSummaryMatch } from "./summary-scoring";
-import type { SearchAssetsByTermsResult } from "./term-asset-service";
-import { searchAssetsByTerms } from "./term-asset-service";
-import { scoreAssetTermMatch } from "./term-scoring";
 
 const SEARCHABLE_AI_VISIBILITY = ["allow"] as const;
 const SUMMARY_ONLY_AI_VISIBILITY = ["summary_only"] as const;
@@ -48,7 +42,6 @@ const getSearchFilters = (input: AssetSearchFilters): AssetSearchFilters => {
   return {
     type: input.type,
     domain: input.domain,
-    documentClass: input.documentClass,
     sourceKind: input.sourceKind,
     createdAtFrom: input.createdAtFrom,
     createdAtTo: input.createdAtTo,
@@ -76,23 +69,12 @@ interface SearchServiceDependencies {
   getAIProvider: (
     bindings: AppBindings | undefined
   ) => AIProvider | Promise<AIProvider>;
-  searchAssetsByTerms: (
-    bindings: AppBindings | undefined,
-    input: {
-      query: string;
-      filters?: AssetSearchFilters | undefined;
-      topK?: number | undefined;
-      page?: number | undefined;
-      pageSize?: number | undefined;
-    }
-  ) => Promise<SearchAssetsByTermsResult>;
 }
 
 const defaultDependencies: SearchServiceDependencies = {
   getAssetRepository: getAssetSearchRepositoryFromBindings,
   getVectorStore: getVectorStoreFromBindings,
   getAIProvider: getAIProviderFromBindings,
-  searchAssetsByTerms,
 };
 
 const getSummaryMatches = async (
@@ -114,36 +96,6 @@ const getSummaryMatches = async (
     });
   } catch {
     // 这里对 lexical summary 检索做兜底，避免边缘 SQL 失败拖垮主链路。
-    return [];
-  }
-};
-
-const getAssertionMatches = async (
-  repository: AssetSearchRepository,
-  input: AssetSearchInput,
-  limit: number,
-  contextPolicy?: ContextRetrievalPolicy
-) => {
-  if (!repository.searchAssetAssertions) {
-    return [];
-  }
-
-  if (contextPolicy && !contextPolicy.includeSummaryOnly) {
-    return [];
-  }
-
-  try {
-    return await repository.searchAssetAssertions({
-      query: input.query,
-      limit,
-      aiVisibility: [
-        ...SUMMARY_ONLY_AI_VISIBILITY,
-        ...SEARCHABLE_AI_VISIBILITY,
-      ],
-      ...getSearchFilters(input),
-    });
-  } catch {
-    // 这里对 lexical assertion 检索做兜底，避免长 query 时报错。
     return [];
   }
 };
@@ -184,37 +136,6 @@ const withOptionalResultScope = <T extends SearchResult>(
   };
 };
 
-const buildTermEvidence = (
-  termMatches: SearchAssetsByTermsResult,
-  contextPolicy?: ContextRetrievalPolicy
-): EvidenceItem[] => {
-  return termMatches.items
-    .filter((item) =>
-      contextPolicy?.includeSummaryOnly === false
-        ? item.asset.aiVisibility === "allow"
-        : true
-    )
-    .map((item) =>
-      buildTermEvidenceItem(
-        item,
-        applyContextPolicyScore(
-          scoreAssetTermMatch(termMatches.terms, item),
-          item.asset,
-          contextPolicy
-        )
-      )
-    )
-    .map((item) =>
-      annotateEvidenceMatchReasons(item, {
-        profileBoosted: Boolean(
-          contextPolicy?.boostedDomains.includes(item.asset.domain)
-        ),
-      })
-    )
-    .filter((item) => matchesContextPolicyAsset(item.asset, contextPolicy))
-    .sort((left, right) => right.score - left.score);
-};
-
 const buildLexicalChunkEvidence = (
   lexicalChunkMatches: AssetChunkMatch[],
   contextPolicy?: ContextRetrievalPolicy
@@ -247,31 +168,9 @@ const buildLexicalChunkEvidence = (
 const buildLexicalEvidence = (
   query: string,
   repositoryMatches: Awaited<ReturnType<typeof getSummaryMatches>>,
-  assertionMatches: Awaited<ReturnType<typeof getAssertionMatches>>,
-  termMatches: SearchAssetsByTermsResult,
   lexicalChunkMatches: AssetChunkMatch[],
   contextPolicy?: ContextRetrievalPolicy
 ): EvidenceItem[] => {
-  const orderedAssertionEvidence = assertionMatches
-    .map((match) =>
-      buildAssertionEvidenceItem(
-        match,
-        applyContextPolicyScore(
-          scoreAssetAssertionMatch(query, match),
-          match.asset,
-          contextPolicy
-        )
-      )
-    )
-    .map((item) =>
-      annotateEvidenceMatchReasons(item, {
-        profileBoosted: Boolean(
-          contextPolicy?.boostedDomains.includes(item.asset.domain)
-        ),
-      })
-    )
-    .filter((item) => matchesContextPolicyAsset(item.asset, contextPolicy))
-    .sort((left, right) => right.score - left.score);
   const orderedSummaryEvidence = repositoryMatches
     .map((match) =>
       buildSummaryEvidenceItem(
@@ -299,14 +198,6 @@ const buildLexicalEvidence = (
       FUSION_CHANNEL_WEIGHTS.lexicalChunk
     ),
     ...normalizeChannelScores(
-      orderedAssertionEvidence,
-      FUSION_CHANNEL_WEIGHTS.assertion
-    ),
-    ...normalizeChannelScores(
-      buildTermEvidence(termMatches, contextPolicy),
-      FUSION_CHANNEL_WEIGHTS.term
-    ),
-    ...normalizeChannelScores(
       orderedSummaryEvidence,
       FUSION_CHANNEL_WEIGHTS.summary
     ),
@@ -320,8 +211,6 @@ const buildSemanticEvidence = (
     ReturnType<AssetSearchRepository["getChunkMatchesByVectorIds"]>
   >,
   summaryMatches: Awaited<ReturnType<typeof getSummaryMatches>>,
-  assertionMatches: Awaited<ReturnType<typeof getAssertionMatches>>,
-  termMatches: SearchAssetsByTermsResult,
   lexicalChunkMatches: AssetChunkMatch[],
   contextPolicy?: ContextRetrievalPolicy
 ): EvidenceItem[] => {
@@ -366,8 +255,6 @@ const buildSemanticEvidence = (
     ...buildLexicalEvidence(
       query,
       summaryMatches,
-      assertionMatches,
-      termMatches,
       lexicalChunkMatches,
       contextPolicy
     ),
@@ -390,9 +277,6 @@ const buildSemanticVectorFilter = (
   }
   if (applied.domain) {
     filter.domain = { $eq: applied.domain };
-  }
-  if (applied.documentClass) {
-    filter.documentClass = { $eq: applied.documentClass };
   }
   if (applied.sourceKind) {
     filter.sourceKind = { $eq: applied.sourceKind };
@@ -498,21 +382,8 @@ export const createSearchService = (
         purpose: "query",
       });
       const queryVector = embeddingResult.embeddings[0];
-      const [
-        summaryMatches,
-        assertionMatches,
-        termMatches,
-        lexicalChunkMatches,
-      ] = await Promise.all([
+      const [summaryMatches, lexicalChunkMatches] = await Promise.all([
         getSummaryMatches(repository, input, topK, contextPolicy),
-        getAssertionMatches(repository, input, topK, contextPolicy),
-        dependencies.searchAssetsByTerms(bindings, {
-          query,
-          filters: getSearchFilters(input),
-          topK,
-          page: 1,
-          pageSize: topK,
-        }),
         getLexicalChunkMatches(repository, input, topK),
       ]);
 
@@ -522,8 +393,6 @@ export const createSearchService = (
         orderedEvidence = buildLexicalEvidence(
           query,
           summaryMatches,
-          assertionMatches,
-          termMatches,
           lexicalChunkMatches,
           contextPolicy
         );
@@ -541,8 +410,6 @@ export const createSearchService = (
           vectorMatches,
           chunkMatches,
           summaryMatches,
-          assertionMatches,
-          termMatches,
           lexicalChunkMatches,
           contextPolicy
         );

@@ -2,7 +2,6 @@ import { z } from "zod";
 import type { CreateAssetChunkInput } from "@/core/assets/ports";
 import { createLogger } from "@/core/logging/logger";
 import type { AssetDetail } from "@/features/assets/model/types";
-import type { TextAssetEnrichmentInput } from "@/features/ingest/model/enrichment";
 import {
   type ChunkEmbeddingPlanItem,
   cleanContentPreservingStructure,
@@ -14,83 +13,15 @@ import {
   persistProcessedContent,
   planChunkEmbeddings,
 } from "@/features/ingest/server/content-processing";
-import { upsertMetadataTermVectors } from "@/features/ingest/server/metadata-terms";
 import { extractGraphFromText } from "@/features/memory/server/graph-extraction";
 import { writeGraphToMemory } from "@/features/memory/server/memory-write";
-import { deriveAssertionsWithAIFallback } from "./assertion-extraction";
-import {
-  type AssetAccessPolicy,
-  type AssetDescriptor,
-  deriveAccessPolicy,
-  deriveDescriptor,
-  deriveFacets,
-} from "./indexing-policy";
+import { classifyAsset } from "./classify";
 import type {
   WorkflowExecutionContext,
   WorkflowStepDefinition,
 } from "./runtime";
-import { mergeDescriptorWithEnrichment } from "./text-enrichment";
 
 const logger = createLogger("workflow-steps");
-
-const assetTypeSchema = z.enum(["url", "pdf", "note", "image", "chat"]);
-const assetSourceKindSchema = z
-  .enum(["manual", "browser_extension", "upload", "mcp", "import"])
-  .nullable();
-const assetDomainSchema = z.enum([
-  "engineering",
-  "product",
-  "research",
-  "personal",
-  "finance",
-  "health",
-  "archive",
-  "general",
-]);
-const assetDocumentClassSchema = z.enum([
-  "reference_doc",
-  "design_doc",
-  "bug_note",
-  "paper",
-  "journal_entry",
-  "meeting_note",
-  "spec",
-  "howto",
-  "general_note",
-]);
-const assetSensitivitySchema = z.enum([
-  "public",
-  "internal",
-  "private",
-  "restricted",
-]);
-const assetAiVisibilitySchema = z.enum(["allow", "summary_only", "deny"]);
-
-const assetDescriptorSchema = z.object({
-  version: z.literal(2),
-  strategy: z.literal("heuristic_v2"),
-  assetType: assetTypeSchema,
-  sourceKind: assetSourceKindSchema,
-  domain: assetDomainSchema,
-  documentClass: assetDocumentClassSchema,
-  topics: z.array(z.string()),
-  tags: z.array(z.string()),
-  collectionKey: z.string().nullable(),
-  capturedAt: z.string().nullable(),
-  sourceHost: z.string().nullable(),
-  language: z.string().nullable(),
-  mimeType: z.string().nullable(),
-  signals: z.array(z.string()),
-}) satisfies z.ZodType<AssetDescriptor>;
-
-const assetAccessPolicySchema = z.object({
-  version: z.literal(1),
-  strategy: z.literal("heuristic_v1"),
-  sensitivity: assetSensitivitySchema,
-  aiVisibility: assetAiVisibilitySchema,
-  retrievalPriority: z.number(),
-  reasons: z.array(z.string()),
-}) satisfies z.ZodType<AssetAccessPolicy>;
 
 const preparedChunkSchema = z.object({
   chunkIndex: z.number().int().nonnegative(),
@@ -164,24 +95,6 @@ const validateWorkflowState = <T>(
   return parsed.data;
 };
 
-const readDescriptor = (state: Record<string, unknown>): AssetDescriptor => {
-  return validateWorkflowState(
-    "descriptor",
-    assetDescriptorSchema,
-    state.descriptor
-  );
-};
-
-const readAccessPolicy = (
-  state: Record<string, unknown>
-): AssetAccessPolicy => {
-  return validateWorkflowState(
-    "accessPolicy",
-    assetAccessPolicySchema,
-    state.accessPolicy
-  );
-};
-
 const readPersistedContent = (state: Record<string, unknown>) => {
   return validateWorkflowState(
     "persistedContent",
@@ -246,11 +159,8 @@ export const createCleanContentStep = (options: {
   },
 });
 
-// summarize — 参数化 enrichment 和 title 生成
+// summarize — 参数化 title 生成
 export const createSummarizeStep = (options?: {
-  getEnrichment?: (
-    state: Record<string, unknown>
-  ) => TextAssetEnrichmentInput | null;
   generateTitle?: boolean;
 }): WorkflowStepDefinition => ({
   key: "summarize",
@@ -262,12 +172,9 @@ export const createSummarizeStep = (options?: {
       throw new Error("Workflow state is missing normalized content.");
     }
 
-    const enrichment = options?.getEnrichment?.(context.state);
-
     const summary = await generateAssetSummary(context.services.aiProvider, {
       title: context.asset.title,
       content: normalizedContent,
-      enrichmentSummary: enrichment?.summary,
     });
 
     if (options?.generateTitle) {
@@ -317,168 +224,54 @@ export const createSummarizeStep = (options?: {
   },
 });
 
-// derive_descriptor — 参数化 auto-enrichment
-export const createDeriveDescriptorStep = (options?: {
-  createEnrichment?: (
-    context: WorkflowExecutionContext
-  ) => Promise<TextAssetEnrichmentInput | null | undefined>;
-}): WorkflowStepDefinition => ({
-  key: "derive_descriptor",
-  type: "derive_descriptor",
+// classify — L1 瘦身后的单一启发式分类步骤，写回 domain/aiVisibility/
+// retrievalPriority/sourceKind/sourceHost/collectionKey/capturedAt。
+export const createClassifyStep = (): WorkflowStepDefinition => ({
+  key: "classify",
+  type: "classify",
   execute: async (context) => {
     const summary = context.state.summary;
     const normalizedContent = context.state.normalizedContent;
 
-    const enrichment = options?.createEnrichment
-      ? await options.createEnrichment(context)
-      : null;
-
-    const derived = deriveDescriptor({
+    const result = classifyAsset({
       asset: context.asset,
       normalizedContent:
         typeof normalizedContent === "string" ? normalizedContent : null,
       summary: typeof summary === "string" ? summary : null,
     });
 
-    const descriptor = mergeDescriptorWithEnrichment(
-      derived.descriptor,
-      enrichment ?? null
-    );
-
     await context.services.assetRepository.updateAssetIndexing(
       context.asset.id,
       {
-        sourceKind: descriptor.sourceKind,
-        domain: descriptor.domain,
-        documentClass: descriptor.documentClass,
-        sourceHost: descriptor.sourceHost,
-        collectionKey: descriptor.collectionKey,
-        capturedAt: descriptor.capturedAt,
-        descriptorJson: JSON.stringify(descriptor),
+        sourceKind: result.sourceKind,
+        domain: result.domain,
+        aiVisibility: result.aiVisibility,
+        retrievalPriority: result.retrievalPriority,
+        sourceHost: result.sourceHost,
+        collectionKey: result.collectionKey,
+        capturedAt: result.capturedAt,
       }
     );
 
     return {
       output: {
-        domain: descriptor.domain,
-        collectionKey: descriptor.collectionKey,
+        domain: result.domain,
+        aiVisibility: result.aiVisibility,
+        retrievalPriority: result.retrievalPriority,
+        collectionKey: result.collectionKey,
       },
-      state: { descriptor },
+      state: { classification: result },
       artifacts: [
         {
-          artifactType: "descriptor",
+          artifactType: "classification",
           storageKind: "inline",
-          contentText: JSON.stringify(descriptor),
+          contentText: JSON.stringify(result),
           metadataJson: JSON.stringify({
-            strategy: descriptor.strategy,
+            strategy: "heuristic_v3",
+            signals: result.signals,
           }),
         },
       ],
-    };
-  },
-});
-
-// derive_access_policy — 完全一致
-export const createDeriveAccessPolicyStep = (): WorkflowStepDefinition => ({
-  key: "derive_access_policy",
-  type: "derive_access_policy",
-  execute: async (context) => {
-    const summary = context.state.summary;
-    const normalizedContent = context.state.normalizedContent;
-    const descriptor = readDescriptor(context.state);
-
-    const derived = deriveAccessPolicy(
-      {
-        asset: context.asset,
-        normalizedContent:
-          typeof normalizedContent === "string" ? normalizedContent : null,
-        summary: typeof summary === "string" ? summary : null,
-      },
-      descriptor
-    );
-
-    await context.services.assetRepository.updateAssetIndexing(
-      context.asset.id,
-      derived.indexing
-    );
-
-    return {
-      output: {
-        sensitivity: derived.policy.sensitivity,
-        aiVisibility: derived.policy.aiVisibility,
-        retrievalPriority: derived.policy.retrievalPriority,
-      },
-      state: { accessPolicy: derived.policy },
-      artifacts: [
-        {
-          artifactType: "access_policy",
-          storageKind: "inline",
-          contentText: JSON.stringify(derived.policy),
-          metadataJson: JSON.stringify({
-            strategy: derived.policy.strategy,
-          }),
-        },
-      ],
-    };
-  },
-});
-
-// derive_facets — 参数化 enrichment
-export const createDeriveFacetsStep = (options?: {
-  getEnrichment?: (
-    state: Record<string, unknown>
-  ) => TextAssetEnrichmentInput | null;
-}): WorkflowStepDefinition => ({
-  key: "derive_facets",
-  type: "derive_facets",
-  execute: async (context) => {
-    const descriptor = readDescriptor(context.state);
-    const accessPolicy = readAccessPolicy(context.state);
-    const enrichment = options?.getEnrichment?.(context.state);
-
-    const facets = deriveFacets(descriptor, accessPolicy, enrichment?.facets);
-
-    await context.services.assetRepository.replaceAssetFacets?.(
-      context.asset.id,
-      facets
-    );
-    await upsertMetadataTermVectors(
-      context.services.vectorStore,
-      context.services.aiProvider,
-      facets
-    );
-
-    return {
-      output: { facetCount: facets.length },
-    };
-  },
-});
-
-// derive_assertions — 完全一致
-export const createDeriveAssertionsStep = (): WorkflowStepDefinition => ({
-  key: "derive_assertions",
-  type: "derive_assertions",
-  execute: async (context) => {
-    const normalizedContent = context.state.normalizedContent;
-    const summary = context.state.summary;
-
-    const assertions = await deriveAssertionsWithAIFallback(
-      context.services.aiProvider,
-      {
-        asset: context.asset,
-        normalizedContent:
-          typeof normalizedContent === "string" ? normalizedContent : null,
-        summary: typeof summary === "string" ? summary : null,
-      }
-    );
-
-    await context.services.assetRepository.replaceAssetAssertions?.(
-      context.asset.id,
-      assertions
-    );
-
-    return {
-      output: { assertionCount: assertions.length },
     };
   },
 });
@@ -762,20 +555,7 @@ export const buildSharedIngestSteps = (options: {
     getContent: (asset: AssetDetail, state: Record<string, unknown>) => string;
   };
   summarize?: {
-    getEnrichment?: (
-      state: Record<string, unknown>
-    ) => TextAssetEnrichmentInput | null;
     generateTitle?: boolean;
-  };
-  deriveDescriptor?: {
-    createEnrichment?: (
-      context: WorkflowExecutionContext
-    ) => Promise<TextAssetEnrichmentInput | null | undefined>;
-  };
-  deriveFacets?: {
-    getEnrichment?: (
-      state: Record<string, unknown>
-    ) => TextAssetEnrichmentInput | null;
   };
   persistContent?: {
     buildExtraMetadata?: (
@@ -790,10 +570,7 @@ export const buildSharedIngestSteps = (options: {
   return [
     createCleanContentStep(options.cleanContent),
     createSummarizeStep(options.summarize),
-    createDeriveDescriptorStep(options.deriveDescriptor),
-    createDeriveAccessPolicyStep(),
-    createDeriveFacetsStep(options.deriveFacets),
-    createDeriveAssertionsStep(),
+    createClassifyStep(),
     createExtractEntitiesStep(),
     createPersistContentStep(options.persistContent),
     createChunkStep(),

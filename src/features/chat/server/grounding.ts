@@ -7,8 +7,6 @@ export type GroundingContext = EvidenceItem;
 export const CHAT_ALLOWED_AI_VISIBILITY = ["allow"] as const;
 export const CHAT_SUMMARY_ONLY_AI_VISIBILITY = ["summary_only"] as const;
 export const SOURCE_TYPE_PRIORITY: Record<ChatSource["sourceType"], number> = {
-  chunk: 4,
-  assertion: 3,
-  term: 2,
+  chunk: 2,
   summary: 1,
 };

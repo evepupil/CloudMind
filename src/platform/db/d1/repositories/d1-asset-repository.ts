@@ -18,36 +18,26 @@ import type {
   AssetSearchInput,
   ChunkMatchQuery,
   CompleteAssetProcessingInput,
-  CreateAssetAssertionInput,
   CreateAssetChunkInput,
-  CreateAssetFacetInput,
   CreateFileAssetInput,
   CreateTextAssetInput,
   CreateUrlAssetInput,
-  SearchAssetAssertionInput,
   SearchAssetSummaryInput,
   UpdateAssetIndexingInput,
   UpdateAssetMetadataInput,
 } from "@/core/assets/ports";
 import type {
-  AssetAssertionMatch,
   AssetChunkMatch,
   AssetDetail,
-  AssetFacetTermQuery,
-  AssetFacetTermResult,
   AssetListQuery,
   AssetListResult,
   AssetSourceKind,
   AssetSummaryMatch,
-  AssetTermMatchItem,
   AssetType,
-  FacetTermRef,
 } from "@/features/assets/model/types";
 import { createDb } from "@/platform/db/d1/client";
 import {
-  assetAssertions,
   assetChunks,
-  assetFacets,
   assetSources,
   assets,
   ingestJobs,
@@ -55,29 +45,18 @@ import {
 import {
   buildAssetListWhereClause,
   buildAssetSearchFilterConditions,
-  createInitialTextDescriptorJson,
-  createInitialTextFacetRows,
-  getFacetTermOrderKey,
-  mapAssertionMatch,
-  mapAssertionSummary,
   mapAssetSummary,
   mapChunkMatch,
   mapChunkSummary,
-  mapFacetSummary,
   mapJobSummary,
-  sortFacetMatchedAssets,
   splitIntoBatches,
 } from "./d1-asset-repository-helpers";
 import { buildFtsMatchQuery } from "./fts-query";
 import {
-  ASSERTION_SEARCH_TERM_BUDGETS,
   expandSearchTerms,
-  MAX_ASSERTION_SEARCH_TERMS,
   MAX_SUMMARY_SEARCH_TERMS,
   SUMMARY_SEARCH_TERM_BUDGETS,
 } from "./search-term-expansion";
-
-export { sortFacetMatchedAssets };
 
 // 这里实现面向 D1 的资产仓储；后续如切数据库，只替换这一层。
 export class D1AssetRepository implements AssetRepository {
@@ -124,163 +103,6 @@ export class D1AssetRepository implements AssetRepository {
       page: input.page,
       pageSize: input.pageSize,
     });
-  }
-
-  public async getAssetsByFacetTerms(
-    input: AssetFacetTermQuery
-  ): Promise<AssetFacetTermResult> {
-    if (input.terms.length === 0) {
-      return {
-        items: [],
-        pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
-      };
-    }
-
-    const page = input.page ?? 1;
-    const pageSize = input.pageSize ?? 20;
-    const offset = (page - 1) * pageSize;
-
-    // 构建 OR 条件：(facet_key = ? AND facet_value = ?) OR ...
-    const facetConditions = input.terms.map((term) =>
-      and(
-        eq(assetFacets.facetKey, term.facetKey),
-        eq(assetFacets.facetValue, term.facetValue)
-      )
-    );
-    const facetOr = or(...facetConditions);
-
-    if (!facetOr) {
-      return {
-        items: [],
-        pagination: { page, pageSize, total: 0, totalPages: 0 },
-      };
-    }
-
-    // 先查匹配的 asset_id + facet 信息（不过分页，用于构建 matchedTerms）
-    const allFacetRows = await this.db
-      .select({
-        assetId: assetFacets.assetId,
-        facetKey: assetFacets.facetKey,
-        facetValue: assetFacets.facetValue,
-        assetCreatedAt: assets.createdAt,
-      })
-      .from(assetFacets)
-      .innerJoin(assets, eq(assetFacets.assetId, assets.id))
-      .where(
-        and(
-          facetOr,
-          ...buildAssetSearchFilterConditions(input.filters),
-          input.aiVisibility?.length
-            ? inArray(assets.aiVisibility, input.aiVisibility)
-            : undefined
-        )
-      );
-
-    // 按 asset 分组收集匹配的 terms
-    const assetTermMap = new Map<string, FacetTermRef[]>();
-    const assetCreatedAtMap = new Map<string, string>();
-    const seenFacetKeys = new Set<string>();
-
-    for (const row of allFacetRows) {
-      const facetDedupeKey = `${row.assetId}:${row.facetKey}:${row.facetValue}`;
-
-      if (seenFacetKeys.has(facetDedupeKey)) {
-        continue;
-      }
-
-      seenFacetKeys.add(facetDedupeKey);
-
-      const existing = assetTermMap.get(row.assetId) ?? [];
-      existing.push({
-        facetKey: row.facetKey as FacetTermRef["facetKey"],
-        facetValue: row.facetValue,
-      });
-      assetTermMap.set(row.assetId, existing);
-      assetCreatedAtMap.set(row.assetId, row.assetCreatedAt);
-    }
-
-    const rankedAssets = sortFacetMatchedAssets(
-      Array.from(assetTermMap.entries()).map(([assetId, matchedTerms]) => ({
-        assetId,
-        createdAt: assetCreatedAtMap.get(assetId) ?? "",
-        matchedTerms: [...matchedTerms].sort((left, right) => {
-          const leftOrder = input.terms.findIndex(
-            (term) =>
-              term.facetKey === left.facetKey &&
-              term.facetValue === left.facetValue
-          );
-          const rightOrder = input.terms.findIndex(
-            (term) =>
-              term.facetKey === right.facetKey &&
-              term.facetValue === right.facetValue
-          );
-
-          if (leftOrder !== rightOrder) {
-            return leftOrder - rightOrder;
-          }
-
-          return getFacetTermOrderKey(left).localeCompare(
-            getFacetTermOrderKey(right)
-          );
-        }),
-      })),
-      input.terms
-    );
-    const matchingAssetIds = rankedAssets.map((item) => item.assetId);
-
-    if (matchingAssetIds.length === 0) {
-      return {
-        items: [],
-        pagination: { page, pageSize, total: 0, totalPages: 0 },
-      };
-    }
-
-    // 分页查询 assets（按 created_at DESC）
-    const total = matchingAssetIds.length;
-    const pagedIds = matchingAssetIds.slice(offset, offset + pageSize);
-
-    const assetRecords: Array<typeof assets.$inferSelect> = [];
-
-    for (const batch of splitIntoBatches(pagedIds, 80)) {
-      const records = await this.db
-        .select()
-        .from(assets)
-        .where(
-          and(
-            ...buildAssetSearchFilterConditions(input.filters),
-            inArray(assets.id, batch)
-          )
-        );
-
-      assetRecords.push(...records);
-    }
-
-    // 保持 pagedIds 顺序
-    const assetMap = new Map(assetRecords.map((record) => [record.id, record]));
-    const items: AssetTermMatchItem[] = pagedIds.flatMap((id) => {
-      const assetRecord = assetMap.get(id);
-
-      if (!assetRecord) {
-        return [];
-      }
-
-      return [
-        {
-          asset: mapAssetSummary(assetRecord),
-          matchedTerms: assetTermMap.get(id) ?? [],
-        },
-      ];
-    });
-
-    return {
-      items,
-      pagination: {
-        page,
-        pageSize,
-        total,
-        totalPages: total === 0 ? 0 : Math.ceil(total / pageSize),
-      },
-    };
   }
 
   public async getChunkMatchesByVectorIds(
@@ -422,61 +244,6 @@ export class D1AssetRepository implements AssetRepository {
     return [];
   }
 
-  public async searchAssetAssertions(
-    input: SearchAssetAssertionInput
-  ): Promise<AssetAssertionMatch[]> {
-    const query = input.query.trim();
-
-    if (!query || input.limit <= 0 || input.aiVisibility.length === 0) {
-      return [];
-    }
-
-    for (const budget of ASSERTION_SEARCH_TERM_BUDGETS) {
-      const searchTerms = expandSearchTerms(
-        query,
-        Math.min(budget, MAX_ASSERTION_SEARCH_TERMS)
-      );
-      const searchCondition = or(
-        ...searchTerms.map((term) => like(assetAssertions.text, `%${term}%`))
-      );
-
-      if (!searchCondition) {
-        continue;
-      }
-
-      try {
-        const records = await this.db
-          .select({
-            assertion: assetAssertions,
-            asset: assets,
-          })
-          .from(assetAssertions)
-          .innerJoin(assets, eq(assetAssertions.assetId, assets.id))
-          .where(
-            and(
-              ...buildAssetSearchFilterConditions(input),
-              inArray(assets.aiVisibility, input.aiVisibility),
-              searchCondition
-            )
-          )
-          .orderBy(
-            desc(assetAssertions.confidence),
-            desc(assets.retrievalPriority),
-            desc(assetAssertions.updatedAt)
-          )
-          .limit(input.limit);
-
-        return records.map(mapAssertionMatch);
-      } catch (error) {
-        if (budget === ASSERTION_SEARCH_TERM_BUDGETS.at(-1)) {
-          throw error;
-        }
-      }
-    }
-
-    return [];
-  }
-
   public async listAssetIdsMissingChunkContent(limit = 50): Promise<string[]> {
     const rows = await this.db
       .selectDistinct({
@@ -526,16 +293,6 @@ export class D1AssetRepository implements AssetRepository {
       .from(assetChunks)
       .where(eq(assetChunks.assetId, id))
       .orderBy(asc(assetChunks.chunkIndex));
-    const facetRecords = await this.db
-      .select()
-      .from(assetFacets)
-      .where(eq(assetFacets.assetId, id))
-      .orderBy(asc(assetFacets.sortOrder), asc(assetFacets.facetLabel));
-    const assertionRecords = await this.db
-      .select()
-      .from(assetAssertions)
-      .where(eq(assetAssertions.assetId, id))
-      .orderBy(asc(assetAssertions.assertionIndex));
 
     return {
       ...mapAssetSummary(assetRecord),
@@ -557,8 +314,6 @@ export class D1AssetRepository implements AssetRepository {
         : null,
       jobs: jobRecords.map(mapJobSummary),
       chunks: chunkRecords.map(mapChunkSummary),
-      facets: facetRecords.map(mapFacetSummary),
-      assertions: assertionRecords.map(mapAssertionSummary),
     };
   }
 
@@ -571,30 +326,21 @@ export class D1AssetRepository implements AssetRepository {
     const jobId = crypto.randomUUID();
     const title = input.title?.trim() || "Untitled Note";
     const sourceKind = input.sourceKind ?? "manual";
-    const summary = input.enrichment?.summary ?? null;
-    const domain = input.enrichment?.domain ?? "general";
-    const documentClass = input.enrichment?.documentClass ?? "general_note";
-    const collectionKey =
-      input.enrichment?.descriptor?.collectionKey?.trim() || null;
-    const descriptorJson = createInitialTextDescriptorJson(input);
 
     await this.db.insert(assets).values({
       id: assetId,
       type: "note" satisfies AssetType,
       title,
-      summary,
+      summary: null,
       sourceUrl: null,
       sourceKind,
       status: "pending",
-      domain,
-      sensitivity: "internal",
+      domain: "general",
       aiVisibility: "allow",
       retrievalPriority: 0,
-      documentClass,
       sourceHost: null,
-      collectionKey,
+      collectionKey: null,
       capturedAt: now,
-      descriptorJson,
       contentText: input.content,
       rawR2Key: null,
       contentR2Key: null,
@@ -607,16 +353,6 @@ export class D1AssetRepository implements AssetRepository {
       createdAt: now,
       updatedAt: now,
     });
-
-    const facetRows = createInitialTextFacetRows(
-      assetId,
-      now,
-      input.enrichment?.facets
-    );
-
-    if (facetRows.length > 0) {
-      await this.db.insert(assetFacets).values(facetRows);
-    }
 
     await this.db.insert(assetSources).values({
       id: sourceId,
@@ -666,14 +402,11 @@ export class D1AssetRepository implements AssetRepository {
       sourceKind,
       status: "pending",
       domain: "general",
-      sensitivity: "internal",
       aiVisibility: "allow",
       retrievalPriority: 0,
-      documentClass: "reference_doc",
       sourceHost: null,
       collectionKey: null,
       capturedAt: now,
-      descriptorJson: null,
       contentText: null,
       rawR2Key: null,
       contentR2Key: null,
@@ -734,14 +467,11 @@ export class D1AssetRepository implements AssetRepository {
       sourceKind: "upload",
       status: "pending",
       domain: "general",
-      sensitivity: "internal",
       aiVisibility: "allow",
       retrievalPriority: 0,
-      documentClass: "reference_doc",
       sourceHost: null,
       collectionKey: null,
       capturedAt: now,
-      descriptorJson: null,
       contentText: null,
       rawR2Key: input.rawR2Key,
       contentR2Key: null,
@@ -860,64 +590,6 @@ export class D1AssetRepository implements AssetRepository {
     }
   }
 
-  public async replaceAssetFacets(
-    assetId: string,
-    facets: CreateAssetFacetInput[]
-  ): Promise<void> {
-    await this.db.delete(assetFacets).where(eq(assetFacets.assetId, assetId));
-
-    if (facets.length === 0) {
-      return;
-    }
-
-    const now = new Date().toISOString();
-    const rows = facets.map((facet, index) => ({
-      id: crypto.randomUUID(),
-      assetId,
-      facetKey: facet.facetKey,
-      facetValue: facet.facetValue,
-      facetLabel: facet.facetLabel,
-      sortOrder: facet.sortOrder ?? index,
-      createdAt: now,
-    }));
-
-    // ??????? 7 ??????? 12 ???????? D1 ? 100 ?????
-    for (const batch of splitIntoBatches(rows, 12)) {
-      await this.db.insert(assetFacets).values(batch);
-    }
-  }
-
-  public async replaceAssetAssertions(
-    assetId: string,
-    assertions: CreateAssetAssertionInput[]
-  ): Promise<void> {
-    await this.db
-      .delete(assetAssertions)
-      .where(eq(assetAssertions.assetId, assetId));
-
-    if (assertions.length === 0) {
-      return;
-    }
-
-    const now = new Date().toISOString();
-    const rows = assertions.map((assertion) => ({
-      id: crypto.randomUUID(),
-      assetId,
-      assertionIndex: assertion.assertionIndex,
-      kind: assertion.kind,
-      text: assertion.text,
-      sourceChunkIndex: assertion.sourceChunkIndex ?? null,
-      sourceSpanJson: assertion.sourceSpanJson ?? null,
-      confidence: assertion.confidence ?? null,
-      createdAt: now,
-      updatedAt: now,
-    }));
-
-    for (const batch of splitIntoBatches(rows, 12)) {
-      await this.db.insert(assetAssertions).values(batch);
-    }
-  }
-
   public async updateAssetIndexing(
     id: string,
     input: UpdateAssetIndexingInput
@@ -934,20 +606,12 @@ export class D1AssetRepository implements AssetRepository {
       updatePayload.domain = input.domain;
     }
 
-    if (input.sensitivity !== undefined) {
-      updatePayload.sensitivity = input.sensitivity;
-    }
-
     if (input.aiVisibility !== undefined) {
       updatePayload.aiVisibility = input.aiVisibility;
     }
 
     if (input.retrievalPriority !== undefined) {
       updatePayload.retrievalPriority = input.retrievalPriority;
-    }
-
-    if (input.documentClass !== undefined) {
-      updatePayload.documentClass = input.documentClass;
     }
 
     if (input.sourceHost !== undefined) {
@@ -960,10 +624,6 @@ export class D1AssetRepository implements AssetRepository {
 
     if (input.capturedAt !== undefined) {
       updatePayload.capturedAt = input.capturedAt;
-    }
-
-    if (input.descriptorJson !== undefined) {
-      updatePayload.descriptorJson = input.descriptorJson;
     }
 
     await this.db.update(assets).set(updatePayload).where(eq(assets.id, id));

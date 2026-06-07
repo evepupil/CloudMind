@@ -1,20 +1,17 @@
 import type { AssetSearchRepository } from "@/core/assets/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
-import { scoreAssetAssertionMatch } from "@/features/search/server/assertion-scoring";
 import {
   applyContextPolicyScore,
   matchesContextPolicyAsset,
 } from "@/features/search/server/context-policy";
 import {
   annotateEvidenceMatchReasons,
-  buildAssertionEvidenceItem,
   buildChunkEvidenceItem,
   buildSummaryEvidenceItem,
 } from "@/features/search/server/evidence";
 import { scoreAssetSummaryMatch } from "@/features/search/server/summary-scoring";
 import {
-  CHAT_ALLOWED_AI_VISIBILITY,
   CHAT_SUMMARY_ONLY_AI_VISIBILITY,
   type GroundingContext,
   SOURCE_TYPE_PRIORITY,
@@ -62,49 +59,6 @@ export const getSummaryGroundingContexts = async (
     .filter((context) =>
       matchesContextPolicyAsset(context.asset, contextPolicy)
     );
-};
-
-export const getAssertionGroundingContexts = async (
-  repository: AssetSearchRepository,
-  question: string,
-  limit: number,
-  contextPolicy?: ContextRetrievalPolicy
-): Promise<GroundingContext[]> => {
-  if (!repository.searchAssetAssertions) {
-    return [];
-  }
-
-  const assertionMatches = await repository
-    .searchAssetAssertions({
-      query: question,
-      limit,
-      aiVisibility: [
-        ...CHAT_SUMMARY_ONLY_AI_VISIBILITY,
-        ...CHAT_ALLOWED_AI_VISIBILITY,
-      ],
-    })
-    .catch(() => []);
-
-  return assertionMatches
-    .map((match) =>
-      buildAssertionEvidenceItem(
-        match,
-        applyContextPolicyScore(
-          scoreAssetAssertionMatch(question, match),
-          match.asset,
-          contextPolicy
-        )
-      )
-    )
-    .map((context) =>
-      annotateEvidenceMatchReasons(context, {
-        profileBoosted: isProfileBoosted(context, contextPolicy),
-      })
-    )
-    .filter((context) =>
-      matchesContextPolicyAsset(context.asset, contextPolicy)
-    )
-    .sort((left, right) => right.score - left.score);
 };
 
 export const buildGroundingContexts = (
