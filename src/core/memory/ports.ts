@@ -38,6 +38,32 @@ export interface MemoryEntity {
   mentionCount: number;
 }
 
+// L2 陈述的读模型（带双时间四字段 + 显著性字段），供智能写调和与图检索消费。
+export interface MemoryStatement {
+  id: string;
+  scopeId: string;
+  subjectEntityId: string;
+  predicate: string;
+  objectEntityId: string | null;
+  objectLiteral: string | null;
+  nlText: string;
+  confidence: number | null;
+  importance: number;
+  validFrom: string | null;
+  validUntil: string | null;
+  createdAt: string;
+  expiredAt: string | null;
+  supersededById: string | null;
+  lastAccessedAt: string | null;
+  accessCount: number;
+}
+
+// 置某陈述失效的输入：写录入时 expired_at，并可用 superseded_by_id 指向取代它的新陈述。
+export interface InvalidateStatementInput {
+  statementId: string;
+  supersededById?: string | null | undefined;
+}
+
 export interface CreateStatementInput {
   scopeId?: string | undefined;
   subjectEntityId: string;
@@ -98,4 +124,13 @@ export interface MemoryRepository {
   createStatement(input: CreateStatementInput): Promise<{ id: string }>;
   createEdge(input: CreateEdgeInput): Promise<{ id: string }>;
   addProvenance(input: AddProvenanceInput): Promise<void>;
+  // 查某主语下所有仍有效（expired_at 空）的陈述，作为智能写调和的候选集（按 created_at 升序）。
+  findActiveStatementsBySubject(
+    subjectEntityId: string,
+    scopeId?: string | undefined
+  ): Promise<MemoryStatement[]>;
+  // 按 id 查单条陈述（含已失效），主要供调和落库后核对与测试用。
+  getStatementById(statementId: string): Promise<MemoryStatement | null>;
+  // 置某陈述失效（双时间：expired_at=now），可指向取代它的新陈述。
+  invalidateStatement(input: InvalidateStatementInput): Promise<void>;
 }

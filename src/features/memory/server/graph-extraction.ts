@@ -82,12 +82,12 @@ export const parseExtractedGraph = (raw: unknown): ExtractedGraph | null => {
 
 // qwen3 等推理模型会先输出 <think>…</think>，其中常含花括号，会让 parseJsonObject 的
 // 「首{到末}」切片把推理文本一起吞进去导致 JSON.parse 失败。这里先剥离 think 块再解析。
-const stripReasoning = (text: string): string =>
+export const stripReasoning = (text: string): string =>
   text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 
 // 从可能含散文前缀 / markdown fence / 重复多个对象的响应里，提取**第一个花括号平衡**的完整 JSON 对象。
 // 这是关键修复：qwen 常在 JSON 前续写文本、并把同一对象重复多遍，朴素的「首{到末}」切片会跨多个对象导致解析失败。
-const extractFirstJsonObject = (text: string): string | null => {
+export const extractFirstJsonObject = (text: string): string | null => {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const haystack = fenced?.[1] ?? text;
   const start = haystack.indexOf("{");

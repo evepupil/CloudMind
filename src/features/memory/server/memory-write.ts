@@ -1,6 +1,7 @@
 import type { MemoryRepository } from "@/core/memory/ports";
 
 import { type ExtractedGraph, normalizeEntityName } from "./graph-extraction";
+import type { ReconcileDecision, ReconcileJudge } from "./memory-reconcile";
 
 export interface MemoryWriteTarget {
   scopeId?: string | undefined;
@@ -24,15 +25,24 @@ export interface EmbedDeduplicate {
   ): Promise<{ vectorId: string; mergedEntityId: string | null }>;
 }
 
+// 写侧可选注入：embedding 模糊消歧 + 智能写调和裁决器。
+export interface WriteGraphOptions {
+  embedDeduplicate?: EmbedDeduplicate | undefined;
+  reconcile?: ReconcileJudge | undefined;
+}
+
 // 把抽取出的知识图谱写入 L2：先按归一化名幂等消歧出实体 id，再写 statements，
 // 宾语为实体时额外写一条 edge（图关系），每条记忆都补 provenance 指回 L1。
-// embedDeduplicate 可选：提供时用 embedding ANN 做模糊消歧（≥0.86 合并），否则仅精确归一化名。
+// options.embedDeduplicate：提供时用 embedding ANN 做模糊消歧（≥0.86 合并），否则仅精确归一化名。
+// options.reconcile：提供时对每条新 statement 取同主语活跃候选做 mem0 式 ADD/UPDATE/DELETE/NOOP 调和。
 export const writeGraphToMemory = async (
   memoryRepository: MemoryRepository,
   target: MemoryWriteTarget,
   graph: ExtractedGraph,
-  embedDeduplicate?: EmbedDeduplicate
+  options?: WriteGraphOptions
 ): Promise<MemoryWriteResult> => {
+  const embedDeduplicate = options?.embedDeduplicate;
+  const reconcile = options?.reconcile;
   const scopeId = target.scopeId;
   const entityIdByNormalized = new Map<string, string>();
   // 优先采用 entities 列表里声明的 type；statement 里出现的实体若未声明则 type 为空。
@@ -102,6 +112,42 @@ export const writeGraphToMemory = async (
       continue;
     }
 
+    // 智能写调和：取同主语仍有效的陈述作候选，LLM 判 ADD/UPDATE/DELETE/NOOP。
+    // 未注入 reconcile 或无候选时退回 ADD（与历史行为一致）。
+    let decision: ReconcileDecision = {
+      action: "ADD",
+      targetStatementId: null,
+    };
+
+    if (reconcile) {
+      const candidates = await memoryRepository.findActiveStatementsBySubject(
+        subjectId,
+        scopeId
+      );
+
+      if (candidates.length > 0) {
+        decision = await reconcile({ statement, candidates });
+      }
+    }
+
+    // NOOP：新事实已被某条旧事实表达，不重复落库。
+    if (decision.action === "NOOP") {
+      continue;
+    }
+
+    // DELETE：新事实与旧事实矛盾，旧事实置失效（双时间关闭录入区间），不另存新陈述
+    // —— 历史靠旧陈述的 expired_at 保留，仍可时间回溯。
+    if (decision.action === "DELETE") {
+      if (decision.targetStatementId) {
+        await memoryRepository.invalidateStatement({
+          statementId: decision.targetStatementId,
+        });
+      }
+
+      continue;
+    }
+
+    // ADD / UPDATE：落新陈述。
     const objectEntityId = statement.objectIsEntity
       ? await resolveEntity(statement.object)
       : null;
@@ -145,6 +191,14 @@ export const writeGraphToMemory = async (
         episodeId: target.episodeId ?? null,
         assetId: target.assetId,
         chunkIndex: target.chunkIndex ?? null,
+      });
+    }
+
+    // UPDATE：把被取代的旧事实置失效，superseded_by 指向新事实（双时间冲突处理，不删）。
+    if (decision.action === "UPDATE" && decision.targetStatementId) {
+      await memoryRepository.invalidateStatement({
+        statementId: decision.targetStatementId,
+        supersededById: created.id,
       });
     }
   }

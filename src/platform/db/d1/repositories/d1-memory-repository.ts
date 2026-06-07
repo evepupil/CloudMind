@@ -1,11 +1,13 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import type {
   AddProvenanceInput,
   CreateEdgeInput,
   CreateEpisodeInput,
   CreateStatementInput,
+  InvalidateStatementInput,
   MemoryEntity,
   MemoryRepository,
+  MemoryStatement,
   UpsertEntityInput,
 } from "@/core/memory/ports";
 import { createDb } from "@/platform/db/d1/client";
@@ -18,6 +20,28 @@ import {
 } from "@/platform/db/d1/schema";
 
 const DEFAULT_SCOPE = "default";
+
+// 把 statements 行投影为读模型（统一 null 语义）。
+type StatementRow = typeof statements.$inferSelect;
+
+const mapStatement = (row: StatementRow): MemoryStatement => ({
+  id: row.id,
+  scopeId: row.scopeId,
+  subjectEntityId: row.subjectEntityId,
+  predicate: row.predicate,
+  objectEntityId: row.objectEntityId,
+  objectLiteral: row.objectLiteral,
+  nlText: row.nlText,
+  confidence: row.confidence,
+  importance: row.importance,
+  validFrom: row.validFrom,
+  validUntil: row.validUntil,
+  createdAt: row.createdAt,
+  expiredAt: row.expiredAt,
+  supersededById: row.supersededById,
+  lastAccessedAt: row.lastAccessedAt,
+  accessCount: row.accessCount,
+});
 
 // 这里实现面向 D1 的 L2 记忆层写仓储；后续切库只替换这一层。
 export class D1MemoryRepository implements MemoryRepository {
@@ -225,5 +249,55 @@ export class D1MemoryRepository implements MemoryRepository {
       .update(entities)
       .set({ embeddingVectorId: vectorId, updatedAt: now })
       .where(eq(entities.id, entityId));
+  }
+
+  public async findActiveStatementsBySubject(
+    subjectEntityId: string,
+    scopeId?: string | undefined
+  ): Promise<MemoryStatement[]> {
+    const scope = scopeId ?? DEFAULT_SCOPE;
+
+    const rows = await this.db
+      .select()
+      .from(statements)
+      .where(
+        and(
+          eq(statements.scopeId, scope),
+          eq(statements.subjectEntityId, subjectEntityId),
+          // expired_at 空 = 系统仍相信该事实（双时间录入区间未关闭）。
+          isNull(statements.expiredAt)
+        )
+      )
+      .orderBy(asc(statements.createdAt));
+
+    return rows.map(mapStatement);
+  }
+
+  public async getStatementById(
+    statementId: string
+  ): Promise<MemoryStatement | null> {
+    const rows = await this.db
+      .select()
+      .from(statements)
+      .where(eq(statements.id, statementId))
+      .limit(1);
+    const found = rows[0];
+
+    return found ? mapStatement(found) : null;
+  }
+
+  public async invalidateStatement(
+    input: InvalidateStatementInput
+  ): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .update(statements)
+      .set({
+        expiredAt: now,
+        supersededById: input.supersededById ?? null,
+        updatedAt: now,
+      })
+      .where(eq(statements.id, input.statementId));
   }
 }

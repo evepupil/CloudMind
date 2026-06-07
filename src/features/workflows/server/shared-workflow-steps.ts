@@ -14,6 +14,7 @@ import {
   planChunkEmbeddings,
 } from "@/features/ingest/server/content-processing";
 import { extractGraphFromText } from "@/features/memory/server/graph-extraction";
+import { createReconcileJudge } from "@/features/memory/server/memory-reconcile";
 import { writeGraphToMemory } from "@/features/memory/server/memory-write";
 import { classifyAsset } from "./classify";
 import type {
@@ -466,71 +467,75 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
       memoryRepository,
       { assetId: context.asset.id, episodeId: episode.id },
       graph,
-      // 可选 embedding 消歧：graph VectorStore 未绑定时省略（退回精确归一化名匹配）。
-      context.services.graphVectorStore
-        ? {
-            embedAndUpsert: async (entityId, name) => {
-              const graphVS = context.services.graphVectorStore!;
-              const ai = context.services.aiProvider;
+      {
+        // 可选 embedding 消歧：graph VectorStore 未绑定时省略（退回精确归一化名匹配）。
+        embedDeduplicate: context.services.graphVectorStore
+          ? {
+              embedAndUpsert: async (entityId, name) => {
+                const graphVS = context.services.graphVectorStore!;
+                const ai = context.services.aiProvider;
 
-              // 1. embed 实体名
-              const embedResult = await ai.createEmbeddings({
-                texts: [name],
-              });
-              const values = embedResult.embeddings[0];
+                // 1. embed 实体名
+                const embedResult = await ai.createEmbeddings({
+                  texts: [name],
+                });
+                const values = embedResult.embeddings[0];
 
-              if (!values) {
-                return { vectorId: "", mergedEntityId: null };
-              }
-
-              // 2. ANN 查 graph_entities namespace
-              const matches = await graphVS.search({
-                values,
-                topK: 1,
-              });
-
-              // 3. 超阈值 → 合并到已有实体
-              if (
-                matches.length > 0 &&
-                matches[0]!.score >= 0.86 &&
-                matches[0]!.id !== entityId
-              ) {
-                const existing = await memoryRepository.getEntityByVectorId(
-                  matches[0]!.id
-                );
-
-                if (existing) {
-                  // 把新实体的向量也 upsert 进去（增加覆盖面）
-                  await graphVS.upsert([
-                    {
-                      id: matches[0]!.id,
-                      values,
-                      metadataJson: JSON.stringify({ canonicalName: name }),
-                    },
-                  ]);
-
-                  return {
-                    vectorId: matches[0]!.id,
-                    mergedEntityId: existing.id,
-                  };
+                if (!values) {
+                  return { vectorId: "", mergedEntityId: null };
                 }
-              }
 
-              // 4. 无合并 → upsert 新向量 + 回填 entity
-              const vectorId = `graph:${entityId}`;
-              await graphVS.upsert([
-                {
-                  id: vectorId,
+                // 2. ANN 查 graph_entities namespace
+                const matches = await graphVS.search({
                   values,
-                  metadataJson: JSON.stringify({ canonicalName: name }),
-                },
-              ]);
-              await memoryRepository.setEntityVectorId(entityId, vectorId);
+                  topK: 1,
+                });
 
-              return { vectorId, mergedEntityId: null };
-            },
-          }
-        : undefined
+                // 3. 超阈值 → 合并到已有实体
+                if (
+                  matches.length > 0 &&
+                  matches[0]!.score >= 0.86 &&
+                  matches[0]!.id !== entityId
+                ) {
+                  const existing = await memoryRepository.getEntityByVectorId(
+                    matches[0]!.id
+                  );
+
+                  if (existing) {
+                    // 把新实体的向量也 upsert 进去（增加覆盖面）
+                    await graphVS.upsert([
+                      {
+                        id: matches[0]!.id,
+                        values,
+                        metadataJson: JSON.stringify({ canonicalName: name }),
+                      },
+                    ]);
+
+                    return {
+                      vectorId: matches[0]!.id,
+                      mergedEntityId: existing.id,
+                    };
+                  }
+                }
+
+                // 4. 无合并 → upsert 新向量 + 回填 entity
+                const vectorId = `graph:${entityId}`;
+                await graphVS.upsert([
+                  {
+                    id: vectorId,
+                    values,
+                    metadataJson: JSON.stringify({ canonicalName: name }),
+                  },
+                ]);
+                await memoryRepository.setEntityVectorId(entityId, vectorId);
+
+                return { vectorId, mergedEntityId: null };
+              },
+            }
+          : undefined,
+        // 智能写调和：每条新 statement 由 LLM 判 ADD/UPDATE/DELETE/NOOP（mem0 式）。
+        reconcile: createReconcileJudge(context.services.aiProvider),
+      }
     );
 
     return {
