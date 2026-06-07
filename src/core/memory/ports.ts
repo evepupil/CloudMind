@@ -64,6 +64,29 @@ export interface InvalidateStatementInput {
   supersededById?: string | null | undefined;
 }
 
+// L2 有向边读模型，供图遍历（BFS / 递归 CTE）消费。
+export interface MemoryEdge {
+  id: string;
+  scopeId: string;
+  srcEntityId: string;
+  dstEntityId: string;
+  relation: string;
+}
+
+// vector id ↔ 实体 id 映射，供图检索把 ANN 命中的种子向量解析为实体。
+export interface EntityVectorRef {
+  vectorId: string;
+  entityId: string;
+}
+
+// 出处引用读模型（记忆 → L1 资产/情节）。供图证据钻取回 L1 原文引用。
+export interface MemoryProvenanceRef {
+  memoryId: string;
+  assetId: string | null;
+  episodeId: string | null;
+  chunkIndex: number | null;
+}
+
 export interface CreateStatementInput {
   scopeId?: string | undefined;
   subjectEntityId: string;
@@ -133,4 +156,22 @@ export interface MemoryRepository {
   getStatementById(statementId: string): Promise<MemoryStatement | null>;
   // 置某陈述失效（双时间：expired_at=now），可指向取代它的新陈述。
   invalidateStatement(input: InvalidateStatementInput): Promise<void>;
+  // —— 图检索读侧（T3）——
+  // 把 ANN 命中的向量 id 解析为实体 id（图检索的种子解析）。
+  findEntityIdsByVectorIds(vectorIds: string[]): Promise<EntityVectorRef[]>;
+  // 取一批源实体的未失效出边，作为 BFS / 递归遍历的一跳。
+  findActiveOutgoingEdges(
+    srcEntityIds: string[],
+    scopeId?: string | undefined
+  ): Promise<MemoryEdge[]>;
+  // 取一批主语实体下所有未失效的陈述（图证据事实集）。
+  findActiveStatementsBySubjects(
+    subjectEntityIds: string[],
+    scopeId?: string | undefined
+  ): Promise<MemoryStatement[]>;
+  // 按记忆 id 批量取出处（钻取回 L1 资产）。
+  findProvenanceByMemoryIds(
+    memoryType: MemoryKind,
+    memoryIds: string[]
+  ): Promise<MemoryProvenanceRef[]>;
 }

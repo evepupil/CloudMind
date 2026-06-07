@@ -1,9 +1,11 @@
 import type { AssetSummary } from "@/features/assets/model/types";
 
-export type EvidenceLayer = "chunk" | "summary";
+// statement = L2 知识图谱事实层（图检索通道），与 L1 的 chunk/summary 并列为证据来源。
+export type EvidenceLayer = "chunk" | "summary" | "statement";
 export type EvidenceMatchReasonCode =
   | "semantic_match"
   | "summary_match"
+  | "graph_match"
   | "profile_boosted"
   | "recent_boosted"
   | "high_priority_asset";

@@ -32,6 +32,7 @@ import type {
   AssetListQuery,
   AssetListResult,
   AssetSourceKind,
+  AssetSummary,
   AssetSummaryMatch,
   AssetType,
 } from "@/features/assets/model/types";
@@ -103,6 +104,20 @@ export class D1AssetRepository implements AssetRepository {
       page: input.page,
       pageSize: input.pageSize,
     });
+  }
+
+  public async getAssetSummariesByIds(ids: string[]): Promise<AssetSummary[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const records = await this.db
+      .select()
+      .from(assets)
+      // 排除软删资产，避免图检索把已删除资产作为证据带回。
+      .where(and(inArray(assets.id, ids), isNull(assets.deletedAt)));
+
+    return records.map(mapAssetSummary);
   }
 
   public async getChunkMatchesByVectorIds(

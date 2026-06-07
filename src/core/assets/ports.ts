@@ -7,6 +7,7 @@ import type {
   AssetListResult,
   AssetSearchFilters,
   AssetSourceKind,
+  AssetSummary,
   AssetSummaryMatch,
 } from "@/features/assets/model/types";
 
@@ -99,6 +100,8 @@ export interface AssetSearchRepository {
   searchAssetSummaries(
     input: SearchAssetSummaryInput
   ): Promise<AssetSummaryMatch[]>;
+  // 按 id 批量取资产摘要（排除软删），供 L2 图检索证据钻取回 L1。可选：未实现时图通道降级。
+  getAssetSummariesByIds?(ids: string[]): Promise<AssetSummary[]>;
 }
 
 // 这里保留采集与处理链路需要的写侧接口。

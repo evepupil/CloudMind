@@ -103,8 +103,36 @@ export const buildSummaryEvidenceItem = (
   };
 };
 
+// 图证据项：一条 L2 知识图谱事实（statement.nlText），经 provenance 钻取回某 L1 资产。
+// id 用 `statement:${statementId}:${assetId}` 保证同一资产下多条事实不互相去重。
+export const buildGraphEvidenceItem = (
+  statement: { id: string; nlText: string },
+  asset: AssetSummary,
+  score: number
+): EvidenceItem => {
+  return {
+    id: `statement:${statement.id}:${asset.id}`,
+    layer: "statement",
+    score,
+    asset,
+    source: buildEvidenceSource(asset),
+    indexing: buildEvidenceIndexing(asset, "statement"),
+    visibility: buildEvidenceVisibility(asset),
+    text: statement.nlText,
+    snippet: statement.nlText,
+    matchReasons: [
+      buildMatchReason(
+        "graph_match",
+        "Knowledge graph match",
+        "Reached via L2 knowledge-graph traversal from an entity in the query."
+      ),
+    ],
+  };
+};
+
 const EVIDENCE_LAYER_PRIORITY: Record<EvidenceLayer, number> = {
-  chunk: 2,
+  chunk: 3,
+  statement: 2,
   summary: 1,
 };
 

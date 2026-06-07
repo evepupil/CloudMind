@@ -7,6 +7,9 @@ export const FUSION_CHANNEL_WEIGHTS = {
   // FTS5/BM25 词面 chunk 通道：略低于 dense，但高于 summary，作为中文/精确关键词的召回补充。
   lexicalChunk: 0.9,
   summary: 0.85,
+  // L2 图检索通道：实体多跳关联召回的事实证据，权重介于 lexicalChunk 与 summary 之间，
+  // 既能把图关联资产带进结果，又不至于压过直接语义命中的 chunk。
+  graph: 0.88,
 } as const;
 
 // 这里对单个通道内的分数做 min-max 归一化到 [0,1]，再乘通道权重。

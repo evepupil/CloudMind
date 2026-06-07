@@ -1,11 +1,15 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type {
   AddProvenanceInput,
   CreateEdgeInput,
   CreateEpisodeInput,
   CreateStatementInput,
+  EntityVectorRef,
   InvalidateStatementInput,
+  MemoryEdge,
   MemoryEntity,
+  MemoryKind,
+  MemoryProvenanceRef,
   MemoryRepository,
   MemoryStatement,
   UpsertEntityInput,
@@ -299,5 +303,111 @@ export class D1MemoryRepository implements MemoryRepository {
         updatedAt: now,
       })
       .where(eq(statements.id, input.statementId));
+  }
+
+  public async findEntityIdsByVectorIds(
+    vectorIds: string[]
+  ): Promise<EntityVectorRef[]> {
+    if (vectorIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.db
+      .select({
+        id: entities.id,
+        vectorId: entities.embeddingVectorId,
+      })
+      .from(entities)
+      .where(
+        and(
+          inArray(entities.embeddingVectorId, vectorIds),
+          isNotNull(entities.embeddingVectorId)
+        )
+      );
+
+    return rows.flatMap((row) =>
+      row.vectorId ? [{ vectorId: row.vectorId, entityId: row.id }] : []
+    );
+  }
+
+  public async findActiveOutgoingEdges(
+    srcEntityIds: string[],
+    scopeId?: string | undefined
+  ): Promise<MemoryEdge[]> {
+    if (srcEntityIds.length === 0) {
+      return [];
+    }
+
+    const scope = scopeId ?? DEFAULT_SCOPE;
+
+    const rows = await this.db
+      .select({
+        id: edges.id,
+        scopeId: edges.scopeId,
+        srcEntityId: edges.srcEntityId,
+        dstEntityId: edges.dstEntityId,
+        relation: edges.relation,
+      })
+      .from(edges)
+      .where(
+        and(
+          eq(edges.scopeId, scope),
+          inArray(edges.srcEntityId, srcEntityIds),
+          isNull(edges.expiredAt)
+        )
+      );
+
+    return rows;
+  }
+
+  public async findActiveStatementsBySubjects(
+    subjectEntityIds: string[],
+    scopeId?: string | undefined
+  ): Promise<MemoryStatement[]> {
+    if (subjectEntityIds.length === 0) {
+      return [];
+    }
+
+    const scope = scopeId ?? DEFAULT_SCOPE;
+
+    const rows = await this.db
+      .select()
+      .from(statements)
+      .where(
+        and(
+          eq(statements.scopeId, scope),
+          inArray(statements.subjectEntityId, subjectEntityIds),
+          isNull(statements.expiredAt)
+        )
+      )
+      .orderBy(asc(statements.createdAt));
+
+    return rows.map(mapStatement);
+  }
+
+  public async findProvenanceByMemoryIds(
+    memoryType: MemoryKind,
+    memoryIds: string[]
+  ): Promise<MemoryProvenanceRef[]> {
+    if (memoryIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.db
+      .select({
+        memoryId: provenance.memoryId,
+        assetId: provenance.assetId,
+        episodeId: provenance.episodeId,
+        chunkIndex: provenance.chunkIndex,
+      })
+      .from(provenance)
+      .where(
+        and(
+          eq(provenance.memoryType, memoryType),
+          inArray(provenance.memoryId, memoryIds)
+        )
+      );
+
+    return rows;
   }
 }

@@ -5,8 +5,12 @@ import type {
   CreateEdgeInput,
   CreateEpisodeInput,
   CreateStatementInput,
+  EntityVectorRef,
   InvalidateStatementInput,
+  MemoryEdge,
   MemoryEntity,
+  MemoryKind,
+  MemoryProvenanceRef,
   MemoryRepository,
   MemoryStatement,
   UpsertEntityInput,
@@ -143,6 +147,57 @@ class FakeMemoryRepository implements MemoryRepository {
 
   public async addProvenance(input: AddProvenanceInput): Promise<void> {
     this.provenance.push(input);
+  }
+
+  public async findEntityIdsByVectorIds(
+    vectorIds: string[]
+  ): Promise<EntityVectorRef[]> {
+    const wanted = new Set(vectorIds);
+
+    return [...this.vectorUpdates.entries()].flatMap(([entityId, vectorId]) =>
+      wanted.has(vectorId) ? [{ vectorId, entityId }] : []
+    );
+  }
+
+  public async findActiveOutgoingEdges(
+    _srcEntityIds: string[],
+    _scopeId?: string | undefined
+  ): Promise<MemoryEdge[]> {
+    // 该 fake 的 edges 不带 id/expired，图遍历在 graph-recall 专用 fake 中测试。
+    return [];
+  }
+
+  public async findActiveStatementsBySubjects(
+    subjectEntityIds: string[],
+    scopeId?: string | undefined
+  ): Promise<MemoryStatement[]> {
+    const scope = scopeId ?? "default";
+    const subjects = new Set(subjectEntityIds);
+
+    return [...this.statementRecords.values()].filter(
+      (statement) =>
+        statement.scopeId === scope &&
+        subjects.has(statement.subjectEntityId) &&
+        statement.expiredAt === null
+    );
+  }
+
+  public async findProvenanceByMemoryIds(
+    memoryType: MemoryKind,
+    memoryIds: string[]
+  ): Promise<MemoryProvenanceRef[]> {
+    const wanted = new Set(memoryIds);
+
+    return this.provenance
+      .filter(
+        (entry) => entry.memoryType === memoryType && wanted.has(entry.memoryId)
+      )
+      .map((entry) => ({
+        memoryId: entry.memoryId,
+        assetId: entry.assetId ?? null,
+        episodeId: entry.episodeId ?? null,
+        chunkIndex: entry.chunkIndex ?? null,
+      }));
   }
 }
 
