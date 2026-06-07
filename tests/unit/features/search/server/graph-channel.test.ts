@@ -6,12 +6,14 @@ import type {
   AssetSearchRepository,
 } from "@/core/assets/ports";
 import type { MemoryRepository, MemoryStatement } from "@/core/memory/ports";
+import type { JobQueue, JobQueueMessage } from "@/core/queue/ports";
 import type { VectorSearchMatch, VectorStore } from "@/core/vector/ports";
 import type {
   AssetAiVisibility,
   AssetListResult,
   AssetSummary,
 } from "@/features/assets/model/types";
+import { parseReinforceGraphAccessMessage } from "@/features/memory/server/reinforcement";
 import { createSearchService } from "@/features/search/server/service";
 
 const graphStatement = (
@@ -135,7 +137,17 @@ const aiProvider: AIProvider = {
   createEmbeddings: async () => ({ embeddings: [[0.11, 0.22, 0.33]] }),
 };
 
-const buildService = (assetVisibility: AssetAiVisibility) =>
+// 捕获入队消息的假队列，用于断言访问写回闭环。
+const capturingJobQueue = (sink: JobQueueMessage[]): JobQueue => ({
+  async enqueue(message) {
+    sink.push(message);
+  },
+});
+
+const buildService = (
+  assetVisibility: AssetAiVisibility,
+  jobQueue?: JobQueue
+) =>
   createSearchService({
     getAssetRepository: () =>
       new GraphOnlySearchRepository([
@@ -145,6 +157,7 @@ const buildService = (assetVisibility: AssetAiVisibility) =>
     getAIProvider: () => aiProvider,
     getMemoryRepository: () => graphMemoryRepository(),
     getGraphVectorStore: () => seedStore([{ id: "gv1", score: 0.9 }]),
+    ...(jobQueue ? { getJobQueue: () => jobQueue } : {}),
   });
 
 describe("search service graph channel", () => {
@@ -181,5 +194,34 @@ describe("search service graph channel", () => {
     expect(
       result.evidence.items.some((item) => item.layer === "statement")
     ).toBe(false);
+  });
+
+  it("enqueues a reinforcement message for graph statements surfaced on the page", async () => {
+    const enqueued: JobQueueMessage[] = [];
+    const service = buildService("allow", capturingJobQueue(enqueued));
+
+    await service.searchAssets(undefined, {
+      query: "where is acme based",
+      page: 1,
+      pageSize: 10,
+    });
+
+    expect(enqueued).toHaveLength(1);
+    const message = enqueued[0];
+    const payload = message ? parseReinforceGraphAccessMessage(message) : null;
+    expect(payload?.statementIds).toEqual(["s1"]);
+  });
+
+  it("does not enqueue reinforcement when no graph evidence reaches the page", async () => {
+    const enqueued: JobQueueMessage[] = [];
+    const service = buildService("summary_only", capturingJobQueue(enqueued));
+
+    await service.searchAssets(undefined, {
+      query: "where is acme based",
+      page: 1,
+      pageSize: 10,
+    });
+
+    expect(enqueued).toHaveLength(0);
   });
 });

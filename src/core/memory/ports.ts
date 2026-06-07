@@ -156,6 +156,8 @@ export interface MemoryRepository {
   getStatementById(statementId: string): Promise<MemoryStatement | null>;
   // 置某陈述失效（双时间：expired_at=now），可指向取代它的新陈述。
   invalidateStatement(input: InvalidateStatementInput): Promise<void>;
+  // 检索命中强化：批量 bump 陈述的 access_count(+1) 与 last_accessed_at（访问写回闭环）。
+  bumpStatementAccess(statementIds: string[]): Promise<void>;
   // —— 图检索读侧（T3）——
   // 把 ANN 命中的向量 id 解析为实体 id（图检索的种子解析）。
   findEntityIdsByVectorIds(vectorIds: string[]): Promise<EntityVectorRef[]>;

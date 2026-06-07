@@ -139,6 +139,18 @@ class FakeMemoryRepository implements MemoryRepository {
     }
   }
 
+  public async bumpStatementAccess(statementIds: string[]): Promise<void> {
+    for (const id of statementIds) {
+      const found = this.statementRecords.get(id);
+
+      if (found) {
+        this.seq += 1;
+        found.accessCount += 1;
+        found.lastAccessedAt = `t${this.seq}`;
+      }
+    }
+  }
+
   public async createEdge(input: CreateEdgeInput): Promise<{ id: string }> {
     this.seq += 1;
     this.edges.push(input);

@@ -1,5 +1,9 @@
 import type { JobQueueMessage } from "@/core/queue/ports";
 import type { AppBindings } from "@/env";
+import {
+  applyGraphAccessReinforcement,
+  parseReinforceGraphAccessMessage,
+} from "@/features/memory/server/reinforcement";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getBlobStoreFromBindings } from "@/platform/blob/r2/get-blob-store";
 import { getAssetIngestRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
@@ -21,6 +25,18 @@ export const consumeWorkflowQueueMessage = async (
   message: JobQueueMessage,
   bindings: AppBindings | undefined
 ): Promise<void> => {
+  // 图检索命中强化：独立的轻量消息，直接 bump access 后返回，不进 workflow step 链路。
+  const reinforcePayload = parseReinforceGraphAccessMessage(message);
+
+  if (reinforcePayload) {
+    await applyGraphAccessReinforcement(
+      getMemoryRepositoryFromBindings(bindings),
+      reinforcePayload
+    );
+
+    return;
+  }
+
   const payload = parseWorkflowStepQueuePayload(message);
 
   if (!payload) {

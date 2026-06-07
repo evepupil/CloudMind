@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type {
   AddProvenanceInput,
   CreateEdgeInput,
@@ -303,6 +303,23 @@ export class D1MemoryRepository implements MemoryRepository {
         updatedAt: now,
       })
       .where(eq(statements.id, input.statementId));
+  }
+
+  public async bumpStatementAccess(statementIds: string[]): Promise<void> {
+    if (statementIds.length === 0) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    await this.db
+      .update(statements)
+      .set({
+        accessCount: sql`${statements.accessCount} + 1`,
+        lastAccessedAt: now,
+        updatedAt: now,
+      })
+      .where(inArray(statements.id, statementIds));
   }
 
   public async findEntityIdsByVectorIds(

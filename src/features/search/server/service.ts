@@ -5,6 +5,7 @@ import type {
 } from "@/core/assets/ports";
 import { createLogger } from "@/core/logging/logger";
 import type { MemoryRepository } from "@/core/memory/ports";
+import type { JobQueue } from "@/core/queue/ports";
 import type { VectorMetadataFilter, VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
 import type {
@@ -13,11 +14,14 @@ import type {
 } from "@/features/assets/model/types";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
 import { recallGraphStatements } from "@/features/memory/server/graph-recall";
+import { buildReinforceGraphAccessMessage } from "@/features/memory/server/reinforcement";
+import { applySalienceWeight } from "@/features/memory/server/salience";
 import type { EvidenceItem } from "@/features/search/model/evidence";
 import type { SearchResult } from "@/features/search/model/types";
 import { getAIProviderFromBindings } from "@/platform/ai/workers-ai/get-ai-provider";
 import { getAssetSearchRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
 import { getMemoryRepositoryFromBindings } from "@/platform/db/d1/repositories/get-memory-repository";
+import { getJobQueueFromBindings } from "@/platform/queue/cloudflare/get-job-queue";
 import { getGraphVectorStoreFromBindings } from "@/platform/vector/vectorize/get-graph-vector-store";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 import {
@@ -81,6 +85,10 @@ interface SearchServiceDependencies {
   getGraphVectorStore?: (
     bindings: AppBindings | undefined
   ) => VectorStore | null | Promise<VectorStore | null>;
+  // 访问写回闭环：命中图证据后入队强化消息（可选，缺失则跳过强化）。
+  getJobQueue?: (
+    bindings: AppBindings | undefined
+  ) => JobQueue | null | Promise<JobQueue | null>;
 }
 
 // graph 依赖工厂在绑定缺失时会抛错；这里包一层 try/catch 让图通道优雅降级为不可用。
@@ -100,6 +108,7 @@ const defaultDependencies: SearchServiceDependencies = {
   getAIProvider: getAIProviderFromBindings,
   getMemoryRepository: optionalGraphFactory(getMemoryRepositoryFromBindings),
   getGraphVectorStore: optionalGraphFactory(getGraphVectorStoreFromBindings),
+  getJobQueue: optionalGraphFactory(getJobQueueFromBindings),
 };
 
 const getSummaryMatches = async (
@@ -412,10 +421,17 @@ const buildGraphEvidence = async (
         return [];
       }
 
+      // 显著性加权：base 关联分 × recency 衰减 × importance × access 强化，
+      // 让久未访问的旧事实下沉、被反复命中的重要事实上浮。
+      const salienceWeighted = applySalienceWeight(hit.score, {
+        createdAt: hit.statement.createdAt,
+        importance: hit.statement.importance,
+        accessCount: hit.statement.accessCount,
+      });
       const item = buildGraphEvidenceItem(
         hit.statement,
         asset,
-        applyContextPolicyScore(hit.score, asset, contextPolicy)
+        applyContextPolicyScore(salienceWeighted, asset, contextPolicy)
       );
 
       return [
@@ -433,6 +449,58 @@ const buildGraphEvidence = async (
   } catch {
     // 图通道是增益项，任何失败都静默降级，不影响主检索结果。
     return [];
+  }
+};
+
+// 从分页后的证据项里提取被命中的 L2 陈述 id。
+// 图证据 id 形如 `statement:<statementId>:<assetId>`（见 buildGraphEvidenceItem），取第 2 段。
+const collectGraphStatementIds = (items: EvidenceItem[]): string[] => {
+  const ids = new Set<string>();
+
+  for (const item of items) {
+    if (item.layer !== "statement") {
+      continue;
+    }
+
+    const statementId = item.id.split(":")[1];
+
+    if (statementId) {
+      ids.add(statementId);
+    }
+  }
+
+  return [...ids];
+};
+
+// 访问写回闭环：把本页命中的图证据 statement 入队强化（bump access_count / last_accessed_at）。
+// best-effort——队列缺失、入队失败一律静默；payload 上限 100（与 reinforcement 校验对齐）。
+const reinforceGraphAccess = async (
+  dependencies: SearchServiceDependencies,
+  bindings: AppBindings | undefined,
+  items: EvidenceItem[]
+): Promise<void> => {
+  const getQueue = dependencies.getJobQueue;
+
+  if (!getQueue) {
+    return;
+  }
+
+  const statementIds = collectGraphStatementIds(items).slice(0, 100);
+
+  if (statementIds.length === 0) {
+    return;
+  }
+
+  try {
+    const jobQueue = await getQueue(bindings);
+
+    if (!jobQueue) {
+      return;
+    }
+
+    await jobQueue.enqueue(buildReinforceGraphAccessMessage(statementIds));
+  } catch {
+    // 强化是异步增益项，入队失败不影响本次检索结果。
   }
 };
 
@@ -555,6 +623,8 @@ export const createSearchService = (
       const orderedGroups = buildGroupedEvidence(rerankedEvidence);
       const pageGroups = orderedGroups.slice(offset, offset + pageSize);
       const pageItems = flattenGroupedEvidence(pageGroups);
+      // 访问写回闭环：本页真正回给用户的图证据才算「被检索命中」，入队异步强化（不阻塞返回）。
+      await reinforceGraphAccess(dependencies, bindings, pageItems);
       const resultScope = getContextResultScope(
         pageGroups.map((group) => group.asset),
         contextPolicy
