@@ -629,7 +629,13 @@ export const createMcpServer = (
       title: "Recall",
       description:
         "Recall the user's own stored memories relevant to the current task, " +
-        "returned as one merged, de-duplicated bundle. First expand the user's " +
+        "returned as one merged, de-duplicated bundle. Call this proactively " +
+        "whenever knowing the user would improve your answer: personalized " +
+        'advice or recommendations, decision questions ("should I…" / ' +
+        '"我该不该…"), anything where the user refers to "I / my / me", or any ' +
+        "task that needs their background, preferences, or history. When in " +
+        "doubt about whether you know the user well enough, recall first. " +
+        "First expand the user's " +
         "request into several focused sub-queries or keywords — e.g. for " +
         '"should I buy a house": age, income, city, marital status; for ' +
         '"build me a website": preferred stack, coding style, project ' +

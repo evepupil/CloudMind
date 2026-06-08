@@ -733,6 +733,9 @@ describe("mcp routes", () => {
     expect(toolsByName.recall?.description).toContain(
       "merged, de-duplicated bundle"
     );
+    // recall 的 description 必须带「何时主动调用」触发引导（个性化/决策类/提到"我"时）。
+    expect(toolsByName.recall?.description).toContain("Call this proactively");
+    expect(toolsByName.recall?.description).toContain("decision questions");
 
     // 回归保护：recall 对外暴露的 JSON schema 必须保留 properties。曾因 inputSchema 带
     // .transform() 退化为 ZodPipe，normalizeObjectSchema 返回 undefined，ListTools 暴露空
