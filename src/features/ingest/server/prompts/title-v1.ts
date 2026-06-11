@@ -19,6 +19,8 @@ export const titleV1: PromptTemplate<{
 
     return {
       prompt: [
+        // /no_think 关闭 qwen3 推理链路：标题任务无需推理，避免截断泄漏。
+        "/no_think",
         "请为 CloudMind 资产生成一个简洁准确的标题。",
         "要求：",
         "- 只输出标题正文，不要解释，不要 Markdown，不要引号。",

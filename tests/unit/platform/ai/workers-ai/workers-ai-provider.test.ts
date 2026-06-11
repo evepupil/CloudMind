@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   extractGeneratedText,
+  stripReasoningBlocks,
   WorkersAIProvider,
 } from "@/platform/ai/workers-ai/workers-ai-provider";
 
@@ -52,8 +53,32 @@ describe("extractGeneratedText", () => {
   });
 });
 
+describe("stripReasoningBlocks", () => {
+  it("removes <think> reasoning blocks and trims", () => {
+    expect(
+      stripReasoningBlocks("<think>let me reason</think>\n\nClean answer.")
+    ).toBe("Clean answer.");
+  });
+
+  it("leaves text without think blocks unchanged (trimmed)", () => {
+    expect(stripReasoningBlocks("  plain answer  ")).toBe("plain answer");
+  });
+
+  it("strips an unclosed <think> block (truncated mid-reasoning) to empty", () => {
+    expect(
+      stripReasoningBlocks("<think>truncated reasoning with no closing tag")
+    ).toBe("");
+  });
+
+  it("strips a trailing unclosed <think> but keeps preceding clean text", () => {
+    expect(
+      stripReasoningBlocks("Clean answer.\n<think>trailing reasoning")
+    ).toBe("Clean answer.");
+  });
+});
+
 describe("WorkersAIProvider.generateText", () => {
-  it("uses the normalized text extraction logic for model output", async () => {
+  it("sends system + user chat messages (not raw completion)", async () => {
     const runMock = vi.fn(async () => ({
       choices: [
         {
@@ -75,7 +100,10 @@ describe("WorkersAIProvider.generateText", () => {
     });
 
     expect(runMock).toHaveBeenCalledWith("@cf/qwen/qwen3-30b-a3b-fp8", {
-      prompt: "System prompt\n\nQuestion prompt",
+      messages: [
+        { role: "system", content: "System prompt" },
+        { role: "user", content: "Question prompt" },
+      ],
       temperature: 0.2,
       max_tokens: 300,
     });
@@ -84,6 +112,32 @@ describe("WorkersAIProvider.generateText", () => {
       provider: "workers_ai",
       model: "@cf/qwen/qwen3-30b-a3b-fp8",
     });
+  });
+
+  it("omits the system message when no systemPrompt is provided", async () => {
+    const runMock = vi.fn(async () => ({ response: "ok" }));
+    const provider = new WorkersAIProvider({
+      run: runMock,
+    } as unknown as Ai);
+
+    await provider.generateText({ prompt: "just user" });
+
+    expect(runMock).toHaveBeenCalledWith("@cf/qwen/qwen3-30b-a3b-fp8", {
+      messages: [{ role: "user", content: "just user" }],
+    });
+  });
+
+  it("strips qwen3 <think> reasoning blocks from the generated text", async () => {
+    const runMock = vi.fn(async () => ({
+      response: "<think>reasoning here</think>Clean summary text.",
+    }));
+    const provider = new WorkersAIProvider({
+      run: runMock,
+    } as unknown as Ai);
+
+    const result = await provider.generateText({ prompt: "summarize" });
+
+    expect(result.text).toBe("Clean summary text.");
   });
 });
 

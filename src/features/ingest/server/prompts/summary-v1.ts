@@ -15,6 +15,9 @@ export const summaryV1: PromptTemplate<{
 
     return {
       prompt: [
+        // /no_think 关闭 qwen3 推理链路：摘要任务无需推理，省 token，且避免
+        // reasoning 占满输出预算被截断、<think> 未闭合而泄漏进摘要。
+        "/no_think",
         "请为 CloudMind 资产生成一个高质量摘要。",
         "要求：",
         "- 只输出摘要正文，不要解释，不要列表，不要 Markdown。",

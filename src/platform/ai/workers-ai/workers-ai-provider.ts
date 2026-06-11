@@ -70,6 +70,16 @@ export const extractGeneratedText = (output: unknown): string => {
   return "";
 };
 
+// qwen3 等推理模型即便在 chat 模式下仍可能吐 <think>…</think> 推理块。
+// 统一在 provider 出口剥离，避免推理文本混入摘要/标题等下游自由文本。
+// 第二条 replace 兜底「被 max_tokens 截断、只有开标签没有 </think>」的情况——
+// 否则惰性匹配找不到闭合标签，整段 reasoning 会原样泄漏进输出。
+export const stripReasoningBlocks = (text: string): string =>
+  text
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<think>[\s\S]*$/i, "")
+    .trim();
+
 // 这里封装 Workers AI，避免业务层直接依赖 Cloudflare 运行时细节。
 export class WorkersAIProvider implements AIProvider {
   private readonly ai: Ai;
@@ -83,15 +93,23 @@ export class WorkersAIProvider implements AIProvider {
   public async generateText(
     input: GenerateTextInput
   ): Promise<GenerateTextResult> {
-    const prompt = input.systemPrompt
-      ? `${input.systemPrompt}\n\n${input.prompt}`
-      : input.prompt;
+    // 用 chat messages 格式（system + user）而非 raw { prompt } completion——
+    // qwen3 是指令模型，completion 模式下会续写 prompt（echo「要求/标题/正文」+
+    // 重复），污染摘要/标题。chat 格式下模型把 prompt 当指令执行，从根上消除 echo。
+    const messages: Array<{ role: "system" | "user"; content: string }> = [];
+
+    if (input.systemPrompt) {
+      messages.push({ role: "system", content: input.systemPrompt });
+    }
+
+    messages.push({ role: "user", content: input.prompt });
+
     const modelInput: {
-      prompt: string;
+      messages: Array<{ role: "system" | "user"; content: string }>;
       temperature?: number;
       max_tokens?: number;
     } = {
-      prompt,
+      messages,
     };
 
     if (input.temperature !== undefined) {
@@ -105,7 +123,7 @@ export class WorkersAIProvider implements AIProvider {
     const output = await this.ai.run(TEXT_GENERATION_MODEL, modelInput);
 
     return {
-      text: extractGeneratedText(output),
+      text: stripReasoningBlocks(extractGeneratedText(output)),
       provider: PROVIDER_NAME,
       model: TEXT_GENERATION_MODEL,
     };
