@@ -1,0 +1,394 @@
+snapshot: 1
+base: 0
+date: 2026-06-14
+commits:
+  - 62bbf85
+  - a4cb55f
+  - 47a994e
+  - 3efac01
+  - 0fc304b
+  - 292bcc1
+  - b873b0d
+  - 91f2ac0
+  - 45e6b81
+  - b26bb11
+  - 56daa51
+  - 5b0b501
+  - e312b18
+  - ebbad8f
+  - d6d0f6c
+  - 357fe98
+  - cdae392
+  - "5610295"
+  - fcf7615
+  - 50265a6
+  - 82046b4
+  - 5c900de
+  - bc946d7
+  - ea040f1
+  - 6dbef58
+  - 3f44357
+  - 87c2f63
+  - 692c068
+  - ab3063e
+  - 669deb3
+  - 1788a23
+  - 0b6ab9d
+  - 2f718d8
+  - 207eb6a
+  - 53e6f13
+  - 2ea033a
+  - 03ac9ae
+  - "192e855"
+  - c3a9c4c
+  - 6aa63bb
+  - 88f9d00
+  - 2b4d136
+  - 64d667c
+  - a05dd29
+  - db3700f
+  - bf86455
+  - 88b1c0d
+  - 0a82379
+  - 1e67bea
+  - 55e96e8
+  - 17eea47
+  - 2ab3bf0
+  - d47d1f2
+  - ed1dfe2
+  - 7a631e0
+  - e4453a4
+  - f9f58ae
+  - dff9d85
+  - 922cff2
+  - d302357
+  - 21c1026
+  - 387a718
+  - 33de0f8
+  - 3ec79d4
+  - afc22d0
+  - bd5bc0e
+  - 40a8880
+  - dd3d2c5
+  - 4bd1a78
+  - 1adb184
+  - ecb5bde
+  - bc10a47
+  - 7b74995
+  - 99dfa8b
+  - 5b272ba
+  - 8342c40
+  - 2aa3e47
+  - 9f7054e
+  - cceed0d
+  - 99c27b9
+  - 8ccdae1
+  - "8259781"
+  - 04fe039
+  - d3b8e4b
+  - "9e46959"
+  - a769c23
+  - d5f3787
+  - 839b5b6
+  - 212ca30
+  - d92e0a7
+  - 64f67ee
+  - a98758c
+  - 9b7db6e
+  - 9ff502c
+  - 0f6e062
+  - 979e1be
+  - 86714c7
+  - e712a4f
+  - 8f11878
+  - 9acd13c
+  - a5f131b
+  - e0b5c9d
+  - "803e367"
+  - f7e1556
+  - a89b712
+  - 445eac0
+  - dc92d84
+  - b82f127
+  - 2b66ccc
+  - 884b8b7
+  - 7bf07af
+  - 3abbc9b
+  - b69104a
+  - fd0da35
+  - 6c238f8
+  - 50e57d1
+  - "51377e3"
+  - 1c0ecea
+  - 613dad2
+  - 96f3f6e
+  - c1cc22b
+  - b1b3994
+  - c6d698c
+  - 59f36d9
+  - 1de9bfd
+  - 5ea9286
+  - f95dfb8
+  - 9af40b3
+  - 4e66a94
+  - ab694d8
+  - fc87c6f
+  - a5af89b
+  - bff163b
+  - 5ae90ae
+  - ccda024
+  - d3c6752
+  - 2fa6528
+  - f706dba
+  - 845f0f1
+  - fa2eeb8
+  - 9bc8973
+  - ed5d67f
+  - af82dab
+  - "6442111"
+kind: init
+title: 首次建图
+story: |
+  CloudMind 是开源、自部署在 Cloudflare 上的个人 AI 记忆库。把网页/文本/PDF
+  收进来，队列异步清洗、摘要、分类、切块、向量化，并抽实体建带时效的知识图谱。
+  对外提供网页后台、混合检索问答与 MCP 工具供 AI 客户端读写。业务经 Core
+  端口抽象、D1/R2/Vectorize/Workers AI 适配实现，预留迁移 pgvector 边界。
+patch:
+  - op: add_module
+    module:
+      id: ingest
+      name: 采集入库
+      summary: 把网址/文本/PDF/记忆收进系统，建资产并投递异步处理
+      anchors:
+        - src/features/ingest/**
+        - src/features/capture/**
+        - tests/unit/features/ingest/**
+  - op: add_module
+    module:
+      id: workflows
+      name: 处理流水线
+      summary: 队列与定时消费者，分步清洗摘要分类切块向量化并抽实体
+      anchors:
+        - src/features/workflows/**
+        - tests/unit/features/workflows/**
+  - op: add_module
+    module:
+      id: memory
+      name: 记忆图谱
+      summary: L2/L3 知识图谱：抽取、增改删调和、图检索、显著性、整合遗忘
+      anchors:
+        - src/features/memory/**
+        - tests/unit/features/memory/**
+  - op: add_module
+    module:
+      id: retrieval
+      name: 检索问答
+      summary: 全文加语义混合检索、重排、记忆召回，生成带来源的问答
+      anchors:
+        - src/features/search/**
+        - src/features/chat/**
+        - tests/unit/features/search/**
+        - tests/unit/features/chat/**
+        - tests/eval/**
+  - op: add_module
+    module:
+      id: assets
+      name: 资产管理
+      summary: 资产的增删改查、列表详情、软删除与恢复
+      anchors:
+        - src/features/assets/**
+        - tests/unit/features/assets/**
+  - op: add_module
+    module:
+      id: mcp
+      name: MCP 接口
+      summary: 对外暴露 MCP 工具，并签发管理访问令牌
+      anchors:
+        - src/features/mcp/**
+        - src/features/mcp-tokens/**
+        - tests/unit/features/mcp/**
+  - op: add_module
+    module:
+      id: auth
+      name: 认证会话
+      summary: 登录、会话、改密与请求鉴权中间件
+      anchors:
+        - src/features/auth/**
+  - op: add_module
+    module:
+      id: web
+      name: 界面与入口
+      summary: HonoX 应用入口、页面路由、渲染壳与健康检查
+      anchors:
+        - app/**
+        - src/features/home/**
+        - src/features/layout/**
+        - src/features/health/**
+        - src/styles/**
+  - op: add_module
+    module:
+      id: infra
+      name: 基础设施
+      summary: Cloudflare 适配边界：端口抽象、平台实现与工程脚手架
+      anchors: []
+  - op: add_module
+    parent: infra
+    module:
+      id: core
+      name: 领域抽象
+      summary: 资产/向量/存储/队列/AI 等端口接口与领域类型
+      anchors:
+        - src/core/**
+        - src/env.ts
+  - op: add_module
+    parent: infra
+    module:
+      id: platform
+      name: 平台适配
+      summary: D1/R2/Vectorize/队列/AI 的 Cloudflare 适配实现
+      anchors:
+        - src/platform/**
+        - drizzle/**
+        - drizzle.config.ts
+        - tests/unit/platform/**
+  - op: add_module
+    parent: infra
+    module:
+      id: scaffold
+      name: 工程脚手架
+      summary: 文档、构建部署配置与运维脚本
+      anchors:
+        - docs/**
+        - scripts/**
+        - public/**
+        - README.md
+        - README.zh-CN.md
+        - AGENTS.md
+        - CLAUDE.md
+        - biome.json
+        - wrangler.jsonc
+        - vite.config.ts
+        - vitest.config.ts
+        - tsconfig.json
+        - tsconfig.base.json
+        - package.json
+        - package-lock.json
+        - pnpm-lock.yaml
+        - .gitattributes
+  - op: add_relation
+    from: ingest
+    relation:
+      to: workflows
+      kind: notifies
+      summary: 投递队列触发处理流水线
+  - op: add_relation
+    from: workflows
+    relation:
+      to: ingest
+      kind: calls
+      summary: 复用内容清洗摘要与向量化
+  - op: add_relation
+    from: workflows
+    relation:
+      to: memory
+      kind: calls
+      summary: 抽取实体写入知识图谱
+  - op: add_relation
+    from: retrieval
+    relation:
+      to: memory
+      kind: calls
+      summary: 融合图谱召回与显著性
+  - op: add_relation
+    from: mcp
+    relation:
+      to: ingest
+      kind: calls
+      summary: 暴露保存与 remember 工具
+  - op: add_relation
+    from: mcp
+    relation:
+      to: retrieval
+      kind: calls
+      summary: 暴露搜索与记忆召回工具
+  - op: add_relation
+    from: mcp
+    relation:
+      to: assets
+      kind: calls
+      summary: 暴露资产读写工具
+  - op: add_relation
+    from: web
+    relation:
+      to: auth
+      kind: calls
+      summary: 入口挂载登录与会话中间件
+  - op: add_relation
+    from: platform
+    relation:
+      to: core
+      kind: depends
+      summary: 实现资产/向量/AI 等端口
+  - op: add_feature
+    feature:
+      id: feat-save-content
+      name: 采集保存
+      summary: 保存网页/文本/PDF，自动摘要打标签切块向量化入库
+      modules:
+        - ingest
+        - workflows
+  - op: add_feature
+    feature:
+      id: feat-semantic-search
+      name: 语义搜索
+      summary: 全文加语义混合检索并标注来源
+      modules:
+        - retrieval
+  - op: add_feature
+    feature:
+      id: feat-ai-qa
+      name: AI 问答
+      summary: 从知识库检索片段生成带来源的回答
+      modules:
+        - retrieval
+  - op: add_feature
+    feature:
+      id: feat-memory-graph
+      name: 记忆图谱
+      summary: 个人知识图谱：实体、带时效的陈述与关系
+      modules:
+        - memory
+        - workflows
+  - op: add_feature
+    feature:
+      id: feat-memory-verbs
+      name: 记忆动词
+      summary: AI 用 remember 写、recall 读个人记忆
+      modules:
+        - memory
+        - retrieval
+        - ingest
+  - op: add_feature
+    feature:
+      id: feat-mcp-access
+      name: MCP 接入
+      summary: 暴露 MCP 工具供外部 AI 客户端读写知识库
+      modules:
+        - mcp
+  - op: add_feature
+    feature:
+      id: feat-asset-admin
+      name: 资产后台
+      summary: 网页后台管理资产：列表、详情、编辑、回收站
+      modules:
+        - assets
+        - web
+  - op: add_feature
+    feature:
+      id: feat-auth-login
+      name: 登录认证
+      summary: 单用户账号登录、会话与改密
+      modules:
+        - auth
+dirty_checked: []
+no_change: []

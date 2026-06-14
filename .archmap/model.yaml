@@ -1,0 +1,229 @@
+version: 1
+modules:
+  - id: ingest
+    name: 采集入库
+    summary: 把网址/文本/PDF/记忆收进系统，建资产并投递异步处理
+    anchors:
+      - src/features/ingest/**
+      - src/features/capture/**
+      - tests/unit/features/ingest/**
+    children: []
+    relations:
+      - to: workflows
+        kind: notifies
+        summary: 投递队列触发处理流水线
+    status: active
+  - id: workflows
+    name: 处理流水线
+    summary: 队列与定时消费者，分步清洗摘要分类切块向量化并抽实体
+    anchors:
+      - src/features/workflows/**
+      - tests/unit/features/workflows/**
+    children: []
+    relations:
+      - to: ingest
+        kind: calls
+        summary: 复用内容清洗摘要与向量化
+      - to: memory
+        kind: calls
+        summary: 抽取实体写入知识图谱
+    status: active
+  - id: memory
+    name: 记忆图谱
+    summary: L2/L3 知识图谱：抽取、增改删调和、图检索、显著性、整合遗忘
+    anchors:
+      - src/features/memory/**
+      - tests/unit/features/memory/**
+    children: []
+    relations: []
+    status: active
+  - id: retrieval
+    name: 检索问答
+    summary: 全文加语义混合检索、重排、记忆召回，生成带来源的问答
+    anchors:
+      - src/features/search/**
+      - src/features/chat/**
+      - tests/unit/features/search/**
+      - tests/unit/features/chat/**
+      - tests/eval/**
+    children: []
+    relations:
+      - to: memory
+        kind: calls
+        summary: 融合图谱召回与显著性
+    status: active
+  - id: assets
+    name: 资产管理
+    summary: 资产的增删改查、列表详情、软删除与恢复
+    anchors:
+      - src/features/assets/**
+      - tests/unit/features/assets/**
+    children: []
+    relations: []
+    status: active
+  - id: mcp
+    name: MCP 接口
+    summary: 对外暴露 MCP 工具，并签发管理访问令牌
+    anchors:
+      - src/features/mcp/**
+      - src/features/mcp-tokens/**
+      - tests/unit/features/mcp/**
+    children: []
+    relations:
+      - to: ingest
+        kind: calls
+        summary: 暴露保存与 remember 工具
+      - to: retrieval
+        kind: calls
+        summary: 暴露搜索与记忆召回工具
+      - to: assets
+        kind: calls
+        summary: 暴露资产读写工具
+    status: active
+  - id: auth
+    name: 认证会话
+    summary: 登录、会话、改密与请求鉴权中间件
+    anchors:
+      - src/features/auth/**
+    children: []
+    relations: []
+    status: active
+  - id: web
+    name: 界面与入口
+    summary: HonoX 应用入口、页面路由、渲染壳与健康检查
+    anchors:
+      - app/**
+      - src/features/home/**
+      - src/features/layout/**
+      - src/features/health/**
+      - src/styles/**
+    children: []
+    relations:
+      - to: auth
+        kind: calls
+        summary: 入口挂载登录与会话中间件
+    status: active
+  - id: infra
+    name: 基础设施
+    summary: Cloudflare 适配边界：端口抽象、平台实现与工程脚手架
+    anchors: []
+    children:
+      - id: core
+        name: 领域抽象
+        summary: 资产/向量/存储/队列/AI 等端口接口与领域类型
+        anchors:
+          - src/core/**
+          - src/env.ts
+        children: []
+        relations: []
+        status: active
+      - id: platform
+        name: 平台适配
+        summary: D1/R2/Vectorize/队列/AI 的 Cloudflare 适配实现
+        anchors:
+          - src/platform/**
+          - drizzle/**
+          - drizzle.config.ts
+          - tests/unit/platform/**
+        children: []
+        relations:
+          - to: core
+            kind: depends
+            summary: 实现资产/向量/AI 等端口
+        status: active
+      - id: scaffold
+        name: 工程脚手架
+        summary: 文档、构建部署配置与运维脚本
+        anchors:
+          - docs/**
+          - scripts/**
+          - public/**
+          - README.md
+          - README.zh-CN.md
+          - AGENTS.md
+          - CLAUDE.md
+          - biome.json
+          - wrangler.jsonc
+          - vite.config.ts
+          - vitest.config.ts
+          - tsconfig.json
+          - tsconfig.base.json
+          - package.json
+          - package-lock.json
+          - pnpm-lock.yaml
+          - .gitattributes
+        children: []
+        relations: []
+        status: active
+    relations: []
+    status: active
+features:
+  - id: feat-save-content
+    name: 采集保存
+    summary: 保存网页/文本/PDF，自动摘要打标签切块向量化入库
+    modules:
+      - ingest
+      - workflows
+    anchors: []
+    since: 1
+    status: active
+  - id: feat-semantic-search
+    name: 语义搜索
+    summary: 全文加语义混合检索并标注来源
+    modules:
+      - retrieval
+    anchors: []
+    since: 1
+    status: active
+  - id: feat-ai-qa
+    name: AI 问答
+    summary: 从知识库检索片段生成带来源的回答
+    modules:
+      - retrieval
+    anchors: []
+    since: 1
+    status: active
+  - id: feat-memory-graph
+    name: 记忆图谱
+    summary: 个人知识图谱：实体、带时效的陈述与关系
+    modules:
+      - memory
+      - workflows
+    anchors: []
+    since: 1
+    status: active
+  - id: feat-memory-verbs
+    name: 记忆动词
+    summary: AI 用 remember 写、recall 读个人记忆
+    modules:
+      - memory
+      - retrieval
+      - ingest
+    anchors: []
+    since: 1
+    status: active
+  - id: feat-mcp-access
+    name: MCP 接入
+    summary: 暴露 MCP 工具供外部 AI 客户端读写知识库
+    modules:
+      - mcp
+    anchors: []
+    since: 1
+    status: active
+  - id: feat-asset-admin
+    name: 资产后台
+    summary: 网页后台管理资产：列表、详情、编辑、回收站
+    modules:
+      - assets
+      - web
+    anchors: []
+    since: 1
+    status: active
+  - id: feat-auth-login
+    name: 登录认证
+    summary: 单用户账号登录、会话与改密
+    modules:
+      - auth
+    anchors: []
+    since: 1
+    status: active
