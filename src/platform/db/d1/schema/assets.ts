@@ -39,6 +39,8 @@ export const assets = sqliteTable(
       .notNull()
       .default("allow"),
     retrievalPriority: integer("retrieval_priority").notNull().default(0),
+    // scope 隔离：personal=用户显式记忆（默认）、agent=agent 自动记忆（一期只用 personal）。
+    scopeId: text("scope_id").notNull().default("personal"),
     sourceHost: text("source_host"),
     collectionKey: text("collection_key"),
     capturedAt: text("captured_at"),
@@ -65,6 +67,7 @@ export const assets = sqliteTable(
     index("assets_captured_at_idx").on(table.capturedAt),
     index("assets_source_url_idx").on(table.sourceUrl),
     index("assets_deleted_at_idx").on(table.deletedAt),
+    index("assets_scope_id_idx").on(table.scopeId),
     index("assets_domain_status_deleted_at_idx").on(
       table.domain,
       table.status,

@@ -310,7 +310,8 @@ const buildSemanticVectorFilter = (
   const applied = getSearchFilters(filters);
   const filter: VectorMetadataFilter = {
     aiVisibility: { $eq: "allow" },
-    scopeId: { $eq: "default" },
+    // 一期：检索默认只查人记忆 scope（personal）；agent 记忆隔离、不进默认检索，二期参数化。
+    scopeId: { $eq: "personal" },
   };
 
   if (applied.type) {
@@ -420,7 +421,8 @@ const buildGraphEvidence = async (
       queryVector,
       repository: memoryRepository,
       graphVectorStore,
-      scopeId: "default",
+      // 一期：L2 图通道同样只查 personal scope（与 dense/lexical 一致）。
+      scopeId: "personal",
     });
 
     const hydrate = assetRepository.getAssetSummariesByIds;

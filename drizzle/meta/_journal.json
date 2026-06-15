@@ -99,6 +99,13 @@
       "when": 1780802238584,
       "tag": "0013_wave_b_l1_slim",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1781536185341,
+      "tag": "0014_add_scope_isolation",
+      "breakpoints": true
     }
   ]
 }

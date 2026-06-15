@@ -28,6 +28,7 @@ export const mapAssetSummary = (
     domain: record.domain,
     aiVisibility: record.aiVisibility,
     retrievalPriority: record.retrievalPriority,
+    scopeId: record.scopeId,
     sourceHost: record.sourceHost,
     collectionKey: record.collectionKey,
     capturedAt: record.capturedAt,
@@ -79,7 +80,8 @@ export const mapChunkMatch = (record: {
 // L1 瘦身后不再有承载表，这里暂不生效（保留入参以维持 API 兼容）。
 // collection 走 assets.collection_key 这一客观 L1 列，仍然生效。
 export const buildAssetListWhereClause = (query?: AssetListQuery) => {
-  const conditions = [];
+  // 一期：默认只列人记忆 scope（personal），agent 记忆隔离；二期按调用方 scope 参数化。
+  const conditions = [eq(assets.scopeId, "personal")];
 
   if (query?.deleted === "only") {
     conditions.push(isNotNull(assets.deletedAt));
@@ -141,7 +143,12 @@ export const buildAssetListWhereClause = (query?: AssetListQuery) => {
 export const buildAssetSearchFilterConditions = (
   filters?: AssetSearchFilters
 ) => {
-  const conditions = [isNull(assets.deletedAt), eq(assets.status, "ready")];
+  // 一期：lexical 通道默认只查人记忆 scope（personal），与 dense/L2 一致。
+  const conditions = [
+    isNull(assets.deletedAt),
+    eq(assets.status, "ready"),
+    eq(assets.scopeId, "personal"),
+  ];
 
   if (filters?.type) {
     conditions.push(eq(assets.type, filters.type));

@@ -53,6 +53,7 @@ const graphAsset = (
   domain: "engineering",
   aiVisibility,
   retrievalPriority: 0,
+  scopeId: "personal",
   sourceHost: null,
   collectionKey: "inbox:notes",
   capturedAt: "2026-03-19T00:00:00.000Z",

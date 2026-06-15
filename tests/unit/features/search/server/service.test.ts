@@ -97,6 +97,7 @@ class InMemorySearchRepository implements AssetSearchRepository {
           aiVisibility:
             index === 1 ? ("summary_only" as const) : ("allow" as const),
           retrievalPriority: 10,
+          scopeId: "personal",
           collectionKey: "inbox:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
           createdAt: "2026-03-19T00:00:00.000Z",
@@ -142,6 +143,7 @@ class InMemorySearchRepository implements AssetSearchRepository {
           domain: "product",
           aiVisibility: "summary_only",
           retrievalPriority: 25,
+          scopeId: "personal",
           collectionKey: "inbox:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
           createdAt: "2026-03-19T00:00:00.000Z",
@@ -225,6 +227,7 @@ class MixedDomainSearchRepository implements AssetSearchRepository {
           domain: "personal",
           aiVisibility: "allow",
           retrievalPriority: 0,
+          scopeId: "personal",
           collectionKey: "inbox:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
           createdAt: "2026-03-19T00:00:00.000Z",
@@ -248,6 +251,7 @@ class MixedDomainSearchRepository implements AssetSearchRepository {
           domain: "engineering",
           aiVisibility: "allow",
           retrievalPriority: 0,
+          scopeId: "personal",
           collectionKey: "inbox:notes",
           capturedAt: "2026-03-19T00:00:00.000Z",
           createdAt: "2026-03-19T00:00:00.000Z",
@@ -300,6 +304,7 @@ class DuplicateAssetSearchRepository implements AssetSearchRepository {
           domain: "engineering",
           aiVisibility: "allow",
           retrievalPriority: 20,
+          scopeId: "personal",
           collectionKey: "engineering:notes",
           capturedAt: "2026-03-24T00:00:00.000Z",
           createdAt: "2026-03-24T00:00:00.000Z",
@@ -323,6 +328,7 @@ class DuplicateAssetSearchRepository implements AssetSearchRepository {
           domain: "engineering",
           aiVisibility: "allow",
           retrievalPriority: 20,
+          scopeId: "personal",
           collectionKey: "engineering:notes",
           capturedAt: "2026-03-24T00:00:00.000Z",
           createdAt: "2026-03-24T00:00:00.000Z",
@@ -346,6 +352,7 @@ class DuplicateAssetSearchRepository implements AssetSearchRepository {
           domain: "engineering",
           aiVisibility: "allow",
           retrievalPriority: 0,
+          scopeId: "personal",
           collectionKey: "engineering:notes",
           capturedAt: "2026-02-01T00:00:00.000Z",
           createdAt: "2026-02-01T00:00:00.000Z",
@@ -400,6 +407,7 @@ class HardFilterAwareSearchRepository implements AssetSearchRepository {
           domain: "personal",
           aiVisibility: "allow",
           retrievalPriority: 0,
+          scopeId: "personal",
           collectionKey: "personal:notes",
           capturedAt: "2026-03-24T00:00:00.000Z",
           createdAt: "2026-03-24T00:00:00.000Z",
@@ -423,6 +431,7 @@ class HardFilterAwareSearchRepository implements AssetSearchRepository {
           domain: "engineering",
           aiVisibility: "allow",
           retrievalPriority: 0,
+          scopeId: "personal",
           collectionKey: "engineering:notes",
           capturedAt: "2026-03-24T00:00:00.000Z",
           createdAt: "2026-03-24T00:00:00.000Z",
@@ -491,7 +500,7 @@ describe("search service", () => {
       topK: 2,
       filter: {
         aiVisibility: { $eq: "allow" },
-        scopeId: { $eq: "default" },
+        scopeId: { $eq: "personal" },
       },
     });
     expect(repository.summaryQueries).toEqual([
@@ -957,7 +966,7 @@ describe("search service", () => {
     expect(searchInputs[0]?.filter).toMatchObject({
       aiVisibility: { $eq: "allow" },
       domain: { $eq: "engineering" },
-      scopeId: { $eq: "default" },
+      scopeId: { $eq: "personal" },
     });
     expect(result.items).toHaveLength(1);
     expect(result.items[0]?.kind).toBe("chunk");
@@ -1032,6 +1041,7 @@ describe("search service", () => {
       domain: "engineering" as const,
       aiVisibility: "allow" as const,
       retrievalPriority: 0,
+      scopeId: "personal",
       collectionKey: "engineering:notes",
       capturedAt: "2026-03-24T00:00:00.000Z",
       createdAt: "2026-03-24T00:00:00.000Z",

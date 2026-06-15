@@ -25,7 +25,8 @@ import {
   statements,
 } from "@/platform/db/d1/schema";
 
-const DEFAULT_SCOPE = "default";
+// 一期：未显式指定 scope 时默认人记忆 personal（agent scope 留二期由调用方显式传）。
+const DEFAULT_SCOPE = "personal";
 
 // 把 statements 行投影为读模型（统一 null 语义）。
 type StatementRow = typeof statements.$inferSelect;

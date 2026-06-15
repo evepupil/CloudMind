@@ -195,6 +195,7 @@ const toAssetSummary = (asset: CorpusAsset): AssetSummary => ({
   domain: asset.domain,
   aiVisibility: asset.aiVisibility ?? "allow",
   retrievalPriority: 0,
+  scopeId: "personal",
   collectionKey: "inbox:notes",
   capturedAt: asset.capturedAt ?? ISO,
   createdAt: asset.capturedAt ?? ISO,

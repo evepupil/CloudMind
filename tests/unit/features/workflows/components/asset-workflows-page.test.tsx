@@ -19,6 +19,7 @@ const createAssetDetail = (
     domain: "engineering",
     aiVisibility: "allow",
     retrievalPriority: 0,
+    scopeId: "personal",
     sourceHost: "github.com",
     collectionKey: "cloudmind/notes",
     capturedAt: "2026-03-28T10:00:00.000Z",

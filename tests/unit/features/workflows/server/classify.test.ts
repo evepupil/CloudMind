@@ -15,6 +15,7 @@ const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => ({
   domain: "general",
   aiVisibility: "allow",
   retrievalPriority: 0,
+  scopeId: "personal",
   sourceHost: null,
   collectionKey: null,
   capturedAt: "2026-06-07T00:00:00.000Z",

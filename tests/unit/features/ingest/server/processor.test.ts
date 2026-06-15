@@ -99,6 +99,7 @@ const createAsset = (overrides: Partial<AssetDetail> = {}): AssetDetail => {
     domain: "general",
     aiVisibility: "allow",
     retrievalPriority: 0,
+    scopeId: "personal",
     collectionKey: "inbox:notes",
     capturedAt: "2026-03-19T00:00:00.000Z",
     createdAt: "2026-03-19T00:00:00.000Z",

@@ -22,6 +22,7 @@ const asset = (over: Partial<AssetSummary> = {}): AssetSummary => ({
   domain: "general",
   aiVisibility: "allow",
   retrievalPriority: 0,
+  scopeId: "personal",
   collectionKey: null,
   capturedAt: null,
   createdAt: "2026-06-07T00:00:00.000Z",

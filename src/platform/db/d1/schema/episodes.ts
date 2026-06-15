@@ -15,7 +15,8 @@ export const episodes = sqliteTable(
   "episodes",
   {
     id: text("id").primaryKey(),
-    // scope_id 贯穿三层；MVP 仅用默认值（ADR-004），多 scope 留接口不实现。
+    // scope_id 贯穿三层。DDL 兜底保持 "default" 以避免 SQLite 改 default 触发整表
+    // recreate；运行时人记忆 scope=personal 由代码层（DEFAULT_SCOPE + 写入传值）保证。
     scopeId: text("scope_id").notNull().default("default"),
     kind: text("kind", { enum: episodeKindValues }).notNull(),
     // doc 导入路径关联到 L1 asset；纯 chat/agent 情节可为空。

@@ -29,6 +29,7 @@ const createAsset = (): AssetDetail => {
     domain: "general",
     aiVisibility: "allow",
     retrievalPriority: 0,
+    scopeId: "personal",
     sourceHost: null,
     collectionKey: "inbox:notes",
     capturedAt: "2026-03-20T00:00:00.000Z",

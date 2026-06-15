@@ -89,6 +89,8 @@ export interface AssetSummary {
   domain: AssetDomain;
   aiVisibility: AssetAiVisibility;
   retrievalPriority: number;
+  // scope 隔离：personal=用户显式记忆、agent=agent 自动记忆（一期只用 personal）。
+  scopeId: string;
   sourceHost?: string | null | undefined;
   collectionKey: string | null;
   capturedAt: string | null;

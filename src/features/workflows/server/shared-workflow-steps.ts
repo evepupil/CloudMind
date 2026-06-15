@@ -481,11 +481,18 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
     const episode = await memoryRepository.createEpisode({
       kind: "ingest",
       assetId: context.asset.id,
+      // scope 跟随写入 asset（与 chunk 向量 metadata 一致），不依赖仓储默认值，
+      // 防二期 agent scope 资产经同一流水线时其图谱被误写进 personal。
+      scopeId: context.asset.scopeId,
     });
 
     const result = await writeGraphToMemory(
       memoryRepository,
-      { assetId: context.asset.id, episodeId: episode.id },
+      {
+        assetId: context.asset.id,
+        episodeId: episode.id,
+        scopeId: context.asset.scopeId,
+      },
       graph,
       {
         // 可选 embedding 消歧：graph VectorStore 未绑定时省略（退回精确归一化名匹配）。
