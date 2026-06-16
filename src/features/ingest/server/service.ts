@@ -7,6 +7,7 @@ import type {
 import { createRawAssetBlobKey } from "@/core/blob/keys";
 import type { BlobStore } from "@/core/blob/ports";
 import { createLogger } from "@/core/logging/logger";
+import { AGENT_SCOPE } from "@/core/memory/scope";
 import type { JobQueue } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { WebPageFetcher } from "@/core/web/ports";
@@ -617,6 +618,23 @@ export const createIngestService = (
         ...(input.visibility ? { aiVisibility: input.visibility } : {}),
       });
     },
+
+    // remember_agent：AI 自动沉淀的 agent 记忆，写入 scope=agent，默认不进日常检索，
+    // 只能由专用读取接口（recall_agent）显式调出。同样复用 note 流水线。
+    async rememberAgentMemory(
+      bindings: AppBindings | undefined,
+      input: {
+        content: string;
+        title?: string | undefined;
+      }
+    ): Promise<AssetDetail> {
+      return service.ingestTextAsset(bindings, {
+        title: input.title,
+        content: input.content,
+        sourceKind: "mcp",
+        scopeId: AGENT_SCOPE,
+      });
+    },
   };
 
   return service;
@@ -629,6 +647,7 @@ export const {
   ingestUrlAsset,
   ingestFileAsset,
   rememberMemory,
+  rememberAgentMemory,
   reprocessAsset,
   backfillChunkContent,
 } = ingestService;

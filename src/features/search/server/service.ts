@@ -5,6 +5,7 @@ import type {
 } from "@/core/assets/ports";
 import { createLogger } from "@/core/logging/logger";
 import type { MemoryRepository } from "@/core/memory/ports";
+import { PERSONAL_SCOPE } from "@/core/memory/scope";
 import type { JobQueue } from "@/core/queue/ports";
 import type { VectorMetadataFilter, VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
@@ -65,6 +66,7 @@ const getSearchFilters = (input: AssetSearchFilters): AssetSearchFilters => {
     topic: input.topic,
     tag: input.tag,
     collection: input.collection,
+    scopeId: input.scopeId,
   };
 };
 
@@ -310,8 +312,8 @@ const buildSemanticVectorFilter = (
   const applied = getSearchFilters(filters);
   const filter: VectorMetadataFilter = {
     aiVisibility: { $eq: "allow" },
-    // 一期：检索默认只查人记忆 scope（personal）；agent 记忆隔离、不进默认检索，二期参数化。
-    scopeId: { $eq: "personal" },
+    // 检索默认只查 personal（人记忆）；recall_agent 显式传 scope=agent 时查 agent。
+    scopeId: { $eq: applied.scopeId ?? PERSONAL_SCOPE },
   };
 
   if (applied.type) {
@@ -398,7 +400,8 @@ const buildGraphEvidence = async (
   assetRepository: AssetSearchRepository,
   contextPolicy?: ContextRetrievalPolicy,
   createdAtFrom?: string,
-  createdAtTo?: string
+  createdAtTo?: string,
+  scopeId?: string
 ): Promise<EvidenceItem[]> => {
   const getMemory = dependencies.getMemoryRepository;
   const getGraph = dependencies.getGraphVectorStore;
@@ -421,8 +424,8 @@ const buildGraphEvidence = async (
       queryVector,
       repository: memoryRepository,
       graphVectorStore,
-      // 一期：L2 图通道同样只查 personal scope（与 dense/lexical 一致）。
-      scopeId: "personal",
+      // L2 图通道与 dense/lexical 一致：默认 personal，显式传入时查指定 scope。
+      scopeId: scopeId ?? PERSONAL_SCOPE,
     });
 
     const hydrate = assetRepository.getAssetSummariesByIds;
@@ -646,7 +649,8 @@ export const createSearchService = (
             repository,
             contextPolicy,
             input.createdAtFrom,
-            input.createdAtTo
+            input.createdAtTo,
+            input.scopeId
           )
         : [];
       const fusedEvidence =
@@ -756,6 +760,7 @@ export const createSearchService = (
             page: 1,
             pageSize: RECALL_PER_QUERY_PAGE_SIZE,
             ...(input.domain ? { domain: input.domain } : {}),
+            ...(input.scopeId ? { scopeId: input.scopeId } : {}),
             // 时间窗（已规范化 ISO）下推检索：向量层原生过滤 + D1 兜底，召回不被 topK 截断。
             ...(input.createdAtFrom
               ? { createdAtFrom: input.createdAtFrom }

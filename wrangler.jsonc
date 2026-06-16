@@ -49,6 +49,19 @@
     },
     // L2 知识图谱实体/陈述向量（embedding 近似消歧用）
     // wrangler vectorize create graph_entities --dimensions=1024 --metric=cosine
+    // 二期 scope 隔离：实体向量按 scopeId 过滤（防 agent/personal 同名实体跨 scope 合并、
+    // 防 agent 种子稀释 personal 图检索）。原生 metadata 过滤只命中【带该字段】的向量，
+    // 故现网旧实体向量（metadata 仅 {canonicalName}）必须在 deploy 前 re-scope 补 scopeId，
+    // 否则 personal 自身的实体去重与图检索种子全部失效。完整有序 runbook（hard pre-deploy）：
+    //   1. wrangler vectorize create-metadata-index graph_entities --property-name=scopeId --type=string
+    //   2. 从 D1 取实体向量 id（D1 驱动，覆盖所有实体）：
+    //      wrangler d1 execute cloudmind --remote --json \
+    //        --command "SELECT embedding_vector_id FROM entities WHERE embedding_vector_id IS NOT NULL"
+    //   3. get-vectors → 转换 → upsert（见 scripts/ops/rescope-vectors.mjs 的 Pass B）：
+    //      wrangler vectorize get-vectors graph_entities --ids <空格分隔 id> > raw.json
+    //      node scripts/ops/rescope-vectors.mjs raw.json > rescoped.ndjson
+    //      wrangler vectorize upsert graph_entities --file rescoped.ndjson
+    //   4. 确认 re-scope 完成后再 npm run deploy（顺序：D1 migrate → 实体/chunk re-scope → worker deploy）。
     {
       "binding": "GRAPH_VECTORS",
       "index_name": "graph_entities"

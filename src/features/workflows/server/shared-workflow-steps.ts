@@ -516,6 +516,8 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
                 const matches = await graphVS.search({
                   values,
                   topK: 1,
+                  // scope 隔离：只在同 scope 内找近邻，防 agent/personal 同名实体合并。
+                  filter: { scopeId: { $eq: context.asset.scopeId } },
                 });
 
                 // 3. 超阈值 → 合并到已有实体
@@ -525,7 +527,8 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
                   matches[0]!.id !== entityId
                 ) {
                   const existing = await memoryRepository.getEntityByVectorId(
-                    matches[0]!.id
+                    matches[0]!.id,
+                    context.asset.scopeId
                   );
 
                   if (existing) {
@@ -534,7 +537,10 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
                       {
                         id: matches[0]!.id,
                         values,
-                        metadataJson: JSON.stringify({ canonicalName: name }),
+                        metadataJson: JSON.stringify({
+                          canonicalName: name,
+                          scopeId: context.asset.scopeId,
+                        }),
                       },
                     ]);
 
@@ -551,7 +557,10 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
                   {
                     id: vectorId,
                     values,
-                    metadataJson: JSON.stringify({ canonicalName: name }),
+                    metadataJson: JSON.stringify({
+                      canonicalName: name,
+                      scopeId: context.asset.scopeId,
+                    }),
                   },
                 ]);
                 await memoryRepository.setEntityVectorId(entityId, vectorId);

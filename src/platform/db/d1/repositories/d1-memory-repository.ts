@@ -16,6 +16,7 @@ import type {
   MemoryStatement,
   UpsertEntityInput,
 } from "@/core/memory/ports";
+import { DEFAULT_SCOPE } from "@/core/memory/scope";
 import { createDb } from "@/platform/db/d1/client";
 import {
   edges,
@@ -24,9 +25,6 @@ import {
   provenance,
   statements,
 } from "@/platform/db/d1/schema";
-
-// 一期：未显式指定 scope 时默认人记忆 personal（agent scope 留二期由调用方显式传）。
-const DEFAULT_SCOPE = "personal";
 
 // 把 statements 行投影为读模型（统一 null 语义）。
 type StatementRow = typeof statements.$inferSelect;
@@ -223,12 +221,19 @@ export class D1MemoryRepository implements MemoryRepository {
   }
 
   public async getEntityByVectorId(
-    vectorId: string
+    vectorId: string,
+    scopeId?: string
   ): Promise<MemoryEntity | null> {
+    const scope = scopeId ?? DEFAULT_SCOPE;
     const rows = await this.db
       .select()
       .from(entities)
-      .where(eq(entities.embeddingVectorId, vectorId))
+      .where(
+        and(
+          eq(entities.embeddingVectorId, vectorId),
+          eq(entities.scopeId, scope)
+        )
+      )
       .limit(1);
     const found = rows[0];
 
@@ -345,12 +350,14 @@ export class D1MemoryRepository implements MemoryRepository {
   }
 
   public async findEntityIdsByVectorIds(
-    vectorIds: string[]
+    vectorIds: string[],
+    scopeId?: string
   ): Promise<EntityVectorRef[]> {
     if (vectorIds.length === 0) {
       return [];
     }
 
+    const scope = scopeId ?? DEFAULT_SCOPE;
     const rows = await this.db
       .select({
         id: entities.id,
@@ -360,7 +367,8 @@ export class D1MemoryRepository implements MemoryRepository {
       .where(
         and(
           inArray(entities.embeddingVectorId, vectorIds),
-          isNotNull(entities.embeddingVectorId)
+          isNotNull(entities.embeddingVectorId),
+          eq(entities.scopeId, scope)
         )
       );
 

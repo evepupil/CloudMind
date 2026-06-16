@@ -26,6 +26,7 @@ import type {
   UpdateAssetIndexingInput,
   UpdateAssetMetadataInput,
 } from "@/core/assets/ports";
+import { PERSONAL_SCOPE } from "@/core/memory/scope";
 import type {
   AssetChunkMatch,
   AssetDetail,
@@ -354,6 +355,8 @@ export class D1AssetRepository implements AssetRepository {
       // 显式 pin 时用 pin 值作初值，使 enqueue 后的快照即正确；classify 步骤会保留它。
       aiVisibility: input.aiVisibility ?? "allow",
       retrievalPriority: 0,
+      // 写入归属 scope：默认 personal（人记忆）；remember_agent 传 agent。
+      scopeId: input.scopeId ?? PERSONAL_SCOPE,
       sourceHost: null,
       collectionKey: null,
       capturedAt: now,

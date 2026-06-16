@@ -1,5 +1,6 @@
 import { and, eq, gte, isNotNull, isNull, like, lte, or } from "drizzle-orm";
 
+import { PERSONAL_SCOPE } from "@/core/memory/scope";
 import type {
   AssetChunkMatch,
   AssetChunkSummary,
@@ -80,8 +81,8 @@ export const mapChunkMatch = (record: {
 // L1 瘦身后不再有承载表，这里暂不生效（保留入参以维持 API 兼容）。
 // collection 走 assets.collection_key 这一客观 L1 列，仍然生效。
 export const buildAssetListWhereClause = (query?: AssetListQuery) => {
-  // 一期：默认只列人记忆 scope（personal），agent 记忆隔离；二期按调用方 scope 参数化。
-  const conditions = [eq(assets.scopeId, "personal")];
+  // 默认只列 personal（人记忆）；调用方显式传 query.scopeId 时按其过滤。
+  const conditions = [eq(assets.scopeId, query?.scopeId ?? PERSONAL_SCOPE)];
 
   if (query?.deleted === "only") {
     conditions.push(isNotNull(assets.deletedAt));
@@ -143,11 +144,11 @@ export const buildAssetListWhereClause = (query?: AssetListQuery) => {
 export const buildAssetSearchFilterConditions = (
   filters?: AssetSearchFilters
 ) => {
-  // 一期：lexical 通道默认只查人记忆 scope（personal），与 dense/L2 一致。
+  // lexical 通道默认只查 personal（人记忆），与 dense/L2 一致；显式传入时按其过滤。
   const conditions = [
     isNull(assets.deletedAt),
     eq(assets.status, "ready"),
-    eq(assets.scopeId, "personal"),
+    eq(assets.scopeId, filters?.scopeId ?? PERSONAL_SCOPE),
   ];
 
   if (filters?.type) {

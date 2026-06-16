@@ -1,3 +1,4 @@
+import type { MemoryScope } from "@/core/memory/scope";
 import type {
   AssetAiVisibility,
   AssetChunkMatch,
@@ -18,6 +19,8 @@ export interface CreateTextAssetInput {
   // 调用方显式 pin 的 AI 可见性（绝对语义）：提供时作为创建初值，并由 classify 步骤
   // 保留不覆盖（见 workflow initialState.pinnedVisibility）。未提供时走自动分类。
   aiVisibility?: AssetAiVisibility | undefined;
+  // 写入归属 scope：personal=用户显式记忆（默认）、agent=AI 自动沉淀（remember_agent）。
+  scopeId?: MemoryScope | undefined;
 }
 
 export interface CreateUrlAssetInput {

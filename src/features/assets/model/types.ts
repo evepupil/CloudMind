@@ -1,4 +1,6 @@
 // 这里定义知识资产相关的领域类型，供页面和 API 统一复用。
+import type { MemoryScope } from "@/core/memory/scope";
+
 export type AssetType = "url" | "pdf" | "note" | "image" | "chat";
 
 // 这里约束资产处理状态，避免各处散落字符串字面量。
@@ -54,6 +56,8 @@ export interface AssetSearchFilters {
   topic?: string | undefined;
   tag?: string | undefined;
   collection?: string | undefined;
+  // scope 隔离维度（非普通 facet）：不传时检索默认只查 personal（人记忆）。
+  scopeId?: MemoryScope | undefined;
 }
 
 export interface AssetListQuery extends AssetSearchFilters {

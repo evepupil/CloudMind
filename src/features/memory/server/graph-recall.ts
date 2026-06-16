@@ -1,4 +1,5 @@
 import type { MemoryRepository, MemoryStatement } from "@/core/memory/ports";
+import { DEFAULT_SCOPE } from "@/core/memory/scope";
 import type { VectorStore } from "@/core/vector/ports";
 
 // 图检索只需要 MemoryRepository 的读侧子集，收窄依赖便于测试注入。
@@ -57,10 +58,13 @@ export const recallGraphStatements = async (
     return [];
   }
 
-  // 1. ANN 种子：query 向量在 graph_entities namespace 找最相似实体向量。
+  // 1. ANN 种子：query 向量在 graph_entities 找最相似实体向量（按 scope 隔离，
+  //    防 agent 种子稀释 personal 召回 / 反之）。
+  const seedScope = scopeId ?? DEFAULT_SCOPE;
   const seedMatches = await graphVectorStore.search({
     values: queryVector,
     topK: seedTopK,
+    filter: { scopeId: { $eq: seedScope } },
   });
 
   if (seedMatches.length === 0) {
@@ -71,7 +75,8 @@ export const recallGraphStatements = async (
     seedMatches.map((match) => [match.id, match.score])
   );
   const seedRefs = await repository.findEntityIdsByVectorIds(
-    seedMatches.map((match) => match.id)
+    seedMatches.map((match) => match.id),
+    seedScope
   );
 
   if (seedRefs.length === 0) {

@@ -155,8 +155,11 @@ export interface MemoryRepository {
   createEpisode(input: CreateEpisodeInput): Promise<{ id: string }>;
   // 按 (scope, normalized_name) 幂等：已存在则 bump mention_count + last_seen，否则新建。
   upsertEntityByNormalizedName(input: UpsertEntityInput): Promise<MemoryEntity>;
-  // 按 vector id 查实体（embed 消歧后回填用）。
-  getEntityByVectorId(vectorId: string): Promise<MemoryEntity | null>;
+  // 按 vector id 查实体（embed 消歧后回填用）；带 scope 防跨 scope 误取。
+  getEntityByVectorId(
+    vectorId: string,
+    scopeId?: string | undefined
+  ): Promise<MemoryEntity | null>;
   // 更新实体的向量 id。
   setEntityVectorId(entityId: string, vectorId: string): Promise<void>;
   createStatement(input: CreateStatementInput): Promise<{ id: string }>;
@@ -176,8 +179,11 @@ export interface MemoryRepository {
   // 检索命中强化：批量 bump 陈述的 access_count(+1) 与 last_accessed_at（访问写回闭环）。
   bumpStatementAccess(statementIds: string[]): Promise<void>;
   // —— 图检索读侧（T3）——
-  // 把 ANN 命中的向量 id 解析为实体 id（图检索的种子解析）。
-  findEntityIdsByVectorIds(vectorIds: string[]): Promise<EntityVectorRef[]>;
+  // 把 ANN 命中的向量 id 解析为实体 id（图检索的种子解析）；按 scope 隔离。
+  findEntityIdsByVectorIds(
+    vectorIds: string[],
+    scopeId?: string | undefined
+  ): Promise<EntityVectorRef[]>;
   // 取一批源实体的未失效出边，作为 BFS / 递归遍历的一跳。
   findActiveOutgoingEdges(
     srcEntityIds: string[],

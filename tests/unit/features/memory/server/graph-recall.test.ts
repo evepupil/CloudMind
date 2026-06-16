@@ -63,9 +63,14 @@ const STATEMENTS: Record<string, MemoryStatement> = {
 const PROVENANCE: Record<string, string> = { s1: "a1", s2: "a2", s3: "a3" };
 
 class FakeGraphRepository implements GraphRecallRepository {
+  // 记录种子映射收到的 scopeId，断言 scope 隔离一路下推到仓储层。
+  public lastFindScopeId: string | undefined;
+
   public async findEntityIdsByVectorIds(
-    vectorIds: string[]
+    vectorIds: string[],
+    scopeId?: string
   ): Promise<EntityVectorRef[]> {
+    this.lastFindScopeId = scopeId;
     return vectorIds.flatMap((vectorId) => {
       const entityId = ENTITY_BY_VECTOR[vectorId];
       return entityId ? [{ vectorId, entityId }] : [];
@@ -102,9 +107,13 @@ class FakeGraphRepository implements GraphRecallRepository {
 }
 
 class FakeGraphVectorStore implements VectorStore {
+  // 捕获最近一次种子检索入参，断言 scope 过滤已下推到向量库。
+  public lastSearchInput: VectorSearchInput | undefined;
+
   public constructor(private readonly matches: VectorSearchMatch[]) {}
 
-  public async search(_input: VectorSearchInput): Promise<VectorSearchMatch[]> {
+  public async search(input: VectorSearchInput): Promise<VectorSearchMatch[]> {
+    this.lastSearchInput = input;
     return this.matches;
   }
 
@@ -184,5 +193,40 @@ describe("recallGraphStatements", () => {
 
     expect(hits).toHaveLength(2);
     expect(hits.map((hit) => hit.statement.id)).toEqual(["s1", "s2"]);
+  });
+
+  // 二期 scope 隔离回归：图检索的 ANN 种子必须把 scope 过滤下推到 graph_entities 向量库，
+  // 并把同一 scope 透传给仓储的实体反查；否则 personal 召回会混入 agent 实体（反之亦然）。
+  it("种子检索默认把 personal scope 下推到向量库与仓储", async () => {
+    const store = new FakeGraphVectorStore([{ id: "v1", score: 0.9 }]);
+    const repo = new FakeGraphRepository();
+
+    await recallGraphStatements({
+      queryVector: [0.1, 0.2],
+      repository: repo,
+      graphVectorStore: store,
+    });
+
+    expect(store.lastSearchInput?.filter).toEqual({
+      scopeId: { $eq: "personal" },
+    });
+    expect(repo.lastFindScopeId).toBe("personal");
+  });
+
+  it("种子检索传 scopeId=agent 时按 agent 过滤并透传", async () => {
+    const store = new FakeGraphVectorStore([{ id: "v1", score: 0.9 }]);
+    const repo = new FakeGraphRepository();
+
+    await recallGraphStatements({
+      queryVector: [0.1, 0.2],
+      repository: repo,
+      graphVectorStore: store,
+      scopeId: "agent",
+    });
+
+    expect(store.lastSearchInput?.filter).toEqual({
+      scopeId: { $eq: "agent" },
+    });
+    expect(repo.lastFindScopeId).toBe("agent");
   });
 });

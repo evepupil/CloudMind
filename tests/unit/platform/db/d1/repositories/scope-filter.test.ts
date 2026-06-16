@@ -35,4 +35,29 @@ describe("scope 隔离 · L1 检索条件", () => {
     expect(sql).toContain("scope_id");
     expect(params).toContain("personal");
   });
+
+  // 二期：显式传 scopeId=agent 时按 agent 过滤（recall_agent 走这条路读 agent 记忆，
+  // 同时反向保证日常 personal 检索不会混入 agent）。
+  it("资产列表 where 传 scopeId=agent 时按 agent 过滤", () => {
+    const where = buildAssetListWhereClause({ scopeId: "agent" });
+    if (!where) {
+      throw new Error("buildAssetListWhereClause 不应返回 undefined");
+    }
+
+    const { params } = dialect.sqlToQuery(where);
+    expect(params).toContain("agent");
+    expect(params).not.toContain("personal");
+  });
+
+  it("lexical 检索条件传 scopeId=agent 时按 agent 过滤", () => {
+    const conditions = buildAssetSearchFilterConditions({ scopeId: "agent" });
+    const combined = and(...conditions);
+    if (!combined) {
+      throw new Error("buildAssetSearchFilterConditions 不应为空");
+    }
+
+    const { params } = dialect.sqlToQuery(combined);
+    expect(params).toContain("agent");
+    expect(params).not.toContain("personal");
+  });
 });

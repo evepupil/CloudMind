@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { AssetNotFoundError } from "@/core/assets/errors";
 import { createLogger } from "@/core/logging/logger";
+import { AGENT_SCOPE } from "@/core/memory/scope";
 import { WorkflowRunNotFoundError } from "@/core/workflows/errors";
 import type { AppBindings } from "@/env";
 import {
@@ -24,6 +25,7 @@ import {
 import {
   ingestTextAsset,
   ingestUrlAsset,
+  rememberAgentMemory,
   rememberMemory,
   reprocessAsset,
 } from "@/features/ingest/server/service";
@@ -78,6 +80,13 @@ const rememberInputSchema = z.object({
   title: z.string().trim().min(1).max(300).optional(),
   // 显式 pin AI 可见性（绝对覆盖自动分类）：allow / summary_only / deny。
   visibility: z.enum(["allow", "summary_only", "deny"]).optional(),
+});
+
+// agent 记忆写入：只需 content（可选 title）；不暴露 visibility——agent 记忆默认
+// 不进日常检索，可见性 pin 对它无意义。保持纯 z.object（MCP schema 不可退化）。
+const rememberAgentInputSchema = z.object({
+  content: z.string().trim().min(1).max(20000),
+  title: z.string().trim().min(1).max(300).optional(),
 });
 
 // 注意：MCP inputSchema 必须保持纯 object（可带 .superRefine），绝不能 .transform()——
@@ -538,6 +547,36 @@ export const createMcpServer = (
   );
 
   server.registerTool(
+    "remember_agent",
+    {
+      title: "Remember (agent memory)",
+      description:
+        "Record an AGENT-side memory: a decision you made, progress on a task, " +
+        "or working context that you (the AI) want to persist for later — e.g. " +
+        "what was done in a project, why a choice was made, or a debugging " +
+        "trail. Distill it into a concise, self-contained statement. This is " +
+        "stored in a SEPARATE agent scope: it will NOT surface in the user's " +
+        "normal recall/search, and is only retrievable via the dedicated " +
+        "recall_agent tool when explicitly invoked. Use this for your own work " +
+        "trail; for facts the user explicitly asked you to remember, use " +
+        "`remember` instead. Returns the stored memory snapshot.",
+      inputSchema: rememberAgentInputSchema,
+    },
+    withToolLogging("remember_agent", async (input) => {
+      try {
+        const item = await rememberAgentMemory(bindings, {
+          content: input.content,
+          title: normalizeOptionalString(input.title),
+        });
+
+        return createToolResult({ item });
+      } catch (error) {
+        return createToolErrorResult(getErrorMessage(error));
+      }
+    })
+  );
+
+  server.registerTool(
     "list_assets",
     {
       title: "List Assets",
@@ -665,6 +704,42 @@ export const createMcpServer = (
           order: input.order,
           createdAtFrom,
           createdAtTo,
+        });
+
+        return createToolResult(result);
+      } catch (error) {
+        return createToolErrorResult(getErrorMessage(error));
+      }
+    })
+  );
+
+  server.registerTool(
+    "recall_agent",
+    {
+      title: "Recall (agent memory)",
+      description:
+        "Recall AGENT-side memories — the AI's own previously recorded " +
+        "decisions, progress notes, and working trails — from the separate " +
+        "agent scope. This is the ONLY way to read agent memories; they never " +
+        "appear in the regular `recall`. Call it explicitly when you need to " +
+        "review what was done before on a project, why a past decision was " +
+        "made, or to retrace a debugging trail. Expand your need into 1-5 " +
+        "focused sub-queries and pass them in the `queries` array (always an " +
+        'array, e.g. ["auth refactor decision", "migration steps"]). Does NOT ' +
+        "read the user's personal memories — use `recall` for those.",
+      inputSchema: recallInputSchema,
+    },
+    withToolLogging("recall_agent", async (input) => {
+      try {
+        const { createdAtFrom, createdAtTo } = normalizeCreatedAtFilters(input);
+        const result = await recallMemories(bindings, {
+          queries: input.queries,
+          domain: input.domain,
+          limit: input.limit,
+          order: input.order,
+          createdAtFrom,
+          createdAtTo,
+          scopeId: AGENT_SCOPE,
         });
 
         return createToolResult(result);

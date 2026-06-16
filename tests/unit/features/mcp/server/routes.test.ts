@@ -43,6 +43,7 @@ vi.mock("@/features/ingest/server/service", () => {
     reprocessAsset: vi.fn(),
     ingestUrlAsset: vi.fn(),
     rememberMemory: vi.fn(),
+    rememberAgentMemory: vi.fn(),
   };
 });
 
@@ -703,10 +704,12 @@ describe("mcp routes", () => {
     expect(result.tools.map((tool) => tool.name)).toEqual([
       "save_asset",
       "remember",
+      "remember_agent",
       "list_assets",
       "search_assets",
       "search_assets_for_context",
       "recall",
+      "recall_agent",
       "get_asset",
       "update_asset",
       "delete_asset",
@@ -858,6 +861,36 @@ describe("mcp routes", () => {
     });
   });
 
+  it("remember_agent stores an agent-scope memory through the ingest service", async () => {
+    const app = createApp();
+    const item = createAssetDetail({
+      id: "asset-agent-mem-1",
+      title: "Refactor decision",
+      sourceKind: "mcp",
+    });
+
+    vi.mocked(ingestService.rememberAgentMemory).mockResolvedValue(item);
+    const connected = await createConnectedClient(app);
+
+    client = connected.client;
+    transport = connected.transport;
+
+    const result = await client.callTool({
+      name: "remember_agent",
+      arguments: {
+        content: "Kept the L2 DB default unchanged to avoid table rebuild.",
+        title: "Refactor decision",
+      },
+    });
+
+    expect(getStructuredContent(result)).toEqual({ item });
+    // agent 写入走专用用例（内部固定 scope=agent），不污染人记忆入口。
+    expect(ingestService.rememberAgentMemory).toHaveBeenCalledWith(env, {
+      content: "Kept the L2 DB default unchanged to avoid table rebuild.",
+      title: "Refactor decision",
+    });
+  });
+
   it("recall fans out sub-queries through the search service", async () => {
     const app = createApp();
     const recallResult = {
@@ -899,6 +932,35 @@ describe("mcp routes", () => {
       domain: "finance",
       limit: 10,
     });
+  });
+
+  it("recall_agent reads the agent scope through the search service", async () => {
+    const app = createApp();
+    const recallResult = {
+      queries: ["auth refactor decision"],
+      memories: [],
+      total: 0,
+    };
+
+    vi.mocked(searchService.recallMemories).mockResolvedValue(recallResult);
+    const connected = await createConnectedClient(app);
+
+    client = connected.client;
+    transport = connected.transport;
+
+    const result = await client.callTool({
+      name: "recall_agent",
+      arguments: {
+        queries: ["auth refactor decision"],
+      },
+    });
+
+    expect(getStructuredContent(result)).toEqual(recallResult);
+    // recall_agent 读隔离的关键：必须显式传 scopeId=agent（日常 recall 不传、只查 personal）。
+    expect(searchService.recallMemories).toHaveBeenCalledWith(
+      env,
+      expect.objectContaining({ scopeId: "agent" })
+    );
   });
 
   it("search_assets, get_asset and ask_library reuse the existing services", async () => {

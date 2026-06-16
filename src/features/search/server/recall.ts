@@ -1,3 +1,4 @@
+import type { MemoryScope } from "@/core/memory/scope";
 import type { AssetDomain } from "@/features/assets/model/types";
 import type { EvidenceItem } from "@/features/search/model/evidence";
 import type {
@@ -20,6 +21,8 @@ export interface RecallMemoriesInput {
   createdAtFrom?: string | undefined;
   createdAtTo?: string | undefined;
   order?: RecallOrder | undefined;
+  // 显式指定检索 scope（recall_agent 传 agent）；不传默认 personal（日常 recall）。
+  scopeId?: MemoryScope | undefined;
 }
 
 // 单个子查询的检索结果，连同发起它的子查询文本一起带回，便于记录 matchedQueries。
