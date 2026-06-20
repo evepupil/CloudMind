@@ -58,12 +58,12 @@ export default function GlassDemo() {
             </div>
           </GlassPanel>
 
-          {/* 卡片 + 交互态 */}
+          {/* 卡片 + 交互态（Catalyst 深色卡片配方：内高光边 + 分层阴影 + hover 上浮） */}
           <div class="grid gap-4 sm:grid-cols-2">
             <GlassCard variant="raised">
               <p class="text-[15px] font-medium text-ink">卡片 GlassCard</p>
               <p class="mt-1.5 text-[13px] leading-relaxed text-ink-soft">
-                带 padding 的玻璃容器，承载结构化内容。
+                内顶部高光发丝线 + 外柔分层阴影，玻璃质感分层悬浮。
               </p>
             </GlassCard>
             <GlassCard variant="raised" interactive>
@@ -71,25 +71,42 @@ export default function GlassDemo() {
                 可点击卡片 · interactive
               </p>
               <p class="mt-1.5 text-[13px] leading-relaxed text-ink-soft">
-                hover 时边框变亮、阴影加深、出现手型。
+                hover 时边框变亮、阴影加深、轻微上浮 0.5。
               </p>
             </GlassCard>
           </div>
 
           {/* 按钮 */}
           <GlassPanel variant="reading">
-            <SectionTitle>按钮 · Buttons</SectionTitle>
-            <div class="mt-4 flex flex-wrap items-center gap-3">
-              <Button variant="primary">Primary 主操作</Button>
-              <Button variant="subtle">Subtle 次操作</Button>
-              <Button variant="ghost">Ghost 幽灵</Button>
-              <Button variant="danger">Danger 危险</Button>
-              <Button variant="primary" disabled>
-                Disabled
-              </Button>
-              <a class={buttonClass("primary")} href="/glass-demo">
-                链接型 Primary
-              </a>
+            <SectionTitle>按钮 · Buttons（Catalyst 配方）</SectionTitle>
+            <div class="mt-4 flex flex-col gap-4">
+              <div class="flex flex-wrap items-center gap-3">
+                <Button variant="primary">Primary 主操作</Button>
+                <Button variant="subtle">Subtle 次操作</Button>
+                <Button variant="ghost">Ghost 幽灵</Button>
+                <Button variant="danger">Danger 危险</Button>
+                <Button variant="primary" disabled>
+                  Disabled
+                </Button>
+                <a class={buttonClass("primary")} href="/glass-demo">
+                  链接型 Primary
+                </a>
+              </div>
+              <div class="flex flex-wrap items-center gap-3">
+                <span class="text-[12px] text-ink-faint">尺寸：</span>
+                <Button variant="primary" size="sm">
+                  Small
+                </Button>
+                <Button variant="primary" size="md">
+                  Medium
+                </Button>
+                <Button variant="primary" size="lg">
+                  Large
+                </Button>
+                <Button variant="subtle" size="icon" aria-label="add">
+                  +
+                </Button>
+              </div>
             </div>
           </GlassPanel>
 
