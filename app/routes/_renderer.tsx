@@ -1,9 +1,11 @@
 import { jsxRenderer } from "hono/jsx-renderer";
+import { HasIslands } from "honox/server/components/has-islands";
+import { Script } from "honox/server/components/script";
 
-// 这里定义全站基础 HTML 外壳，保证 SSR 页面结构统一。
-// CSS 路径分环境处理：
-// - Dev: Vite + @tailwindcss/vite 实时处理 /src/styles/app.css（支持 HMR）
-// - Prod: Cloudflare Workers 从 public/ 提供静态文件 /styles.css
+// 全站 HTML 外壳：Glass/Aurora 深色底。CSS 路径分环境：
+// - Dev: Vite + @tailwindcss/vite 实时处理 /src/styles/app.css（HMR）
+// - Prod: Cloudflare Workers 从 public/ 提供 build:css 预编译的 /styles.css
+// HasIslands + Script 实现「仅当页面用到 island 才注入客户端 JS」的渐进增强。
 const cssHref = import.meta.env.DEV ? "/src/styles/app.css" : "/styles.css";
 
 export default jsxRenderer(({ children }) => {
@@ -12,10 +14,15 @@ export default jsxRenderer(({ children }) => {
       <head>
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        {/* theme-color 与极光底 #0b0f1a 对齐，让移动端浏览器 chrome 融入深色底 */}
+        <meta name="theme-color" content="#0b0f1a" />
         <link rel="stylesheet" href={cssHref} />
         <title>CloudMind</title>
       </head>
-      <body>{children}</body>
+      <body>
+        <HasIslands>{children}</HasIslands>
+        <Script src="/app/client.ts" />
+      </body>
     </html>
   );
 });

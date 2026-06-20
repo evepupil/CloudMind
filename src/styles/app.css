@@ -1,68 +1,178 @@
 @import "tailwindcss";
 
-/* ------------------------------------------------------------------ */
-/*  CloudMind — Notion-style Design Tokens                            */
-/* ------------------------------------------------------------------ */
-
+/* ======================================================================
+   CloudMind — Glass / Aurora 设计令牌
+   深色极光底 + 磨砂玻璃面板。可读性铁律：正文一律落 reading/raised 玻璃面
+   （高不透明度），保证 WCAG AA；chrome 玻璃（侧栏/页头）可更通透让极光透出。
+   组件层禁用内联 hex——颜色一律用下列令牌命名的 utility（bg-* / text-* / border-*），
+   否则 Tailwind v4 会 tree-shake 掉未被引用的令牌。极光渐变的 hex 只允许出现在
+   本文件底部的 .aurora-* 装饰规则里（本文件即颜色的唯一真相源）。
+   ====================================================================== */
 @theme {
-  /* --- Page background --- */
-  --color-notion-bg: #f7f6f3;
-  --color-notion-bg-soft: #ffffff;
-  --color-notion-bg-hover: #ebebea;
-  --color-notion-bg-active: #e3e3e2;
+  /* --- 玻璃面（不透明度分层；正文区用 reading/raised） --- */
+  --color-glass-chrome: rgba(15, 20, 36, 0.62);
+  --color-glass-chrome-hover: rgba(255, 255, 255, 0.06);
+  --color-glass-reading: rgba(18, 24, 42, 0.94);
+  --color-glass-raised: rgba(27, 34, 56, 0.92);
+  --color-glass-border: rgba(255, 255, 255, 0.1);
+  --color-glass-border-soft: rgba(255, 255, 255, 0.06);
 
-  /* --- Sidebar --- */
-  --color-sidebar-bg: #ffffff;
-  --color-sidebar-hover: #f1f1f0;
-  --color-sidebar-active: #ebebea;
-  --color-sidebar-border: #e8e8e7;
-  --color-sidebar-text: #37352f;
-  --color-sidebar-text-soft: #9b9a97;
+  /* --- 文本（落在 reading-glass 上，AA 校准） --- */
+  --color-ink: #e8ebf3;
+  --color-ink-soft: #aab2c8;
+  --color-ink-faint: #8089a3;
 
-  /* --- Ink / text --- */
-  --color-ink: #37352f;
-  --color-ink-soft: #787774;
-  --color-ink-faint: #9b9a97;
+  /* --- 分隔线（暗底上的发丝线） --- */
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-line-soft: rgba(255, 255, 255, 0.05);
 
-  /* --- Border / line --- */
-  --color-line: #e8e8e7;
-  --color-line-soft: #ededec;
+  /* --- 强调色（单一冰青） --- */
+  --color-accent: #5ec4ee;
+  --color-accent-hover: #7ad3f5;
+  --color-accent-soft: rgba(94, 196, 238, 0.14);
+  /* 强调色之上的深色文字（主按钮 CTA，保高对比） */
+  --color-on-accent: #07111c;
 
-  /* --- Status colors (low-saturation, Notion-like) --- */
-  --color-status-pending-bg: #f9f3e3;
-  --color-status-pending-text: #7c6a2e;
-  --color-status-pending-border: #e8dbb7;
+  /* --- 状态色（深底调、玻璃质感） --- */
+  --color-status-pending-text: #f0c674;
+  --color-status-pending-bg: rgba(240, 198, 116, 0.12);
+  --color-status-pending-border: rgba(240, 198, 116, 0.3);
 
-  --color-status-processing-bg: #e3eef9;
-  --color-status-processing-text: #2e6a9c;
-  --color-status-processing-border: #b7d4e8;
+  --color-status-processing-text: #5ec4ee;
+  --color-status-processing-bg: rgba(94, 196, 238, 0.12);
+  --color-status-processing-border: rgba(94, 196, 238, 0.3);
 
-  --color-status-ready-bg: #e3f2e8;
-  --color-status-ready-text: #2e6c3e;
-  --color-status-ready-border: #b7dbbf;
+  --color-status-ready-text: #5fd8a6;
+  --color-status-ready-bg: rgba(95, 216, 166, 0.12);
+  --color-status-ready-border: rgba(95, 216, 166, 0.3);
 
-  --color-status-failed-bg: #f9e3e3;
-  --color-status-failed-text: #9c2e2e;
-  --color-status-failed-border: #e8b7b7;
+  --color-status-failed-text: #f08a8a;
+  --color-status-failed-bg: rgba(240, 138, 138, 0.12);
+  --color-status-failed-border: rgba(240, 138, 138, 0.3);
 
-  /* --- Accent --- */
-  --color-accent: #2383e2;
-  --color-accent-hover: #1b6ec2;
-  --color-accent-soft: #e8f0fa;
+  /* --- 圆角（玻璃偏大） --- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
 
-  /* --- Border radius (Notion: small) --- */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  /* --- 阴影（柔和分层，营造悬浮） --- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 24px 70px rgba(0, 0, 0, 0.45);
 
-  /* --- Shadows (minimal) --- */
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04);
-
-  /* --- Font family --- */
+  /* --- 字体（Inter 真加载后自动接管，否则回退系统栈） --- */
   --font-sans:
-    ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    "Helvetica Neue", Arial, sans-serif;
+    "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  --font-mono:
+    "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
-  /* --- Sidebar width --- */
-  --width-sidebar: 240px;
+  /* --- 动效缓动（配合 transition-* 用 ease-glass） --- */
+  --ease-glass: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ----------------------------------------------------------------------
+   极光底层（纯装饰；hex 只允许在此中央样式表）。
+   position:fixed 全屏、z-index 负值，绝不出现在文字直接落色的区域；
+   极其缓慢的漂移仅服务氛围，不抢内容焦点。
+   ---------------------------------------------------------------------- */
+.aurora-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  overflow: hidden;
+  background-color: #0b0f1a;
+}
+.aurora-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(72px);
+  opacity: 0.5;
+  will-change: transform;
+}
+.aurora-blob--cyan {
+  width: 46vw;
+  height: 46vw;
+  left: -8vw;
+  top: -10vh;
+  background: radial-gradient(circle at center, #56b4e0, transparent 68%);
+  animation: aurora-drift-1 26s ease-in-out infinite alternate;
+}
+.aurora-blob--violet {
+  width: 42vw;
+  height: 42vw;
+  right: -6vw;
+  top: 6vh;
+  background: radial-gradient(circle at center, #7c5cff, transparent 68%);
+  animation: aurora-drift-2 32s ease-in-out infinite alternate;
+}
+.aurora-blob--magenta {
+  width: 40vw;
+  height: 40vw;
+  left: 22vw;
+  bottom: -16vh;
+  background: radial-gradient(circle at center, #c850c0, transparent 68%);
+  animation: aurora-drift-3 38s ease-in-out infinite alternate;
+}
+.aurora-blob--teal {
+  width: 34vw;
+  height: 34vw;
+  right: 16vw;
+  bottom: -12vh;
+  opacity: 0.32;
+  background: radial-gradient(circle at center, #3ddc97, transparent 70%);
+  animation: aurora-drift-1 30s ease-in-out infinite alternate-reverse;
+}
+@keyframes aurora-drift-1 {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(6vw, 8vh, 0) scale(1.12);
+  }
+}
+@keyframes aurora-drift-2 {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1.05);
+  }
+  100% {
+    transform: translate3d(-7vw, 6vh, 0) scale(0.95);
+  }
+}
+@keyframes aurora-drift-3 {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.95);
+  }
+  100% {
+    transform: translate3d(5vw, -7vh, 0) scale(1.1);
+  }
+}
+
+/* ----------------------------------------------------------------------
+   基础：深色底 + 默认字色 + 平滑滚动 + 选区配色。
+   color-scheme:dark 让原生表单控件也按深色渲染。
+   ---------------------------------------------------------------------- */
+html {
+  color-scheme: dark;
+  scroll-behavior: smooth;
+}
+body {
+  min-height: 100vh;
+  background-color: #0b0f1a;
+  color: var(--color-ink);
+}
+::selection {
+  background: rgba(94, 196, 238, 0.28);
+  color: #ffffff;
+}
+
+/* 尊重「减少动态」偏好：极光静止、不闪不漂移、关闭平滑滚动。 */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .aurora-blob {
+    animation: none !important;
+  }
 }
