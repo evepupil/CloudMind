@@ -1,11 +1,12 @@
 import { jsxRenderer } from "hono/jsx-renderer";
-import { HasIslands } from "honox/server/components/has-islands";
 import { Script } from "honox/server/components/script";
 
 // 全站 HTML 外壳：Glass/Aurora 深色底。CSS 路径分环境：
 // - Dev: Vite + @tailwindcss/vite 实时处理 /src/styles/app.css（HMR）
 // - Prod: Cloudflare Workers 从 public/ 提供 build:css 预编译的 /styles.css
-// HasIslands + Script 实现「仅当页面用到 island 才注入客户端 JS」的渐进增强。
+// Script 内部已用 HasIslands 条件包装：仅当页面真正用到 island 才注入客户端 JS
+// （渐进增强：无 island 即零客户端 JS）。children 直接渲染，不要用 HasIslands 包裹
+// ——否则无 island 的页面 children 会被吞成空 body。
 const cssHref = import.meta.env.DEV ? "/src/styles/app.css" : "/styles.css";
 
 export default jsxRenderer(({ children }) => {
@@ -20,7 +21,7 @@ export default jsxRenderer(({ children }) => {
         <title>CloudMind</title>
       </head>
       <body>
-        <HasIslands>{children}</HasIslands>
+        {children}
         <Script src="/app/client.ts" />
       </body>
     </html>
