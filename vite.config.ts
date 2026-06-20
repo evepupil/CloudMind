@@ -17,6 +17,13 @@ export default defineConfig({
       external: ["ajv", "ajv-formats"],
     }),
   ],
+  // dev SSR：ajv / ajv-formats 是 @modelcontextprotocol/sdk 的 CommonJS 依赖，
+  // Vite 的 SSR module runner 若当 ESM 求值会因 `exports is not defined` 崩渲染
+  // （island 机制把 MCP 模块图拽进 SSR 求值后触发）。留 external 交给 Node 原生
+  // require 处理（CJS 环境里 exports 存在），与上方 workers 构建的 external 对齐。
+  ssr: {
+    external: ["ajv", "ajv-formats"],
+  },
   resolve: {
     alias: {
       "@": srcPath,
