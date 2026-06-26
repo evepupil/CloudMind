@@ -1,4 +1,9 @@
-// 这里提供改密页，首次登录和后续手动更新都复用这个表单。
+import { buttonClass, FlashMessage, Panel } from "@/features/ui/components";
+
+const cpInputClass =
+  "w-full rounded-md border border-line bg-ink-raised px-3 py-2 text-[14px] text-bone outline-none transition-colors placeholder:text-bone-faint focus:border-brass";
+
+// 改密页：独立全屏，首次登录与后续手动更新复用。
 export const ChangePasswordPage = ({
   username,
   mustChangePassword,
@@ -13,32 +18,30 @@ export const ChangePasswordPage = ({
   flashMessage?: string | undefined;
 }) => {
   return (
-    <main class="min-h-screen bg-[#f7f6f3] px-4 py-10">
-      <div class="mx-auto max-w-[640px] rounded-[24px] border border-[#e8e8e7] bg-white p-8 shadow-[0_24px_80px_rgba(55,53,47,0.08)]">
-        <p class="mb-3 text-[12px] font-semibold uppercase tracking-[0.18em] text-[#9b9a97]">
+    <main class="flex min-h-screen items-center justify-center px-4 py-10">
+      <Panel class="w-full max-w-[560px] p-8" variant="panel">
+        <p class="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-brass">
           Account Security
         </p>
-        <h1 class="m-0 text-[34px] font-semibold tracking-[-0.03em] text-[#37352f]">
-          Change password
+        <h1 class="font-display text-[32px] font-medium tracking-tight text-bone">
+          修改密码
         </h1>
-        <p class="mt-4 mb-0 text-[15px] leading-relaxed text-[#787774]">
-          Signed in as{" "}
-          <span class="font-semibold text-[#37352f]">{username}</span>.
+        <p class="mt-3.5 text-[14px] leading-relaxed text-bone-soft">
+          当前登录：<span class="font-medium text-bone">{username}</span>。
           {mustChangePassword
-            ? " This account is still using the default password. Update it before you continue."
-            : " Update your password to keep this single-user workspace locked down."}
+            ? " 此账号仍在用默认密码，继续前请先修改。"
+            : " 更新密码以锁定这个单用户工作台。"}
         </p>
 
         {flashMessage ? (
-          <section class="mt-4 rounded-lg border border-[#b7dbbf] bg-[#e3f2e8] px-4 py-3 text-[14px] text-[#2e6c3e]">
+          <FlashMessage kind="success" class="mt-4">
             {flashMessage}
-          </section>
+          </FlashMessage>
         ) : null}
-
         {errorMessage ? (
-          <section class="mt-4 rounded-lg border border-[#e8b7b7] bg-[#f9e3e3] px-4 py-3 text-[14px] text-[#9c2e2e]">
+          <FlashMessage kind="error" class="mt-4">
             {errorMessage}
-          </section>
+          </FlashMessage>
         ) : null}
 
         <form
@@ -47,59 +50,45 @@ export const ChangePasswordPage = ({
           class="mt-6 grid gap-4"
         >
           <input type="hidden" name="next" value={nextPath ?? ""} />
-
-          <label class="grid gap-2">
-            <span class="text-[14px] font-semibold text-[#37352f]">
-              Current password
-            </span>
+          <label class="grid gap-1.5">
+            <span class="text-[12px] font-medium text-bone-soft">当前密码</span>
             <input
               name="currentPassword"
               type="password"
               autoComplete="current-password"
-              class="rounded-md border border-[#e8e8e7] bg-white px-3 py-2 text-[14px] text-[#37352f] focus:border-[#37352f] focus:outline-none"
+              class={cpInputClass}
             />
           </label>
-
-          <label class="grid gap-2">
-            <span class="text-[14px] font-semibold text-[#37352f]">
-              New password
-            </span>
+          <label class="grid gap-1.5">
+            <span class="text-[12px] font-medium text-bone-soft">新密码</span>
             <input
               name="newPassword"
               type="password"
               autoComplete="new-password"
-              class="rounded-md border border-[#e8e8e7] bg-white px-3 py-2 text-[14px] text-[#37352f] focus:border-[#37352f] focus:outline-none"
+              class={cpInputClass}
             />
           </label>
-
-          <label class="grid gap-2">
-            <span class="text-[14px] font-semibold text-[#37352f]">
-              Confirm new password
+          <label class="grid gap-1.5">
+            <span class="text-[12px] font-medium text-bone-soft">
+              确认新密码
             </span>
             <input
               name="confirmPassword"
               type="password"
               autoComplete="new-password"
-              class="rounded-md border border-[#e8e8e7] bg-white px-3 py-2 text-[14px] text-[#37352f] focus:border-[#37352f] focus:outline-none"
+              class={cpInputClass}
             />
           </label>
-
           <div class="mt-2 flex flex-wrap items-center gap-3">
-            <button
-              type="submit"
-              class="cursor-pointer rounded-md bg-[#37352f] px-4 py-2.5 text-[14px] font-semibold text-white transition-colors hover:bg-[#2f2d28]"
-            >
-              Save password
+            <button type="submit" class={buttonClass("primary")}>
+              保存密码
             </button>
-            <a
-              href="/auth/logout"
-              class="rounded-md border border-[#e8e8e7] px-4 py-2.5 text-[14px] font-semibold text-[#37352f] no-underline transition-colors hover:bg-[#f1f1f0]"
-            >
-              Log out
+            <a class={buttonClass("subtle")} href="/auth/logout">
+              退出登录
             </a>
           </div>
         </form>
-      </div>
+      </Panel>
     </main>
   );
 };
