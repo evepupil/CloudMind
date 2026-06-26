@@ -1,13 +1,10 @@
 import { jsxRenderer } from "hono/jsx-renderer";
-import { Script } from "honox/server/components/script";
 
 // 全站 HTML 外壳：Observatory 深墨底 + 氛围层（点阵网格 + 地平线暖光 + 胶片颗粒）。
 // CSS 路径分环境：
 // - Dev: Vite + @tailwindcss/vite 实时处理 /src/styles/app.css（HMR）
 // - Prod: Cloudflare Workers 从 public/ 提供 build:css 预编译的 /styles.css
-// Script 内部已用 HasIslands 条件包装：仅当页面真正用到 island 才注入客户端 JS
-// （渐进增强：无 island 即零客户端 JS）。children 直接渲染，不要用 HasIslands 包裹
-// ——否则无 island 的页面 children 会被吞成空 body。
+// 客户端导航增强（boosted links）走 public/boost.js 静态脚本无条件加载，详见该文件。
 const cssHref = import.meta.env.DEV ? "/src/styles/app.css" : "/styles.css";
 
 export default jsxRenderer(({ children }) => {
@@ -40,8 +37,10 @@ export default jsxRenderer(({ children }) => {
         {/* 全站氛围底层（纯装饰，aria-hidden）：点阵网格 + 地平线暖光 + 颗粒 */}
         <div class="atmos" aria-hidden="true" />
         <div class="atmos-grain" aria-hidden="true" />
-        {children}
-        <Script src="/app/client.ts" />
+        {/* boost-root：客户端导航只替换此容器内容（保留字体/CSS/氛围层不重载） */}
+        <div id="boost-root">{children}</div>
+        {/* 客户端导航增强（渐进增强：无 JS / 出错时退化为原生整页导航） */}
+        <script src="/boost.js" defer />
       </body>
     </html>
   );
