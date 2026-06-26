@@ -10,6 +10,7 @@ import { registerHealthRoutes } from "@/features/health/server/routes";
 import { registerIngestRoutes } from "@/features/ingest/server/routes";
 import { registerMcpRoutes } from "@/features/mcp/server/routes";
 import { registerMcpTokenRoutes } from "@/features/mcp-tokens/server/routes";
+import { registerMemoryRoutes } from "@/features/memory/server/routes";
 import { registerSearchRoutes } from "@/features/search/server/routes";
 import { consumeWorkflowQueueMessage } from "@/features/workflows/server/queue-consumer";
 import { consumeScheduledEvent } from "@/features/workflows/server/scheduled-consumer";
@@ -25,6 +26,7 @@ const app = createApp<AppEnv>({
     registerIngestRoutes(server);
     registerMcpRoutes(server);
     registerMcpTokenRoutes(server);
+    registerMemoryRoutes(server);
     registerSearchRoutes(server);
   },
 });

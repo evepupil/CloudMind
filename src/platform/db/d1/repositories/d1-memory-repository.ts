@@ -1,4 +1,14 @@
-import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  sql,
+} from "drizzle-orm";
 import type {
   AddProvenanceInput,
   CreateEdgeInput,
@@ -8,8 +18,13 @@ import type {
   EntityVectorRef,
   InvalidateEdgesInput,
   InvalidateStatementInput,
+  ListEntitiesOptions,
+  ListStatementsOptions,
   MemoryEdge,
   MemoryEntity,
+  MemoryGraphCounts,
+  MemoryGraphEdge,
+  MemoryGraphEntity,
   MemoryKind,
   MemoryProvenanceRef,
   MemoryRepository,
@@ -502,6 +517,127 @@ export class D1MemoryRepository implements MemoryRepository {
       .where(and(eq(statements.scopeId, scope), isNull(statements.expiredAt)));
 
     return groupDuplicateStatements(rows);
+  }
+
+  public async listEntities(
+    options?: ListEntitiesOptions
+  ): Promise<MemoryGraphEntity[]> {
+    const scope = options?.scopeId ?? DEFAULT_SCOPE;
+
+    const rows = await this.db
+      .select({
+        id: entities.id,
+        scopeId: entities.scopeId,
+        canonicalName: entities.canonicalName,
+        type: entities.type,
+        salience: entities.salience,
+        mentionCount: entities.mentionCount,
+        firstSeenAt: entities.firstSeenAt,
+        lastSeenAt: entities.lastSeenAt,
+      })
+      .from(entities)
+      .where(eq(entities.scopeId, scope))
+      // 按显著性降序、提及数次之——最重要的实体排在前。
+      .orderBy(desc(entities.salience), desc(entities.mentionCount))
+      .limit(options?.limit ?? 200)
+      .offset(options?.offset ?? 0);
+
+    return rows;
+  }
+
+  public async getEntityById(
+    entityId: string
+  ): Promise<MemoryGraphEntity | null> {
+    const rows = await this.db
+      .select({
+        id: entities.id,
+        scopeId: entities.scopeId,
+        canonicalName: entities.canonicalName,
+        type: entities.type,
+        salience: entities.salience,
+        mentionCount: entities.mentionCount,
+        firstSeenAt: entities.firstSeenAt,
+        lastSeenAt: entities.lastSeenAt,
+      })
+      .from(entities)
+      .where(eq(entities.id, entityId))
+      .limit(1);
+
+    return rows[0] ?? null;
+  }
+
+  public async listActiveEdges(
+    scopeId?: string | undefined
+  ): Promise<MemoryGraphEdge[]> {
+    const scope = scopeId ?? DEFAULT_SCOPE;
+
+    const rows = await this.db
+      .select({
+        id: edges.id,
+        scopeId: edges.scopeId,
+        srcEntityId: edges.srcEntityId,
+        dstEntityId: edges.dstEntityId,
+        relation: edges.relation,
+      })
+      .from(edges)
+      .where(and(eq(edges.scopeId, scope), isNull(edges.expiredAt)));
+
+    return rows;
+  }
+
+  public async listStatements(
+    options?: ListStatementsOptions
+  ): Promise<MemoryStatement[]> {
+    const scope = options?.scopeId ?? DEFAULT_SCOPE;
+    const conditions = [eq(statements.scopeId, scope)];
+
+    if (options?.subjectEntityId) {
+      conditions.push(eq(statements.subjectEntityId, options.subjectEntityId));
+    }
+    if (!options?.includeExpired) {
+      conditions.push(isNull(statements.expiredAt));
+    }
+
+    const rows = await this.db
+      .select()
+      .from(statements)
+      .where(and(...conditions))
+      // 时间线按创建时间降序（最新在前）。
+      .orderBy(desc(statements.createdAt))
+      .limit(options?.limit ?? 100)
+      .offset(options?.offset ?? 0);
+
+    return rows.map(mapStatement);
+  }
+
+  public async countGraph(
+    scopeId?: string | undefined
+  ): Promise<MemoryGraphCounts> {
+    const scope = scopeId ?? DEFAULT_SCOPE;
+
+    // 三表活跃计数并行（statements/edges 仅计未失效）。
+    const [entityRows, statementRows, edgeRows] = await Promise.all([
+      this.db
+        .select({ value: count() })
+        .from(entities)
+        .where(eq(entities.scopeId, scope)),
+      this.db
+        .select({ value: count() })
+        .from(statements)
+        .where(
+          and(eq(statements.scopeId, scope), isNull(statements.expiredAt))
+        ),
+      this.db
+        .select({ value: count() })
+        .from(edges)
+        .where(and(eq(edges.scopeId, scope), isNull(edges.expiredAt))),
+    ]);
+
+    return {
+      entities: entityRows[0]?.value ?? 0,
+      statements: statementRows[0]?.value ?? 0,
+      edges: edgeRows[0]?.value ?? 0,
+    };
   }
 }
 

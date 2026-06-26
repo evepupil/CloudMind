@@ -1,16 +1,10 @@
 import { createRoute } from "honox/factory";
 
-import { ComingSoonPage } from "@/features/layout/components/coming-soon-page";
+import { GraphPage } from "@/features/memory/components/graph-page";
+import { getGraphView } from "@/features/memory/server/memory-browse-service";
 
-// 记忆图谱页占位（Phase 5 接 GET /api/memory/* + dagre SSR-SVG）。
-export default createRoute((context) => {
-  return context.render(
-    <ComingSoonPage
-      navigationKey="graph"
-      eyebrow="记忆层 · 图谱"
-      title="记忆图谱"
-      phase="Phase 5"
-      description="实体、陈述与关系边构成的知识图谱，可视化你的记忆如何相互连接。"
-    />
-  );
+// 记忆图谱页：取实体 + 活跃边 + 计数，SSR 出环形布局 SVG。
+export default createRoute(async (context) => {
+  const view = await getGraphView(context.env);
+  return context.render(<GraphPage view={view} />);
 });

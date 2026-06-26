@@ -1,16 +1,10 @@
 import { createRoute } from "honox/factory";
 
-import { ComingSoonPage } from "@/features/layout/components/coming-soon-page";
+import { TimelinePage } from "@/features/memory/components/timeline-page";
+import { getTimelineView } from "@/features/memory/server/memory-browse-service";
 
-// 事实/时间线页占位（Phase 5 接 listStatements + bi-temporal 有效期）。
-export default createRoute((context) => {
-  return context.render(
-    <ComingSoonPage
-      navigationKey="timeline"
-      eyebrow="记忆层 · 事实"
-      title="事实 / 时间线"
-      phase="Phase 5"
-      description="带双时间有效期的陈述，按时间轴铺开，可追溯每条事实的生效与失效。"
-    />
-  );
+// 事实/时间线页：取陈述（含失效）+ 实体名映射 + 计数。
+export default createRoute(async (context) => {
+  const view = await getTimelineView(context.env);
+  return context.render(<TimelinePage view={view} />);
 });

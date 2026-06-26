@@ -102,6 +102,53 @@ export interface DuplicateStatementRef {
   retainId: string;
 }
 
+// —— 记忆层浏览读模型（Phase 5：GET /api/memory/* 供 UI 渲染）——
+
+// 实体节点详细读模型（比图检索用的 MemoryEntity 多带显著性/时间字段，供图谱与详情展示）。
+export interface MemoryGraphEntity {
+  id: string;
+  scopeId: string;
+  canonicalName: string;
+  type: string | null;
+  salience: number;
+  mentionCount: number;
+  firstSeenAt: string | null;
+  lastSeenAt: string | null;
+}
+
+// 浏览用有向边（带关系名，全图列出而非按 src 过滤）。
+export interface MemoryGraphEdge {
+  id: string;
+  scopeId: string;
+  srcEntityId: string;
+  dstEntityId: string;
+  relation: string;
+}
+
+// L2 计数快照（Overview 计量条 + 记忆层概览）。
+export interface MemoryGraphCounts {
+  entities: number;
+  statements: number;
+  edges: number;
+}
+
+// listStatements 的过滤/分页选项。
+export interface ListStatementsOptions {
+  scopeId?: string | undefined;
+  subjectEntityId?: string | undefined;
+  // 是否包含已失效（expired_at 非空）的陈述；时间线视图需要看完整历史。
+  includeExpired?: boolean | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
+}
+
+// listEntities 的过滤/分页选项。
+export interface ListEntitiesOptions {
+  scopeId?: string | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
+}
+
 export interface CreateStatementInput {
   scopeId?: string | undefined;
   subjectEntityId: string;
@@ -206,4 +253,15 @@ export interface MemoryRepository {
   findDuplicateActiveStatements(
     scopeId?: string | undefined
   ): Promise<DuplicateStatementRef[]>;
+  // —— 记忆层浏览读侧（Phase 5：供 GET /api/memory/* 渲染 UI）——
+  // 列出实体（按显著性降序），供图谱与实体面板。
+  listEntities(options?: ListEntitiesOptions): Promise<MemoryGraphEntity[]>;
+  // 按 id 取单个实体详情。
+  getEntityById(entityId: string): Promise<MemoryGraphEntity | null>;
+  // 列出活跃边（全图，按 scope），供图谱连线。
+  listActiveEdges(scopeId?: string | undefined): Promise<MemoryGraphEdge[]>;
+  // 列出陈述（可含失效、可按主语过滤、按 created_at 降序），供事实/时间线。
+  listStatements(options?: ListStatementsOptions): Promise<MemoryStatement[]>;
+  // L2 计数快照（entities/statements/edges 的活跃计数）。
+  countGraph(scopeId?: string | undefined): Promise<MemoryGraphCounts>;
 }

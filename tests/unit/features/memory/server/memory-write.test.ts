@@ -11,6 +11,9 @@ import type {
   InvalidateStatementInput,
   MemoryEdge,
   MemoryEntity,
+  MemoryGraphCounts,
+  MemoryGraphEdge,
+  MemoryGraphEntity,
   MemoryKind,
   MemoryProvenanceRef,
   MemoryRepository,
@@ -312,6 +315,27 @@ class FakeMemoryRepository implements MemoryRepository {
     }
 
     return duplicates;
+  }
+
+  // —— 浏览读侧（写侧测试不覆盖，给最简实现满足接口）——
+  public async listEntities(): Promise<MemoryGraphEntity[]> {
+    return [];
+  }
+
+  public async getEntityById(): Promise<MemoryGraphEntity | null> {
+    return null;
+  }
+
+  public async listActiveEdges(): Promise<MemoryGraphEdge[]> {
+    return [];
+  }
+
+  public async listStatements(): Promise<MemoryStatement[]> {
+    return [];
+  }
+
+  public async countGraph(): Promise<MemoryGraphCounts> {
+    return { entities: 0, statements: 0, edges: 0 };
   }
 }
 
