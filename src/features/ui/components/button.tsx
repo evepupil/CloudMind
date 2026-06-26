@@ -1,8 +1,7 @@
 import type { Child, JSX } from "hono/jsx";
 
-// 配方取自 Tailwind Catalyst 深色按钮的 class 组合，适配 Glass/Aurora 令牌：
-// 多层阴影（外阴影 + 内高光边）、focus 用 outline-ring（不挤布局）、active 微位移、
-// 大小分级。比手搓单层 hover 更精致，且零 JS 运行时。
+// Observatory 按钮：黄铜金主操作 + 描边次操作 + 幽灵 + 危险。
+// 主按钮带内高光 + 外黄铜辉，focus 用 outline-ring（不挤布局），active 微位移。
 export type ButtonVariant = "primary" | "subtle" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg" | "icon";
 
@@ -13,28 +12,27 @@ const sizeClasses: Record<ButtonSize, string> = {
   icon: "h-9 w-9 rounded-md",
 };
 
-// Catalyst 深色基底：内高光 + 外阴影 + focus outline ring + active 压缩。
 const buttonBase = [
-  "inline-flex select-none items-center justify-center whitespace-nowrap font-medium",
+  "inline-flex select-none items-center justify-center whitespace-nowrap font-medium no-underline",
   "outline-none transition-[color,background-color,border-color,box-shadow,transform] duration-150 ease-glass",
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brass",
   "active:translate-y-px",
   "disabled:pointer-events-none disabled:opacity-50",
   "[&>svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0",
 ].join(" ");
 
 const variantClasses: Record<ButtonVariant, string> = {
-  // 主操作：冰青实心 + 内高光 + 外柔阴影，hover 提亮、active 压暗。
+  // 主操作：黄铜金实心 + 内高光 + 外黄铜辉，hover 提亮。
   primary:
-    "bg-accent text-on-accent shadow-[0_1px_0_0_rgba(255,255,255,0.2)_inset,0_1px_2px_0_rgba(0,0,0,0.3)] hover:bg-accent-hover",
-  // 次操作：玻璃面 + 发丝边 + hover 边框变亮。
+    "bg-brass text-on-brass shadow-[inset_0_1px_0_0_rgba(255,255,255,0.25),0_6px_20px_rgba(201,163,94,0.22)] hover:bg-brass-bright",
+  // 次操作：描边 + 暖底，hover 边框转黄铜。
   subtle:
-    "border border-glass-border bg-glass-raised text-ink shadow-sm backdrop-blur-xl hover:border-glass-border-soft hover:bg-glass-chrome-hover",
-  // 幽灵：无边无底，hover 浮一层。
-  ghost: "text-ink-soft hover:bg-glass-chrome-hover hover:text-ink",
-  // 危险：玻璃红调 + 红边。
+    "border border-line bg-ink-raised text-bone-soft hover:border-brass/40 hover:text-bone",
+  // 幽灵：无边无底，hover 浮一层暖光。
+  ghost: "text-bone-soft hover:bg-[rgba(236,228,212,0.04)] hover:text-bone",
+  // 危险：铁锈调 + 锈边。
   danger:
-    "border border-status-failed-border bg-status-failed-bg text-status-failed-text backdrop-blur-xl hover:bg-glass-chrome-hover",
+    "border border-status-failed-border bg-status-failed-bg text-status-failed hover:bg-[rgba(193,123,90,0.14)]",
 };
 
 const resolveClasses = (

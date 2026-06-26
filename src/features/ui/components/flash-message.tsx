@@ -3,11 +3,9 @@ import type { Child } from "hono/jsx";
 export type FlashKind = "success" | "error" | "info";
 
 const flashStyles: Record<FlashKind, string> = {
-  success:
-    "border-status-ready-border bg-status-ready-bg text-status-ready-text",
-  error:
-    "border-status-failed-border bg-status-failed-bg text-status-failed-text",
-  info: "border-status-processing-border bg-status-processing-bg text-status-processing-text",
+  success: "border-status-ready-border bg-status-ready-bg text-status-ready",
+  error: "border-status-failed-border bg-status-failed-bg text-status-failed",
+  info: "border-status-processing-border bg-status-processing-bg text-status-processing",
 };
 
 // 一次性提示条（成功/错误/信息）。复用状态色保证语义一致；role=status 供辅助技术。

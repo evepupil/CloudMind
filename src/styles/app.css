@@ -1,156 +1,235 @@
 @import "tailwindcss";
 
+/* 自托管字体（woff2 从 @fontsource 子集复制到 public/fonts/，契合 BYOC 不依赖
+   Google CDN）。只引 latin + latin-ext（中文回退系统字），控制体积 ~276K。
+   可变字体用 woff2-variations + font-weight:100 900。url 走 /fonts/ 绝对路径，
+   由 Cloudflare Workers 从 public/ 静态提供——故 SSR 首屏即可用，无需客户端 JS。 */
+
+/* Fraunces 可变 · 标题正体（latin + latin-ext） */
+@font-face {
+  font-family: "Fraunces Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(/fonts/fraunces-latin-wght-normal.woff2) format("woff2-variations");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Fraunces Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(/fonts/fraunces-latin-ext-wght-normal.woff2)
+    format("woff2-variations");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2C60-2C7F, U+A720-A7FF;
+}
+/* Fraunces 可变 · 标题斜体（标题里的斜体黄铜强调用） */
+@font-face {
+  font-family: "Fraunces Variable";
+  font-style: italic;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(/fonts/fraunces-latin-wght-italic.woff2) format("woff2-variations");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Fraunces Variable";
+  font-style: italic;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(/fonts/fraunces-latin-ext-wght-italic.woff2)
+    format("woff2-variations");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Hanken Grotesk 可变 · 正文（latin + latin-ext） */
+@font-face {
+  font-family: "Hanken Grotesk Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(/fonts/hanken-grotesk-latin-wght-normal.woff2)
+    format("woff2-variations");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Hanken Grotesk Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(/fonts/hanken-grotesk-latin-ext-wght-normal.woff2)
+    format("woff2-variations");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* JetBrains Mono · 数据/标签（latin 400 + 500，latin-ext 400） */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(/fonts/jetbrains-mono-latin-400-normal.woff2) format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(/fonts/jetbrains-mono-latin-ext-400-normal.woff2) format("woff2");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url(/fonts/jetbrains-mono-latin-500-normal.woff2) format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
 /* ======================================================================
-   CloudMind — Glass / Aurora 设计令牌
-   深色极光底 + 磨砂玻璃面板。可读性铁律：正文一律落 reading/raised 玻璃面
-   （高不透明度），保证 WCAG AA；chrome 玻璃（侧栏/页头）可更通透让极光透出。
-   组件层禁用内联 hex——颜色一律用下列令牌命名的 utility（bg-* / text-* / border-*），
-   否则 Tailwind v4 会 tree-shake 掉未被引用的令牌。极光渐变的 hex 只允许出现在
-   本文件底部的 .aurora-* 装饰规则里（本文件即颜色的唯一真相源）。
+   CloudMind — Observatory 硬核记忆层控制台 · 设计令牌
+   深墨底 + 暖骨白 + 单一黄铜金。Fraunces 衬线标题 + Hanken Grotesk 正文
+   + JetBrains Mono 数据/标签。胶片颗粒 + 点阵网格 + 地平线暖光造氛围。
+   组件层禁用内联 hex——颜色一律用下列令牌命名的 utility（bg-* / text-* /
+   border-*），否则 Tailwind v4 会 tree-shake 掉未被引用的令牌。氛围层与状态
+   渐变的 hex 只允许出现在本文件底部的装饰规则里（本文件即颜色唯一真相源）。
    ====================================================================== */
 @theme {
-  /* --- 玻璃面（不透明度分层；正文区用 reading/raised） --- */
-  --color-glass-chrome: rgba(15, 20, 36, 0.62);
-  --color-glass-chrome-hover: rgba(255, 255, 255, 0.06);
-  --color-glass-reading: rgba(18, 24, 42, 0.94);
-  --color-glass-raised: rgba(27, 34, 56, 0.92);
-  --color-glass-border: rgba(255, 255, 255, 0.1);
-  --color-glass-border-soft: rgba(255, 255, 255, 0.06);
+  /* --- 底色三档（墨 → 抬升 → 面板） --- */
+  --color-ink: #0a0c10;
+  --color-ink-raised: #12151c;
+  --color-ink-panel: #161a23;
 
-  /* --- 文本（落在 reading-glass 上，AA 校准） --- */
-  --color-ink: #e8ebf3;
-  --color-ink-soft: #aab2c8;
-  --color-ink-faint: #8089a3;
+  /* --- 文本（暖骨白系，落在 ink-panel 上 AA） --- */
+  --color-bone: #ece4d4;
+  --color-bone-soft: #a9a294;
+  --color-bone-faint: #6b665b;
 
-  /* --- 分隔线（暗底上的发丝线） --- */
-  --color-line: rgba(255, 255, 255, 0.08);
-  --color-line-soft: rgba(255, 255, 255, 0.05);
+  /* --- 黄铜金（唯一强调） --- */
+  --color-brass: #c9a35e;
+  --color-brass-bright: #e6c585;
+  --color-brass-soft: rgba(201, 163, 94, 0.12);
+  /* 黄铜金之上的深色文字（主按钮 CTA） */
+  --color-on-brass: #0a0c10;
 
-  /* --- 强调色（单一冰青） --- */
-  --color-accent: #5ec4ee;
-  --color-accent-hover: #7ad3f5;
-  --color-accent-soft: rgba(94, 196, 238, 0.14);
-  /* 强调色之上的深色文字（主按钮 CTA，保高对比） */
-  --color-on-accent: #07111c;
+  /* --- 状态色（玉绿/钢蓝/铁锈，去饱和暖调） --- */
+  --color-status-ready: #7fae8a;
+  --color-status-ready-bg: rgba(127, 174, 138, 0.08);
+  --color-status-ready-border: rgba(127, 174, 138, 0.4);
 
-  /* --- 状态色（深底调、玻璃质感） --- */
-  --color-status-pending-text: #f0c674;
-  --color-status-pending-bg: rgba(240, 198, 116, 0.12);
-  --color-status-pending-border: rgba(240, 198, 116, 0.3);
+  --color-status-processing: #6f97b5;
+  --color-status-processing-bg: rgba(111, 151, 181, 0.08);
+  --color-status-processing-border: rgba(111, 151, 181, 0.4);
 
-  --color-status-processing-text: #5ec4ee;
-  --color-status-processing-bg: rgba(94, 196, 238, 0.12);
-  --color-status-processing-border: rgba(94, 196, 238, 0.3);
+  --color-status-pending: #c9a35e;
+  --color-status-pending-bg: rgba(201, 163, 94, 0.08);
+  --color-status-pending-border: rgba(201, 163, 94, 0.4);
 
-  --color-status-ready-text: #5fd8a6;
-  --color-status-ready-bg: rgba(95, 216, 166, 0.12);
-  --color-status-ready-border: rgba(95, 216, 166, 0.3);
+  --color-status-failed: #c17b5a;
+  --color-status-failed-bg: rgba(193, 123, 90, 0.08);
+  --color-status-failed-border: rgba(193, 123, 90, 0.4);
 
-  --color-status-failed-text: #f08a8a;
-  --color-status-failed-bg: rgba(240, 138, 138, 0.12);
-  --color-status-failed-border: rgba(240, 138, 138, 0.3);
+  /* --- 分隔线（暖骨白发丝） --- */
+  --color-line: rgba(236, 228, 212, 0.1);
+  --color-line-soft: rgba(236, 228, 212, 0.06);
 
-  /* --- 圆角（玻璃偏大） --- */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  /* --- 圆角 --- */
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
 
   /* --- 阴影（柔和分层，营造悬浮） --- */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 24px 70px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 18px 50px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 24px 70px rgba(0, 0, 0, 0.5);
 
-  /* --- 字体（Inter 真加载后自动接管，否则回退系统栈） --- */
+  /* --- 字体（@fontsource variable 经 client.ts import；回退系统栈） --- */
+  --font-display:
+    "Fraunces Variable", "Fraunces", Georgia, "Times New Roman", serif;
   --font-sans:
-    "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", sans-serif;
+    "Hanken Grotesk Variable", "Hanken Grotesk", system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono:
-    "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
   /* --- 动效缓动（配合 transition-* 用 ease-glass） --- */
   --ease-glass: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* ----------------------------------------------------------------------
-   极光底层（纯装饰；hex 只允许在此中央样式表）。
-   position:fixed 全屏、z-index 负值，绝不出现在文字直接落色的区域；
-   极其缓慢的漂移仅服务氛围，不抢内容焦点。
+   氛围底层（纯装饰；hex 只允许在此中央样式表）。
+   固定全屏、z-index 负值，绝不出现在文字直接落色的区域。
+   ① 极淡点阵技术网格 ② 底部地平线黄铜暖光 ③ 胶片颗粒。
    ---------------------------------------------------------------------- */
-.aurora-canvas {
+.atmos {
   position: fixed;
   inset: 0;
-  z-index: -10;
-  overflow: hidden;
-  background-color: #0b0f1a;
+  z-index: -3;
+  pointer-events: none;
 }
-.aurora-blob {
+.atmos::before {
+  content: "";
   position: absolute;
-  border-radius: 9999px;
-  filter: blur(72px);
-  opacity: 0.5;
-  will-change: transform;
+  inset: 0;
+  background-image: radial-gradient(
+    circle at center,
+    rgba(236, 228, 212, 0.5) 0.5px,
+    transparent 0.5px
+  );
+  background-size: 38px 38px;
+  opacity: 0.045;
 }
-.aurora-blob--cyan {
-  width: 46vw;
-  height: 46vw;
-  left: -8vw;
-  top: -10vh;
-  background: radial-gradient(circle at center, #56b4e0, transparent 68%);
-  animation: aurora-drift-1 26s ease-in-out infinite alternate;
+.atmos::after {
+  content: "";
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  bottom: -40%;
+  height: 80%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(201, 163, 94, 0.16),
+    transparent 60%
+  );
+  opacity: 0.7;
 }
-.aurora-blob--violet {
-  width: 42vw;
-  height: 42vw;
-  right: -6vw;
-  top: 6vh;
-  background: radial-gradient(circle at center, #7c5cff, transparent 68%);
-  animation: aurora-drift-2 32s ease-in-out infinite alternate;
-}
-.aurora-blob--magenta {
-  width: 40vw;
-  height: 40vw;
-  left: 22vw;
-  bottom: -16vh;
-  background: radial-gradient(circle at center, #c850c0, transparent 68%);
-  animation: aurora-drift-3 38s ease-in-out infinite alternate;
-}
-.aurora-blob--teal {
-  width: 34vw;
-  height: 34vw;
-  right: 16vw;
-  bottom: -12vh;
-  opacity: 0.32;
-  background: radial-gradient(circle at center, #3ddc97, transparent 70%);
-  animation: aurora-drift-1 30s ease-in-out infinite alternate-reverse;
-}
-@keyframes aurora-drift-1 {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  100% {
-    transform: translate3d(6vw, 8vh, 0) scale(1.12);
-  }
-}
-@keyframes aurora-drift-2 {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1.05);
-  }
-  100% {
-    transform: translate3d(-7vw, 6vh, 0) scale(0.95);
-  }
-}
-@keyframes aurora-drift-3 {
-  0% {
-    transform: translate3d(0, 0, 0) scale(0.95);
-  }
-  100% {
-    transform: translate3d(5vw, -7vh, 0) scale(1.1);
-  }
+.atmos-grain {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 /* ----------------------------------------------------------------------
-   基础：深色底 + 默认字色 + 平滑滚动 + 选区配色。
+   基础：深墨底 + 默认字色 + 平滑滚动 + 选区配色。
    color-scheme:dark 让原生表单控件也按深色渲染。
    ---------------------------------------------------------------------- */
 html {
@@ -159,20 +238,39 @@ html {
 }
 body {
   min-height: 100vh;
-  background-color: #0b0f1a;
-  color: var(--color-ink);
+  background-color: #0a0c10;
+  color: var(--color-bone);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }
 ::selection {
-  background: rgba(94, 196, 238, 0.28);
+  background: rgba(201, 163, 94, 0.3);
   color: #ffffff;
 }
 
-/* 尊重「减少动态」偏好：极光静止、不闪不漂移、关闭平滑滚动。 */
+/* 进场错峰动画：页面块依次淡入上移（用 inline animation-delay 错峰）。 */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise {
+  opacity: 0;
+  animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* 尊重「减少动态」偏好：进场静止、关闭平滑滚动。 */
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
-  .aurora-blob {
-    animation: none !important;
+  .rise {
+    animation: none;
+    opacity: 1;
   }
 }

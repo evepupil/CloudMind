@@ -23,6 +23,9 @@
     "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy"
   },
   "dependencies": {
+    "@fontsource-variable/fraunces": "^5.2.9",
+    "@fontsource-variable/hanken-grotesk": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
     "@hono/mcp": "^0.1.5",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@tailwindcss/vite": "^4.2.2",

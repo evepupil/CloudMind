@@ -1,0 +1,898 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CloudMind · 设计方向稿</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ===================================================================
+         CloudMind — 硬核记忆层控制台
+         深墨底 + 暖骨白 + 单一黄铜金。Fraunces 衬线 + JetBrains Mono 数据。
+         胶片颗粒 + 网格 + 地平线暖光造氛围。图谱用结构化节点图，不搞星图叙事。
+         =================================================================== */
+      :root {
+        --ink: #0a0c10; /* 深墨底 */
+        --ink-raised: #12151c; /* 抬升面 */
+        --ink-panel: #161a23; /* 面板 */
+        --bone: #ece4d4; /* 暖骨白（主字） */
+        --bone-soft: #a9a294; /* 次字 */
+        --bone-faint: #6b665b; /* 弱字 */
+        --brass: #c9a35e; /* 黄铜金（唯一强调） */
+        --brass-bright: #e6c585; /* 亮铜（hover） */
+        --jade: #7fae8a; /* 玉绿（就绪） */
+        --rust: #c17b5a; /* 铁锈（失败/警示） */
+        --azure: #6f97b5; /* 钢蓝（处理中） */
+        --line: rgba(236, 228, 212, 0.1);
+        --line-soft: rgba(236, 228, 212, 0.06);
+        --brass-glow: rgba(201, 163, 94, 0.16);
+        --font-display: "Fraunces", Georgia, serif;
+        --font-body: "Hanken Grotesk", system-ui, sans-serif;
+        --font-mono: "JetBrains Mono", monospace;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        font-family: var(--font-body);
+        background-color: var(--ink);
+        color: var(--bone);
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+        position: relative;
+        overflow-x: hidden;
+      }
+
+      /* --- 氛围层：网格 + 地平线暖光 + 胶片颗粒 --- */
+      .atmos {
+        position: fixed;
+        inset: 0;
+        z-index: -3;
+        pointer-events: none;
+      }
+      /* 极淡技术网格（点阵） */
+      .atmos::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(
+          circle at center,
+          rgba(236, 228, 212, 0.5) 0.5px,
+          transparent 0.5px
+        );
+        background-size: 38px 38px;
+        opacity: 0.045;
+      }
+      /* 地平线暖光（底部黄铜辉） */
+      .atmos::after {
+        content: "";
+        position: absolute;
+        left: -10%;
+        right: -10%;
+        bottom: -40%;
+        height: 80%;
+        background: radial-gradient(
+          ellipse at center,
+          var(--brass-glow),
+          transparent 60%
+        );
+        opacity: 0.7;
+      }
+      /* 胶片颗粒 */
+      .grain {
+        position: fixed;
+        inset: 0;
+        z-index: -2;
+        pointer-events: none;
+        opacity: 0.04;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      }
+
+      /* --- 布局：侧边索引 + 主区 --- */
+      .shell {
+        display: grid;
+        grid-template-columns: 248px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      /* === 侧边栏 === */
+      .sidebar {
+        border-right: 1px solid var(--line);
+        padding: 28px 20px;
+        display: flex;
+        flex-direction: column;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        background: linear-gradient(
+          180deg,
+          rgba(18, 21, 28, 0.4),
+          transparent
+        );
+      }
+      .brand {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        padding: 0 8px 18px;
+        border-bottom: 1px solid var(--line-soft);
+      }
+      .brand-mark {
+        font-family: var(--font-display);
+        font-size: 25px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: var(--bone);
+      }
+      .brand-mark .dot {
+        color: var(--brass);
+      }
+      .brand-sub {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--bone-faint);
+        padding: 12px 8px 0;
+      }
+
+      .nav-group {
+        margin-top: 26px;
+      }
+      .nav-label {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--bone-faint);
+        padding: 0 8px;
+        margin-bottom: 8px;
+      }
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        padding: 8px 10px;
+        border-radius: 7px;
+        color: var(--bone-soft);
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+        position: relative;
+      }
+      .nav-item:hover {
+        background: rgba(236, 228, 212, 0.04);
+        color: var(--bone);
+      }
+      .nav-item.active {
+        color: var(--bone);
+        background: rgba(201, 163, 94, 0.08);
+      }
+      .nav-item.active::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 2px;
+        height: 16px;
+        background: var(--brass);
+        border-radius: 2px;
+      }
+      .nav-glyph {
+        width: 15px;
+        text-align: center;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        opacity: 0.85;
+      }
+
+      .sidebar-foot {
+        margin-top: auto;
+        padding: 14px 8px 0;
+        border-top: 1px solid var(--line-soft);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--bone-faint);
+        line-height: 1.9;
+      }
+      .sidebar-foot .row {
+        display: flex;
+        justify-content: space-between;
+      }
+      .sidebar-foot .val {
+        color: var(--bone-soft);
+      }
+
+      /* === 主区 === */
+      .main {
+        padding: 40px 48px 64px;
+        max-width: 1180px;
+      }
+
+      /* 进场错峰动画 */
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(14px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .rise {
+        opacity: 0;
+        animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      }
+
+      /* 页眉 */
+      .head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 24px;
+        margin-bottom: 8px;
+      }
+      .eyebrow {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--brass);
+        margin-bottom: 12px;
+      }
+      .title {
+        font-family: var(--font-display);
+        font-size: 52px;
+        font-weight: 500;
+        line-height: 1.02;
+        letter-spacing: -0.025em;
+        color: var(--bone);
+      }
+      .title em {
+        font-style: italic;
+        color: var(--brass);
+      }
+      .subtitle {
+        margin-top: 14px;
+        font-size: 15px;
+        color: var(--bone-soft);
+        max-width: 52ch;
+        line-height: 1.65;
+      }
+      .head-actions {
+        display: flex;
+        gap: 10px;
+        flex-shrink: 0;
+      }
+
+      .btn {
+        font-family: var(--font-body);
+        font-size: 13.5px;
+        font-weight: 600;
+        padding: 9px 16px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: all 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .btn-primary {
+        background: var(--brass);
+        color: var(--ink);
+        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset,
+          0 6px 20px rgba(201, 163, 94, 0.22);
+      }
+      .btn-primary:hover {
+        background: var(--brass-bright);
+        transform: translateY(-1px);
+      }
+      .btn-ghost {
+        border-color: var(--line);
+        color: var(--bone-soft);
+        background: rgba(236, 228, 212, 0.02);
+      }
+      .btn-ghost:hover {
+        border-color: rgba(201, 163, 94, 0.4);
+        color: var(--bone);
+      }
+
+      /* 计量条 */
+      .ledger {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        margin: 32px 0;
+        background: var(--line-soft);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        overflow: hidden;
+      }
+      .metric {
+        background: var(--ink-raised);
+        padding: 22px 24px;
+        position: relative;
+      }
+      .metric-label {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--bone-faint);
+        margin-bottom: 12px;
+      }
+      .metric-value {
+        font-family: var(--font-display);
+        font-size: 42px;
+        font-weight: 500;
+        line-height: 1;
+        color: var(--bone);
+        font-variant-numeric: tabular-nums;
+      }
+      .metric-value.accent {
+        color: var(--brass);
+      }
+      .metric-note {
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--bone-soft);
+      }
+      .metric-spark {
+        position: absolute;
+        right: 18px;
+        top: 22px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--jade);
+      }
+
+      /* 内容网格 */
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+        gap: 22px;
+      }
+
+      .panel {
+        background: var(--ink-panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 24px;
+        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset,
+          0 18px 50px rgba(0, 0, 0, 0.4);
+      }
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 18px;
+      }
+      .panel-title {
+        font-family: var(--font-display);
+        font-size: 19px;
+        font-weight: 600;
+        color: var(--bone);
+        letter-spacing: -0.01em;
+      }
+      .panel-link {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        color: var(--brass);
+        text-decoration: none;
+        text-transform: uppercase;
+      }
+      .panel-link:hover {
+        color: var(--brass-bright);
+      }
+
+      /* 知识图谱：结构化节点图（非星图） */
+      .graph {
+        position: relative;
+        height: 250px;
+        margin: -4px -4px 4px;
+      }
+      .graph svg {
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+      .edge {
+        stroke: rgba(201, 163, 94, 0.3);
+        stroke-width: 1;
+      }
+      .edge-arrow {
+        fill: rgba(201, 163, 94, 0.5);
+      }
+      /* 节点：实心方点 + 细环，工程图谱感，不闪烁 */
+      .node-ring {
+        fill: none;
+        stroke: var(--brass);
+        stroke-width: 1;
+        opacity: 0.35;
+      }
+      .node-dot {
+        fill: var(--brass);
+      }
+      .node-dot.dim {
+        fill: var(--bone-soft);
+        opacity: 0.6;
+      }
+      .node-label {
+        font-family: var(--font-mono);
+        font-size: 9.5px;
+        fill: var(--bone-soft);
+        letter-spacing: 0.02em;
+      }
+
+      /* 资产清单 */
+      .asset {
+        display: flex;
+        gap: 14px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--line-soft);
+        align-items: flex-start;
+      }
+      .asset:last-child {
+        border-bottom: none;
+      }
+      .asset-rule {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--bone-faint);
+        padding-top: 2px;
+        min-width: 22px;
+      }
+      .asset-body {
+        flex: 1;
+        min-width: 0;
+      }
+      .asset-title {
+        font-size: 14.5px;
+        font-weight: 600;
+        color: var(--bone);
+        margin-bottom: 4px;
+        line-height: 1.4;
+      }
+      .asset-meta {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--bone-faint);
+        display: flex;
+        gap: 12px;
+      }
+      .pill {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding: 3px 9px;
+        border-radius: 100px;
+        border: 1px solid;
+        white-space: nowrap;
+        align-self: center;
+      }
+      .pill.ready {
+        color: var(--jade);
+        border-color: rgba(127, 174, 138, 0.4);
+        background: rgba(127, 174, 138, 0.08);
+      }
+      .pill.processing {
+        color: var(--azure);
+        border-color: rgba(111, 151, 181, 0.4);
+        background: rgba(111, 151, 181, 0.08);
+      }
+      .pill.failed {
+        color: var(--rust);
+        border-color: rgba(193, 123, 90, 0.4);
+        background: rgba(193, 123, 90, 0.08);
+      }
+
+      /* 追问建议 */
+      .prompt {
+        display: block;
+        padding: 13px 16px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        margin-bottom: 10px;
+        color: var(--bone-soft);
+        text-decoration: none;
+        font-size: 13.5px;
+        transition: all 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+        position: relative;
+      }
+      .prompt:hover {
+        border-color: rgba(201, 163, 94, 0.4);
+        color: var(--bone);
+        transform: translateX(3px);
+      }
+      .prompt::after {
+        content: "→";
+        position: absolute;
+        right: 16px;
+        color: var(--brass);
+        opacity: 0;
+        transition: opacity 0.18s;
+      }
+      .prompt:hover::after {
+        opacity: 1;
+      }
+
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+      }
+
+      /* 整合状态条 */
+      .consol {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 16px;
+        border-radius: 10px;
+        background: rgba(127, 174, 138, 0.06);
+        border: 1px solid rgba(127, 174, 138, 0.2);
+        font-size: 13px;
+        color: var(--bone-soft);
+      }
+      .consol .glyph {
+        color: var(--jade);
+        font-family: var(--font-mono);
+        font-size: 14px;
+      }
+      .consol strong {
+        color: var(--bone);
+        font-weight: 600;
+      }
+
+      @media (max-width: 980px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+        .sidebar {
+          display: none;
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .ledger {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .title {
+          font-size: 38px;
+        }
+        .main {
+          padding: 28px 22px 48px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .rise {
+          animation: none;
+          opacity: 1;
+        }
+        html {
+          scroll-behavior: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="atmos"></div>
+    <div class="grain"></div>
+
+    <div class="shell">
+      <!-- 侧边索引 -->
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">CloudMind<span class="dot">.</span></span>
+        </div>
+        <div class="brand-sub">SELF-HOSTED MEMORY LAYER</div>
+
+        <nav class="nav-group">
+          <div class="nav-label">工作区</div>
+          <a class="nav-item active" href="#"
+            ><span class="nav-glyph">#</span>纵览</a
+          >
+          <a class="nav-item" href="#"
+            ><span class="nav-glyph">▤</span>记忆库</a
+          >
+          <a class="nav-item" href="#"
+            ><span class="nav-glyph">+</span>采集</a
+          >
+          <a class="nav-item" href="#"
+            ><span class="nav-glyph">?</span>问答</a
+          >
+        </nav>
+
+        <nav class="nav-group">
+          <div class="nav-label">记忆层</div>
+          <a class="nav-item" href="#"
+            ><span class="nav-glyph">◆</span>记忆图谱</a
+          >
+          <a class="nav-item" href="#"
+            ><span class="nav-glyph">≡</span>事实 / 时间线</a
+          >
+          <a class="nav-item" href="#"
+            ><span class="nav-glyph">◍</span>整合</a
+          >
+        </nav>
+
+        <nav class="nav-group">
+          <div class="nav-label">系统</div>
+          <a class="nav-item" href="#"
+            ><span class="nav-glyph">›_</span>活动 / 任务</a
+          >
+          <a class="nav-item" href="#"
+            ><span class="nav-glyph">=</span>设置</a
+          >
+        </nav>
+
+        <div class="sidebar-foot">
+          <div class="row"><span>mode</span><span class="val">single-user</span></div>
+          <div class="row">
+            <span>store</span><span class="val">D1·R2·Vectorize</span>
+          </div>
+          <div class="row">
+            <span>scope</span><span class="val">personal</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 主区 -->
+      <main class="main">
+        <header class="head rise" style="animation-delay: 0.05s">
+          <div>
+            <div class="eyebrow">MEMORY LAYER · 纵览</div>
+            <h1 class="title">你的<em>记忆</em>当前状态</h1>
+            <p class="subtitle">
+              一座私有、可导出、由你掌控的知识层。最近采集、处理动态、知识图谱的生长，都在这里一眼可见。
+            </p>
+          </div>
+          <div class="head-actions">
+            <a class="btn btn-ghost" href="#">? 问答</a>
+            <a class="btn btn-primary" href="#">+ 采集</a>
+          </div>
+        </header>
+
+        <!-- 计量 -->
+        <section class="ledger rise" style="animation-delay: 0.12s">
+          <div class="metric">
+            <div class="metric-label">资产</div>
+            <div class="metric-value">13</div>
+            <div class="metric-note">L1 事实 / 情节</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">图谱实体</div>
+            <div class="metric-value accent">39</div>
+            <div class="metric-note">entities</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">陈述</div>
+            <div class="metric-value">43</div>
+            <div class="metric-note">带有效期的事实</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">关系边</div>
+            <div class="metric-value">13</div>
+            <div class="metric-spark">● active</div>
+            <div class="metric-note">实体间连接</div>
+          </div>
+        </section>
+
+        <!-- 主网格 -->
+        <div class="grid">
+          <!-- 左：图谱 + 最近采集 -->
+          <div class="stack">
+            <section class="panel rise" style="animation-delay: 0.2s">
+              <div class="panel-head">
+                <h2 class="panel-title">记忆图谱</h2>
+                <a class="panel-link" href="#">展开全图 →</a>
+              </div>
+              <div class="graph">
+                <svg viewBox="0 0 520 250" aria-hidden="true">
+                  <defs>
+                    <marker
+                      id="arrow"
+                      viewBox="0 0 10 10"
+                      refX="9"
+                      refY="5"
+                      markerWidth="6"
+                      markerHeight="6"
+                      orient="auto-start-reverse"
+                    >
+                      <path class="edge-arrow" d="M 0 0 L 10 5 L 0 10 z" />
+                    </marker>
+                  </defs>
+                  <!-- 有向边 -->
+                  <line class="edge" marker-end="url(#arrow)" x1="96" y1="70" x2="204" y2="52" />
+                  <line class="edge" marker-end="url(#arrow)" x1="216" y1="50" x2="324" y2="93" />
+                  <line class="edge" marker-end="url(#arrow)" x1="336" y1="95" x2="444" y2="62" />
+                  <line class="edge" marker-end="url(#arrow)" x1="210" y1="56" x2="174" y2="154" />
+                  <line class="edge" marker-end="url(#arrow)" x1="176" y1="160" x2="294" y2="183" />
+                  <line class="edge" marker-end="url(#arrow)" x1="330" y1="101" x2="306" y2="179" />
+                  <line class="edge" marker-end="url(#arrow)" x1="306" y1="185" x2="424" y2="198" />
+                  <line class="edge" marker-end="url(#arrow)" x1="450" y1="66" x2="432" y2="194" />
+                  <line class="edge" marker-end="url(#arrow)" x1="84" y1="74" x2="64" y2="174" />
+                  <!-- 节点 -->
+                  <g>
+                    <circle class="node-ring" cx="90" cy="70" r="9" />
+                    <circle class="node-dot" cx="90" cy="70" r="4" />
+                    <text class="node-label" x="102" y="66">提示词防火墙</text>
+                  </g>
+                  <g>
+                    <circle class="node-ring" cx="210" cy="50" r="11" />
+                    <circle class="node-dot" cx="210" cy="50" r="5" />
+                    <text class="node-label" x="224" y="46">CloudMind</text>
+                  </g>
+                  <g>
+                    <circle class="node-dot dim" cx="330" cy="95" r="3.5" />
+                    <text class="node-label" x="340" y="91">scope 隔离</text>
+                  </g>
+                  <g>
+                    <circle class="node-ring" cx="450" cy="60" r="9" />
+                    <circle class="node-dot" cx="450" cy="60" r="4" />
+                    <text class="node-label" x="404" y="50">agent 记忆</text>
+                  </g>
+                  <g>
+                    <circle class="node-dot dim" cx="170" cy="160" r="3.5" />
+                    <text class="node-label" x="180" y="156">时间检索</text>
+                  </g>
+                  <g>
+                    <circle class="node-ring" cx="300" cy="185" r="9" />
+                    <circle class="node-dot" cx="300" cy="185" r="4" />
+                    <text class="node-label" x="312" y="181">知识图谱</text>
+                  </g>
+                  <g>
+                    <circle class="node-dot dim" cx="430" cy="200" r="3.5" />
+                    <text class="node-label" x="326" y="204">bi-temporal</text>
+                  </g>
+                  <g>
+                    <circle class="node-dot dim" cx="60" cy="180" r="3" />
+                    <text class="node-label" x="70" y="176">Vectorize</text>
+                  </g>
+                </svg>
+              </div>
+              <div class="consol" style="margin-top: 14px">
+                <span class="glyph">◍</span>
+                <span
+                  >上次整合 <strong>今晨 03:00 UTC</strong> · 修复漂移边
+                  <strong>0</strong> · 归档重复陈述 <strong>0</strong> ·
+                  图谱一致</span
+                >
+              </div>
+            </section>
+
+            <section class="panel rise" style="animation-delay: 0.28s">
+              <div class="panel-head">
+                <h2 class="panel-title">最近采集</h2>
+                <a class="panel-link" href="#">记忆库全览 →</a>
+              </div>
+              <div class="asset">
+                <span class="asset-rule">01</span>
+                <div class="asset-body">
+                  <div class="asset-title">
+                    CloudMind 记忆分离决策 · 人的记忆 vs agent 记忆
+                  </div>
+                  <div class="asset-meta">
+                    <span>chat</span><span>engineering</span
+                    ><span>2 天前</span>
+                  </div>
+                </div>
+                <span class="pill ready">就绪</span>
+              </div>
+              <div class="asset">
+                <span class="asset-rule">02</span>
+                <div class="asset-body">
+                  <div class="asset-title">
+                    提示词安全拦截引擎（Code Firewall）技术方案
+                  </div>
+                  <div class="asset-meta">
+                    <span>note</span><span>engineering</span
+                    ><span>6 天前</span>
+                  </div>
+                </div>
+                <span class="pill ready">就绪</span>
+              </div>
+              <div class="asset">
+                <span class="asset-rule">03</span>
+                <div class="asset-body">
+                  <div class="asset-title">
+                    AI Agent 自动记忆原则 · 三类高价值信息
+                  </div>
+                  <div class="asset-meta">
+                    <span>chat</span><span>personal</span><span>5 天前</span>
+                  </div>
+                </div>
+                <span class="pill processing">处理中</span>
+              </div>
+              <div class="asset">
+                <span class="asset-rule">04</span>
+                <div class="asset-body">
+                  <div class="asset-title">时间检索 createdAt 向量过滤验收</div>
+                  <div class="asset-meta">
+                    <span>note</span><span>general</span><span>9 天前</span>
+                  </div>
+                </div>
+                <span class="pill ready">就绪</span>
+              </div>
+            </section>
+          </div>
+
+          <!-- 右：速记 + 追问 -->
+          <div class="stack">
+            <section class="panel rise" style="animation-delay: 0.36s">
+              <div class="panel-head">
+                <h2 class="panel-title">速记</h2>
+              </div>
+              <p
+                style="
+                  font-size: 13px;
+                  color: var(--bone-soft);
+                  margin-bottom: 14px;
+                  line-height: 1.6;
+                "
+              >
+                把此刻想留住的东西收进来——原文、链接，或一段 AI
+                生成的高密度记忆。
+              </p>
+              <textarea
+                placeholder="记一下：……"
+                rows="4"
+                style="
+                  width: 100%;
+                  background: var(--ink-raised);
+                  border: 1px solid var(--line);
+                  border-radius: 10px;
+                  padding: 12px 14px;
+                  color: var(--bone);
+                  font-family: var(--font-body);
+                  font-size: 14px;
+                  resize: vertical;
+                  outline: none;
+                "
+              ></textarea>
+              <div style="display: flex; gap: 10px; margin-top: 12px">
+                <a class="btn btn-primary" href="#" style="flex: 1; justify-content: center"
+                  >收录这条</a
+                >
+                <a class="btn btn-ghost" href="#">URL</a>
+                <a class="btn btn-ghost" href="#">PDF</a>
+              </div>
+            </section>
+
+            <section class="panel rise" style="animation-delay: 0.44s">
+              <div class="panel-head">
+                <h2 class="panel-title">建议问询</h2>
+                <a class="panel-link" href="#">问答 →</a>
+              </div>
+              <a class="prompt" href="#">我关于 scope 隔离做过哪些决策？</a>
+              <a class="prompt" href="#">提示词防火墙的核心机制是什么？</a>
+              <a class="prompt" href="#">最近一周我采集了哪些工程笔记？</a>
+              <a class="prompt" href="#">agent 记忆和人的记忆区别在哪？</a>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

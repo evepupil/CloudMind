@@ -2,12 +2,11 @@ export type StatusKind = "pending" | "processing" | "ready" | "failed";
 
 const statusStyles: Record<StatusKind, string> = {
   pending:
-    "border-status-pending-border bg-status-pending-bg text-status-pending-text",
+    "border-status-pending-border bg-status-pending-bg text-status-pending",
   processing:
-    "border-status-processing-border bg-status-processing-bg text-status-processing-text",
-  ready: "border-status-ready-border bg-status-ready-bg text-status-ready-text",
-  failed:
-    "border-status-failed-border bg-status-failed-bg text-status-failed-text",
+    "border-status-processing-border bg-status-processing-bg text-status-processing",
+  ready: "border-status-ready-border bg-status-ready-bg text-status-ready",
+  failed: "border-status-failed-border bg-status-failed-bg text-status-failed",
 };
 
 const statusLabels: Record<StatusKind, string> = {
@@ -17,7 +16,7 @@ const statusLabels: Record<StatusKind, string> = {
   failed: "失败",
 };
 
-// 状态药丸：点用 bg-current 跟随文字色，统一玻璃质感。
+// 状态药丸：JetBrains Mono 小字 + 圆角描边，玉绿/钢蓝/黄铜/铁锈四态。
 export const StatusBadge = ({
   status,
   label,
@@ -28,7 +27,7 @@ export const StatusBadge = ({
   class?: string;
 }) => (
   <span
-    class={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-medium ${statusStyles[status]} ${className ?? ""}`}
+    class={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.06em] ${statusStyles[status]} ${className ?? ""}`}
   >
     <span class="h-1.5 w-1.5 rounded-full bg-current" />
     {label ?? statusLabels[status]}
