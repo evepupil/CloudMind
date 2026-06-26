@@ -1,29 +1,24 @@
 import { PageShell } from "@/features/layout/components/page-shell";
 import type { EvidenceLayer } from "@/features/search/model/evidence";
 import type { SearchResult } from "@/features/search/model/types";
+import { buttonClass, EmptyState, Panel } from "@/features/ui/components";
 
 const starterQueries = [
-  "Cloudflare deployment decisions",
-  "What did I save about vector search?",
-  "Recent notes about frontend refactor",
+  "Cloudflare 部署决策",
+  "我关于向量检索保存了什么？",
+  "最近的前端重构笔记",
 ];
 
-const buildStarterHref = (query: string): string => {
-  return `/search?query=${encodeURIComponent(query)}`;
-};
+const buildStarterHref = (query: string): string =>
+  `/search?query=${encodeURIComponent(query)}`;
 
-const formatDate = (value: string): string => {
-  return new Date(value).toLocaleString("zh-CN", {
-    hour12: false,
-  });
-};
+const formatDate = (value: string): string =>
+  new Date(value).toLocaleString("zh-CN", { hour12: false });
 
-const formatScore = (value: number): string => {
-  return value.toFixed(3);
-};
+const formatScore = (value: number): string => value.toFixed(3);
 
-const formatLabel = (value: string): string => {
-  return value
+const formatLabel = (value: string): string =>
+  value
     .split("_")
     .map((segment) =>
       segment.length > 0
@@ -31,41 +26,31 @@ const formatLabel = (value: string): string => {
         : segment
     )
     .join(" ");
-};
 
-const getEvidenceLayerLabel = (layer: EvidenceLayer): string => {
-  if (layer === "chunk") {
-    return "Chunk match";
-  }
+const getEvidenceLayerLabel = (layer: EvidenceLayer): string =>
+  layer === "chunk" ? "切块命中" : "摘要命中";
 
-  return "Summary match";
-};
-
+// 得分 → 三档语义色（强/相关/弱），复用状态色令牌。
 const getScoreClasses = (value: number): string => {
   if (value >= 0.85) {
-    return "text-[#2e6c3e] bg-[#e3f2e8] border-[#b7dbbf]";
+    return "text-status-ready border-status-ready-border bg-status-ready-bg";
   }
-
   if (value >= 0.65) {
-    return "text-[#2e6a9c] bg-[#e3eef9] border-[#b7d4e8]";
+    return "text-status-processing border-status-processing-border bg-status-processing-bg";
   }
-
-  return "text-[#7c6a2e] bg-[#f9f3e3] border-[#e8dbb7]";
+  return "text-status-pending border-status-pending-border bg-status-pending-bg";
 };
 
 const getScoreLabel = (value: number): string => {
-  if (value >= 0.85) {
-    return "Strong match";
-  }
-
-  if (value >= 0.65) {
-    return "Relevant";
-  }
-
-  return "Weak match";
+  if (value >= 0.85) return "强匹配";
+  if (value >= 0.65) return "相关";
+  return "弱匹配";
 };
 
-// 这里把 Search 改成工作台内的检索面板，不再作为脱离壳层的单页。
+const chipClass =
+  "rounded bg-ink-raised px-2 py-0.5 font-mono text-[10.5px] uppercase tracking-[0.06em] text-bone-soft";
+
+// 搜索：工作台内的语义检索面板，召回切块 → 还原成可查看的资产来源。
 export const SearchPage = ({
   result,
   query,
@@ -79,72 +64,61 @@ export const SearchPage = ({
 
   return (
     <PageShell
-      title="Search your library"
-      subtitle="Run semantic retrieval across saved assets, inspect chunk-level matches, and decide what should be opened, compared, or asked next."
       navigationKey="search"
+      eyebrow="系统 · 搜索"
+      title={
+        <>
+          语义<em class="italic text-brass">检索</em>
+        </>
+      }
+      subtitle="在收录的记忆里做语义召回，查看切块级命中，决定下一步打开、对比还是追问。"
       actions={
         <>
-          <a
-            href="/ask"
-            class="rounded-md border border-[#e8e8e7] bg-white px-4 py-2 text-[#37352f] font-bold no-underline"
-          >
-            Open Ask
+          <a class={buttonClass("subtle")} href="/ask">
+            ? 问答
           </a>
-          <a
-            href="/capture"
-            class="rounded-md border border-[#e8e8e7] bg-[#fafaf9] px-4 py-2 text-[#37352f] font-bold no-underline"
-          >
-            Add sources
+          <a class={buttonClass("subtle")} href="/capture">
+            + 补充来源
           </a>
         </>
       }
     >
-      <section class="grid grid-cols-[minmax(0,1.55fr)_minmax(300px,0.82fr)] gap-[18px]">
-        <div class="grid gap-4">
-          <article class="rounded-lg border border-[#e8e8e7] bg-white p-6">
+      <section class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.82fr)]">
+        <div class="flex flex-col gap-4">
+          {/* 检索框 */}
+          <Panel class="p-6" variant="panel">
             <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p class="mb-1 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#9b9a97]">
+                <p class="mb-1 font-mono text-[11px] uppercase tracking-[0.16em] text-bone-faint">
                   Semantic retrieval
                 </p>
-                <h2 class="m-0 text-[28px] font-extrabold tracking-tight text-[#37352f]">
-                  Query the knowledge graph-in-progress
+                <h2 class="font-display text-[22px] font-semibold text-bone">
+                  按含义检索记忆
                 </h2>
               </div>
-              <div class="rounded-md border border-[#ededec] bg-[#fafaf9] px-3 py-2 text-[13px] text-[#787774]">
-                {result.pagination.total} ranked assets
+              <div class="rounded-md border border-line bg-ink-raised px-3 py-2 font-mono text-[11px] text-bone-soft">
+                {result.pagination.total} 条排序资产
               </div>
             </div>
 
             <form method="get" action="/search" class="grid gap-3">
-              <label class="grid gap-2">
-                <span class="text-[14px] font-bold text-[#37352f]">
-                  Semantic query
+              <label class="grid gap-1.5">
+                <span class="text-[13px] font-medium text-bone-soft">
+                  语义查询
                 </span>
                 <input
                   name="query"
                   type="search"
                   defaultValue={query}
-                  placeholder="Search across notes, PDFs, and saved URLs by meaning"
-                  class="w-full rounded-md border border-[#e8e8e7] bg-white px-4 py-2 text-[15px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
+                  placeholder="按含义检索笔记、PDF 与保存的 URL"
+                  class="w-full rounded-md border border-line bg-ink-raised px-4 py-2 text-[15px] text-bone outline-none transition-colors placeholder:text-bone-faint focus:border-brass"
                 />
               </label>
-
-              <div class="flex flex-wrap items-center justify-between gap-3">
-                <div class="flex flex-wrap gap-2">
-                  <button
-                    type="submit"
-                    class="rounded-md bg-[#37352f] px-4 py-2 text-[14px] font-bold text-white cursor-pointer border-none hover:bg-[#2f2d28] transition-colors"
-                  >
-                    Search library
-                  </button>
-                  <span class="px-2 py-0.5 text-[12px] bg-[#f1f1f0] text-[#787774] rounded">
-                    Asset-level rerank + grouped evidence
-                  </span>
-                </div>
-                <span class="text-[13px] text-[#9b9a97]">
-                  Page refresh for now. Async search can come next.
-                </span>
+              <div class="flex flex-wrap items-center gap-3">
+                <button type="submit" class={buttonClass("primary")}>
+                  搜索
+                </button>
+                <span class={chipClass}>资产级重排 + 分组证据</span>
               </div>
             </form>
 
@@ -154,43 +128,44 @@ export const SearchPage = ({
                   <a
                     key={item}
                     href={buildStarterHref(item)}
-                    class="rounded-md border border-[#ededec] bg-[#fafaf9] px-3 py-2 text-[13px] text-[#787774] no-underline"
+                    class="rounded-md border border-line bg-ink-raised px-3 py-2 text-[13px] text-bone-soft no-underline transition-colors hover:border-brass/40 hover:text-bone"
                   >
                     {item}
                   </a>
                 ))}
               </div>
             ) : null}
-          </article>
+          </Panel>
 
-          <section class="rounded-lg border border-[#e8e8e7] bg-white p-6">
+          {/* 检索输出 */}
+          <Panel class="p-6" variant="panel">
             <div class="mb-4 flex flex-wrap items-baseline justify-between gap-3">
-              <div>
-                <p class="mb-1 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#9b9a97]">
-                  Results
-                </p>
-                <h2 class="m-0 text-[28px] font-extrabold tracking-tight text-[#37352f]">
-                  Retrieval output
-                </h2>
-              </div>
-              <span class="text-[13px] text-[#787774]">
-                Page {result.pagination.page} /{" "}
-                {Math.max(result.pagination.totalPages, 1)}
+              <h2 class="font-display text-[22px] font-semibold text-bone">
+                检索结果
+              </h2>
+              <span class="font-mono text-[12px] text-bone-faint">
+                第 {result.pagination.page} /{" "}
+                {Math.max(result.pagination.totalPages, 1)} 页
               </span>
             </div>
 
             {!hasQuery ? (
-              <article class="rounded-md border border-dashed border-[#e8e8e7] bg-white p-4 text-[#787774] leading-relaxed">
-                输入一个主题、问题或技术决策方向，Search 会先召回最相关的
-                chunk，再把它们还原成可查看的资产来源。
-              </article>
+              <EmptyState
+                title="输入一个主题或问题"
+                description="搜索会先召回最相关的切块，再把它们还原成可查看的资产来源。"
+              />
             ) : !hasResults ? (
-              <article class="rounded-md border border-dashed border-[#e8e8e7] bg-white p-4 text-[#787774] leading-relaxed">
-                没有找到匹配结果。可以换一种表达方式，或者先去 Capture
-                增加上下文资产再回来搜索。
-              </article>
+              <EmptyState
+                title="没有找到匹配结果"
+                description="换一种表达，或先去采集补充上下文资产再回来搜索。"
+                action={
+                  <a class={buttonClass("primary")} href="/capture">
+                    去采集
+                  </a>
+                }
+              />
             ) : (
-              <div class="grid gap-3">
+              <div class="flex flex-col gap-3">
                 {result.groupedEvidence.map((group, index) => {
                   const asset = group.asset;
                   const primaryEvidence = group.primaryEvidence;
@@ -201,234 +176,206 @@ export const SearchPage = ({
                   );
 
                   return (
-                    <article
-                      key={asset.id}
-                      class="rounded-lg border border-[#e8e8e7] bg-white p-4 pb-5"
-                    >
+                    <Panel key={asset.id} class="p-4" variant="raised">
                       <div class="mb-2 flex flex-wrap items-start justify-between gap-3">
                         <div class="min-w-0">
-                          <div class="mb-2 flex flex-wrap gap-2">
-                            <span class="px-2 py-0.5 text-[12px] bg-[#f1f1f0] text-[#787774] rounded font-bold uppercase tracking-wide">
-                              {asset.type}
-                            </span>
+                          <div class="mb-2 flex flex-wrap gap-1.5">
+                            <span class={chipClass}>{asset.type}</span>
                             <span
-                              class={`px-2 py-0.5 text-[12px] rounded border font-bold uppercase tracking-wide ${scoreClasses}`}
+                              class={`rounded border px-2 py-0.5 font-mono text-[10.5px] uppercase tracking-[0.06em] ${scoreClasses}`}
                             >
                               {scoreLabel}
                             </span>
-                            <span class="px-2 py-0.5 text-[12px] bg-[#e3eef9] text-[#2e6a9c] border border-[#b7d4e8] rounded font-bold uppercase tracking-wide">
-                              {group.items.length} evidence
+                            <span class={chipClass}>
+                              {group.items.length} 证据
                             </span>
-                          </div>
-                          <div
-                            class={`mb-2 flex flex-wrap gap-2 ${indexingTags.length > 0 ? "mb-2" : "mb-2"}`}
-                          >
                             {group.matchedLayers.map((layer) => (
                               <span
                                 key={`${asset.id}:layer:${layer}`}
-                                class="px-2 py-0.5 text-[12px] bg-[#f3eefa] text-[#7a3fb2] border border-[#e0d4ee] rounded font-bold uppercase tracking-wide"
+                                class={chipClass}
                               >
                                 {getEvidenceLayerLabel(layer)}
                               </span>
                             ))}
+                            {indexingTags.map((tag) => (
+                              <span
+                                key={`${asset.id}:group:${tag}`}
+                                class={chipClass}
+                              >
+                                {formatLabel(tag)}
+                              </span>
+                            ))}
                           </div>
-                          {indexingTags.length > 0 ? (
-                            <div class="mb-2 flex flex-wrap gap-2">
-                              {indexingTags.map((tag) => (
-                                <span
-                                  key={`${asset.id}:group:${tag}`}
-                                  class="px-2 py-0.5 text-[12px] bg-[#f1f1f0] text-[#787774] rounded font-bold"
-                                >
-                                  {formatLabel(tag)}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
                           <a
                             href={`/assets/${asset.id}`}
-                            class="text-[20px] font-extrabold text-[#37352f] no-underline"
+                            class="text-[18px] font-semibold text-bone no-underline hover:text-brass"
                           >
                             {asset.title}
                           </a>
                         </div>
 
-                        <div class="grid min-w-[142px] gap-1 justify-items-end">
-                          <span class="text-[16px] font-extrabold text-[#37352f]">
+                        <div class="grid min-w-[130px] justify-items-end gap-0.5">
+                          <span class="font-display text-[18px] font-medium tabular-nums text-brass">
                             {formatScore(group.assetScore)}
                           </span>
-                          <span class="text-[12px] text-[#787774]">
-                            Asset rank #{index + 1}
+                          <span class="font-mono text-[11px] text-bone-faint">
+                            排名 #{index + 1}
                           </span>
-                          <span class="text-[12px] text-[#787774]">
-                            {`Top evidence ${formatScore(group.topScore)}`}
+                          <span class="font-mono text-[11px] text-bone-faint">
+                            顶证据 {formatScore(group.topScore)}
                           </span>
                         </div>
                       </div>
 
-                      <div class="mb-2 flex flex-wrap gap-2 text-[13px] text-[#787774]">
-                        <span>{`Primary: ${getEvidenceLayerLabel(primaryEvidence.layer)}`}</span>
+                      <div class="mb-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11px] text-bone-faint">
                         <span>
-                          {`Visibility: ${formatLabel(primaryEvidence.indexing.aiVisibility)}`}
+                          主证据：{getEvidenceLayerLabel(primaryEvidence.layer)}
                         </span>
-                        {primaryEvidence.indexing.collectionKey ? (
-                          <span>{`Collection: ${primaryEvidence.indexing.collectionKey}`}</span>
-                        ) : null}
                         <span>{formatDate(asset.createdAt)}</span>
-                        <span>
-                          {asset.sourceUrl ?? `Asset ID: ${asset.id}`}
+                        <span class="truncate">
+                          {asset.sourceUrl ?? `ID: ${asset.id}`}
                         </span>
                       </div>
 
-                      <p class="mb-3 text-[15px] leading-[1.82] text-[#37352f]">
+                      <p class="mb-3 text-[14.5px] leading-[1.8] text-bone-soft">
                         {asset.summary ?? primaryEvidence.snippet}
                       </p>
 
-                      <article class="mb-4 rounded-md border border-[#ededec] bg-[#fafaf9] p-3">
-                        <p class="mb-2 text-[13px] font-extrabold text-[#2383e2]">
+                      <div class="mb-3 rounded-md border border-line bg-ink-panel p-3">
+                        <p class="mb-2 text-[13px] font-semibold text-brass">
                           {group.groupSummary.headline}
                         </p>
                         <div class="grid gap-1">
                           {group.groupSummary.bullets.map((bullet) => (
                             <p
                               key={`${asset.id}:summary:${bullet}`}
-                              class="m-0 text-[13px] leading-relaxed text-[#37352f]"
+                              class="text-[13px] leading-relaxed text-bone-soft"
                             >
                               {bullet}
                             </p>
                           ))}
                         </div>
-                      </article>
+                      </div>
 
-                      <div class="mb-4 grid gap-2">
+                      <div class="mb-3 grid gap-2">
                         {group.items.slice(0, 3).map((evidence) => (
-                          <article
+                          <div
                             key={evidence.id}
-                            class="rounded-md border border-[#ededec] bg-[#fafaf9] p-3"
+                            class="rounded-md border border-line bg-ink-panel p-3"
                           >
                             <div class="mb-2 flex flex-wrap items-center justify-between gap-3">
-                              <div class="flex flex-wrap gap-2">
-                                <span class="px-2 py-0.5 text-[12px] bg-white text-[#787774] rounded border border-[#ededec] font-bold">
+                              <div class="flex flex-wrap items-center gap-2">
+                                <span class={chipClass}>
                                   {getEvidenceLayerLabel(evidence.layer)}
                                 </span>
                                 {evidence.layer === "chunk" ? (
-                                  <span class="text-[12px] text-[#787774]">
-                                    {`Chunk #${evidence.chunkIndex ?? 0}`}
+                                  <span class="font-mono text-[11px] text-bone-faint">
+                                    #{evidence.chunkIndex ?? 0}
                                   </span>
-                                ) : (
-                                  <span class="text-[12px] text-[#787774]">
-                                    Summary-only evidence
-                                  </span>
-                                )}
+                                ) : null}
                               </div>
-                              <span class="text-[12px] font-bold text-[#37352f]">
+                              <span class="font-mono text-[12px] font-medium text-bone">
                                 {formatScore(evidence.score)}
                               </span>
                             </div>
-                            <p class="m-0 text-[14px] leading-[1.7] text-[#37352f]">
+                            <p class="text-[13.5px] leading-[1.7] text-bone-soft">
                               {evidence.snippet}
                             </p>
-                            <div class="mt-2 flex flex-wrap gap-2">
-                              {evidence.matchReasons.map((reason) => (
-                                <span
-                                  key={`${evidence.id}:reason:${reason.code}`}
-                                  title={reason.detail}
-                                  class="px-2 py-0.5 text-[12px] bg-white text-[#787774] rounded border border-[#ededec] font-bold"
-                                >
-                                  {reason.label}
-                                </span>
-                              ))}
-                            </div>
-                          </article>
+                            {evidence.matchReasons.length > 0 ? (
+                              <div class="mt-2 flex flex-wrap gap-1.5">
+                                {evidence.matchReasons.map((reason) => (
+                                  <span
+                                    key={`${evidence.id}:reason:${reason.code}`}
+                                    title={reason.detail}
+                                    class={chipClass}
+                                  >
+                                    {reason.label}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
                         ))}
                       </div>
 
-                      <div class="flex flex-wrap gap-2">
+                      <div class="flex flex-wrap gap-2.5">
                         <a
+                          class={buttonClass("primary", "sm")}
                           href={`/assets/${asset.id}`}
-                          class="rounded-md bg-[#37352f] px-4 py-2 text-[13px] font-bold text-white no-underline hover:bg-[#2f2d28] transition-colors"
                         >
-                          Open asset
+                          打开资产
                         </a>
                         <a
+                          class={buttonClass("subtle", "sm")}
                           href={`/ask?question=${encodeURIComponent(
-                            `Based on ${asset.title}, ${trimmedQuery}`
+                            `基于《${asset.title}》，${trimmedQuery}`
                           )}`}
-                          class="rounded-md border border-[#e8e8e7] bg-[#fafaf9] px-4 py-2 text-[13px] font-bold text-[#37352f] no-underline hover:bg-[#f1f1f0] transition-colors"
                         >
-                          Ask from result
+                          基于此追问
                         </a>
                       </div>
-                    </article>
+                    </Panel>
                   );
                 })}
               </div>
             )}
-          </section>
+          </Panel>
         </div>
 
-        <aside class="grid gap-4">
-          <article class="rounded-lg border border-[#e8e8e7] bg-white p-5">
-            <p class="mb-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#9b9a97]">
+        {/* 右栏：遥测 + 指南 */}
+        <aside class="flex flex-col gap-4">
+          <Panel class="p-5" variant="panel">
+            <p class="mb-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-bone-faint">
               Search telemetry
             </p>
             <div class="grid gap-2">
               {[
+                { label: "查询状态", value: hasQuery ? "活跃" : "空闲" },
+                { label: "总匹配", value: String(result.pagination.total) },
                 {
-                  label: "Query state",
-                  value: hasQuery ? "Active" : "Idle",
-                },
-                {
-                  label: "Total matches",
-                  value: String(result.pagination.total),
-                },
-                {
-                  label: "Assets / page",
+                  label: "每页资产",
                   value: String(result.pagination.pageSize),
                 },
-                {
-                  label: "Evidence on page",
-                  value: String(result.items.length),
-                },
-                {
-                  label: "Current page",
-                  value: String(result.pagination.page),
-                },
+                { label: "本页证据", value: String(result.items.length) },
+                { label: "当前页", value: String(result.pagination.page) },
               ].map((item, index) => (
                 <div
                   key={item.label}
-                  class={`flex items-center justify-between gap-3 text-[13px] text-[#787774] ${index === 0 ? "" : "border-t border-[#ededec] pt-2"}`}
+                  class={`flex items-center justify-between gap-3 text-[13px] text-bone-soft ${index === 0 ? "" : "border-t border-line-soft pt-2"}`}
                 >
                   <span>{item.label}</span>
-                  <span class="font-bold text-[#37352f]">{item.value}</span>
+                  <span class="font-mono font-medium text-bone">
+                    {item.value}
+                  </span>
                 </div>
               ))}
             </div>
-          </article>
+          </Panel>
 
-          <article class="rounded-lg border border-[#e8e8e7] bg-white p-5">
-            <p class="mb-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#2383e2]">
-              Search guide
+          <Panel class="p-5" variant="panel">
+            <p class="mb-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-brass">
+              检索提示
             </p>
             <div class="grid gap-3">
               {[
-                "Search works on chunks, not whole documents, so ask about concepts rather than titles only.",
-                "Layered index chips show domain and source host extracted during ingest.",
-                "Summary-only assets can appear as abstracted matches when the raw body is not AI-visible.",
-                "If a result looks close but incomplete, jump into Ask and turn that query into a source-aware follow-up.",
-                "Weak or empty results usually mean the library lacks enough processed context, not necessarily that retrieval is wrong.",
+                "搜索作用在切块而非整篇文档，所以问概念而非仅标题。",
+                "分层索引标签展示采集时抽取的领域与来源主机。",
+                "正文不对 AI 可见时，仅摘要资产会以抽象命中形式出现。",
+                "结果接近但不完整时，跳到问答把它变成带来源的追问。",
+                "弱或空结果通常意味库里处理过的上下文不够，未必是检索错。",
               ].map((tip, index) => (
                 <div
                   key={tip}
-                  class="grid grid-cols-[26px_minmax(0,1fr)] gap-3 items-start"
+                  class="grid grid-cols-[26px_minmax(0,1fr)] items-start gap-3"
                 >
-                  <span class="flex h-[26px] w-[26px] items-center justify-center rounded-full border border-[#b7d4e8] bg-[#e3eef9] text-[12px] font-extrabold text-[#2e6a9c]">
+                  <span class="flex h-[26px] w-[26px] items-center justify-center rounded-full border border-line bg-ink-raised font-mono text-[12px] font-medium text-brass">
                     {index + 1}
                   </span>
-                  <p class="m-0 mt-0 leading-[1.75] text-[#37352f]">{tip}</p>
+                  <p class="text-[13px] leading-[1.7] text-bone-soft">{tip}</p>
                 </div>
               ))}
             </div>
-          </article>
+          </Panel>
         </aside>
       </section>
     </PageShell>

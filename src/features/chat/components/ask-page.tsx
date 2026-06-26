@@ -1,23 +1,23 @@
 import type { AskLibraryResult } from "@/features/chat/model/types";
 import { PageShell } from "@/features/layout/components/page-shell";
+import { buttonClass, EmptyState, Panel } from "@/features/ui/components";
 
 const suggestionPrompts = [
-  "Summarize what I saved this week.",
-  "Which assets mention Cloudflare deployment tradeoffs?",
-  "What should be fixed before the next frontend refactor batch?",
+  "总结我这周收录了什么。",
+  "哪些记忆提到了 scope 隔离的决策？",
+  "下一批前端重构前应该先修什么？",
 ];
 
 const retrievalStages = [
-  "Embed the question",
-  "Retrieve the highest scoring chunks",
-  "Ground the answer in cited evidence",
+  "把问题向量化",
+  "检索得分最高的切块与摘要",
+  "用带引用的证据生成回答",
 ];
 
-const buildSuggestionHref = (prompt: string): string => {
-  return `/ask?question=${encodeURIComponent(prompt)}`;
-};
+const buildSuggestionHref = (prompt: string): string =>
+  `/ask?question=${encodeURIComponent(prompt)}`;
 
-// 这里先把 Ask 重构成更像工作台的问答面板，强调提问、回答和证据三栏关系。
+// 问答工作台：左提问+回答，右证据面板+检索链，强调「答案带可验证来源」。
 export const AskPage = ({
   question,
   result,
@@ -31,70 +31,61 @@ export const AskPage = ({
 
   return (
     <PageShell
-      title="Ask with grounded evidence"
-      subtitle="Use retrieval-first answers so CloudMind behaves less like a chatbot and more like a verifiable research operator."
       navigationKey="ask"
+      eyebrow="工作区 · 问答"
+      title={
+        <>
+          带<em class="italic text-brass">证据</em>地问
+        </>
+      }
+      subtitle="检索优先的回答，让 CloudMind 不像聊天机器人，更像一个可核验的研究助手。"
       actions={
         <>
-          <a
-            href="/search"
-            class="border border-[#e8e8e7] bg-white text-[#37352f] rounded-md px-3 py-1.5 font-medium hover:bg-[#f1f1f0] transition-colors no-underline"
-          >
-            Search first
+          <a class={buttonClass("subtle")} href="/search">
+            先搜索
           </a>
-          <a
-            href="/capture"
-            class="border border-[#e8e8e7] bg-white text-[#37352f] rounded-md px-3 py-1.5 font-medium hover:bg-[#f1f1f0] transition-colors no-underline"
-          >
-            Add more context
+          <a class={buttonClass("subtle")} href="/capture">
+            + 补充上下文
           </a>
         </>
       }
     >
-      <section class="grid grid-cols-[minmax(0,1.55fr)_minmax(320px,0.85fr)] gap-[18px]">
+      <section class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.85fr)]">
         {/* 左栏：提问、回答、建议 */}
-        <article class="rounded-lg border border-[#e8e8e7] bg-white p-6">
+        <Panel class="p-6" variant="panel">
           <div class="mb-4 flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p class="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-[#9b9a97]">
+              <p class="mb-1 font-mono text-[11px] uppercase tracking-[0.16em] text-bone-faint">
                 Answer workspace
               </p>
-              <h2 class="m-0 text-[20px] font-bold text-[#37352f]">
-                Query, answer, verify
+              <h2 class="font-display text-[20px] font-semibold text-bone">
+                提问 · 回答 · 核验
               </h2>
             </div>
-            <div class="rounded-md border border-[#ededec] bg-[#fafaf9] px-3 py-2 text-[13px] text-[#787774]">
-              Retrieval mode: chunks + summary-only assets
+            <div class="rounded-md border border-line bg-ink-raised px-3 py-2 font-mono text-[11px] text-bone-soft">
+              检索模式：切块 + 摘要资产
             </div>
           </div>
 
           <form method="get" action="/ask" class="mb-5 grid gap-3">
-            <label class="grid gap-2">
-              <span class="text-[14px] font-semibold text-[#37352f]">
-                Ask a grounded question
+            <label class="grid gap-1.5">
+              <span class="text-[13px] font-medium text-bone-soft">
+                问一个有据可查的问题
               </span>
               <textarea
                 name="question"
                 rows={5}
                 defaultValue={question}
-                placeholder="Ask CloudMind to explain, compare, summarize, or locate something in your saved library..."
-                class="w-full rounded-md border border-[#e8e8e7] bg-white px-3 py-2 text-[14px] text-[#37352f] leading-relaxed resize-y font-inherit focus:outline-none focus:border-[#2383e2]"
+                placeholder="让 CloudMind 解释、对比、总结，或在你收录的记忆里定位某个东西…"
+                class="w-full resize-y rounded-md border border-line bg-ink-raised px-3 py-2 text-[14px] leading-relaxed text-bone outline-none transition-colors placeholder:text-bone-faint focus:border-brass"
               />
             </label>
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <div class="flex flex-wrap gap-2.5">
-                <button
-                  type="submit"
-                  class="bg-[#37352f] text-white rounded-md px-4 py-2 font-medium hover:bg-[#2f2d28] transition-colors cursor-pointer border-none"
-                >
-                  Ask Library
-                </button>
-                <span class="px-2 py-0.5 text-[12px] bg-[#f1f1f0] text-[#787774] rounded">
-                  Evidence required
-                </span>
-              </div>
-              <span class="text-[13px] text-[#9b9a97]">
-                Full-page submit for now. AJAX comes next.
+            <div class="flex flex-wrap items-center gap-3">
+              <button type="submit" class={buttonClass("primary")}>
+                ? 问知识库
+              </button>
+              <span class="rounded bg-ink-raised px-2 py-0.5 font-mono text-[11px] text-bone-soft">
+                证据必备
               </span>
             </div>
           </form>
@@ -102,36 +93,32 @@ export const AskPage = ({
           {/* 回答区域 */}
           <div class="grid gap-3.5">
             {hasQuestion ? (
-              <article class="rounded-md border border-[#ededec] bg-[#fafaf9] p-4">
-                <p class="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#2383e2]">
-                  User query
+              <div class="rounded-md border border-line bg-ink-raised p-4">
+                <p class="mb-2 font-mono text-[11px] uppercase tracking-[0.14em] text-brass">
+                  你的问题
                 </p>
-                <p class="m-0 text-[15px] leading-7 text-[#37352f]">
-                  {question}
-                </p>
-              </article>
+                <p class="text-[15px] leading-7 text-bone">{question}</p>
+              </div>
             ) : null}
 
-            <article class="rounded-md border border-[#ededec] bg-white p-5">
-              <p class="mb-2.5 text-[12px] font-semibold uppercase tracking-wide text-[#9b9a97]">
-                CloudMind answer
+            <div class="rounded-md border border-line bg-ink-panel p-5">
+              <p class="mb-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-bone-faint">
+                CloudMind 回答
               </p>
               {errorMessage ? (
-                <p class="m-0 text-[15px] leading-7 text-[#9c2e2e]">
+                <p class="text-[15px] leading-7 text-status-failed">
                   {errorMessage}
                 </p>
               ) : result ? (
-                <p class="m-0 text-[15px] leading-7 text-[#37352f]">
+                <p class="whitespace-pre-wrap text-[15px] leading-7 text-bone">
                   {result.answer}
                 </p>
               ) : (
-                <p class="m-0 text-[15px] leading-7 text-[#787774]">
-                  Ask a question about your saved material. The answer area is
-                  designed to stay readable, with evidence cards alongside it
-                  instead of burying sources after the fact.
+                <p class="text-[15px] leading-7 text-bone-soft">
+                  问一个关于你收录材料的问题。回答区会保持可读，证据卡片在一旁同时呈现，而不是事后才补上来源。
                 </p>
               )}
-            </article>
+            </div>
           </div>
 
           {/* 建议提问 */}
@@ -140,82 +127,80 @@ export const AskPage = ({
               <a
                 key={prompt}
                 href={buildSuggestionHref(prompt)}
-                class="rounded-md border border-[#ededec] bg-[#fafaf9] px-3 py-2 text-[13px] text-[#787774] no-underline hover:bg-[#f1f1f0] transition-colors"
+                class="rounded-md border border-line bg-ink-raised px-3 py-2 text-[13px] text-bone-soft no-underline transition-colors hover:border-brass/40 hover:text-bone"
               >
                 {prompt}
               </a>
             ))}
           </div>
-        </article>
+        </Panel>
 
         {/* 右栏：证据面板 + 检索链 */}
-        <aside class="grid gap-4">
-          {/* 证据面板 */}
-          <article class="rounded-lg border border-[#e8e8e7] bg-white p-5">
-            <p class="mb-2.5 text-[12px] font-semibold uppercase tracking-wide text-[#9b9a97]">
+        <aside class="flex flex-col gap-4">
+          <Panel class="p-5" variant="panel">
+            <p class="mb-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-bone-faint">
               Evidence panel
             </p>
-            <h3 class="mb-3 text-[18px] font-bold text-[#37352f]">
-              Retrieved sources
+            <h3 class="mb-3 font-display text-[18px] font-semibold text-bone">
+              检索到的来源
             </h3>
             <div class="grid gap-3">
               {result?.sources.length ? (
                 result.sources.map((source, index) => (
-                  <article
+                  <div
                     key={`${source.assetId}:${source.chunkId ?? "source"}`}
-                    class="p-4 rounded-md border border-[#ededec] bg-[#fafaf9]"
+                    class="rounded-md border border-line bg-ink-raised p-4"
                   >
                     <div class="mb-2 flex flex-wrap items-center justify-between gap-2.5">
                       <a
                         href={`/assets/${source.assetId}`}
-                        class="font-semibold text-[#2383e2] hover:underline"
+                        class="font-semibold text-brass no-underline hover:text-brass-bright"
                       >
                         {source.title}
                       </a>
-                      <span class="px-2 py-0.5 text-[12px] bg-[#f1f1f0] text-[#787774] rounded">
+                      <span class="rounded bg-ink-panel px-2 py-0.5 font-mono text-[10.5px] text-bone-soft">
                         {source.sourceType === "chunk"
-                          ? `Chunk ${index + 1}`
-                          : `Summary ${index + 1}`}
+                          ? `切块 ${index + 1}`
+                          : `摘要 ${index + 1}`}
                       </span>
                     </div>
-                    <p class="m-0 text-[14px] leading-relaxed text-[#787774]">
+                    <p class="text-[13.5px] leading-relaxed text-bone-soft">
                       {source.snippet}
                     </p>
-                    <p class="mt-2.5 text-[12px] text-[#9b9a97]">
-                      {source.sourceUrl ?? `Asset ID: ${source.assetId}`}
+                    <p class="mt-2.5 truncate font-mono text-[11px] text-bone-faint">
+                      {source.sourceUrl ?? `ID: ${source.assetId}`}
                     </p>
-                  </article>
+                  </div>
                 ))
               ) : (
-                <article class="rounded-md border border-dashed border-[#ededec] bg-white p-4 text-[14px] leading-relaxed text-[#787774]">
-                  Submit a question to see retrieved chunks, summary-only
-                  sources, and evidence cards here.
-                </article>
+                <EmptyState
+                  title="提交问题后在此看到证据"
+                  description="检索到的切块、仅摘要来源与证据卡片会出现在这里。"
+                />
               )}
             </div>
-          </article>
+          </Panel>
 
-          {/* 检索链 */}
-          <article class="rounded-lg border border-[#e8e8e7] bg-white p-5">
-            <p class="mb-2.5 text-[12px] font-semibold uppercase tracking-wide text-[#2383e2]">
-              Retrieval chain
+          <Panel class="p-5" variant="panel">
+            <p class="mb-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-brass">
+              检索链
             </p>
             <div class="grid gap-3">
               {retrievalStages.map((stage, index) => (
                 <div
                   key={stage}
-                  class="grid grid-cols-[26px_minmax(0,1fr)] gap-3 items-start"
+                  class="grid grid-cols-[26px_minmax(0,1fr)] items-start gap-3"
                 >
-                  <span class="inline-flex h-[26px] w-[26px] items-center justify-center rounded-full border border-[#ededec] bg-white text-[12px] font-bold text-[#2383e2]">
+                  <span class="inline-flex h-[26px] w-[26px] items-center justify-center rounded-full border border-line bg-ink-raised font-mono text-[12px] font-medium text-brass">
                     {index + 1}
                   </span>
-                  <p class="m-0 mt-0.5 text-[14px] leading-relaxed text-[#37352f]">
+                  <p class="mt-0.5 text-[13.5px] leading-relaxed text-bone">
                     {stage}
                   </p>
                 </div>
               ))}
             </div>
-          </article>
+          </Panel>
         </aside>
       </section>
     </PageShell>
