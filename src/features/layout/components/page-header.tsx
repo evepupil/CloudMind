@@ -1,27 +1,39 @@
 import type { Child } from "hono/jsx";
 
-// Notion 极简页面头部：无渐变、无大圆角、无 kicker，只有干净的标题和底线分隔。
+// Observatory 页头：Fraunces 衬线大标题 + 黄铜 eyebrow + 可选操作区。
+// title 支持传 JSX（用 <em class="italic text-brass"> 做斜体黄铜强调）。
 export const PageHeader = ({
   title,
   subtitle,
+  eyebrow,
   actions,
 }: {
-  title: string;
-  subtitle: string;
+  title: Child;
+  subtitle?: string | undefined;
+  eyebrow?: string | undefined;
   actions?: Child | undefined;
 }) => {
   return (
-    <header class="flex items-end justify-between gap-5 pb-6 mb-6 border-b border-[#e8e8e7]">
+    <header class="mb-8 flex items-end justify-between gap-6">
       <div class="min-w-0">
-        <h1 class="text-[36px] font-semibold text-[#37352f] leading-tight tracking-tight">
+        {eyebrow ? (
+          <p class="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-brass">
+            {eyebrow}
+          </p>
+        ) : null}
+        <h1 class="font-display text-[44px] font-medium leading-[1.02] tracking-tight text-bone">
           {title}
         </h1>
-        <p class="mt-2 max-w-[760px] text-[15px] text-[#787774] leading-relaxed">
-          {subtitle}
-        </p>
+        {subtitle ? (
+          <p class="mt-3.5 max-w-[56ch] text-[15px] leading-relaxed text-bone-soft">
+            {subtitle}
+          </p>
+        ) : null}
       </div>
       {actions ? (
-        <div class="flex items-center gap-3 flex-wrap">{actions}</div>
+        <div class="flex flex-shrink-0 flex-wrap items-center gap-2.5">
+          {actions}
+        </div>
       ) : null}
     </header>
   );

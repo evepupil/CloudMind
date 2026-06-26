@@ -1,8 +1,10 @@
 import { createRoute } from "honox/factory";
 
 import { HomePage } from "@/features/home/components/home-page";
+import { getOverviewSnapshot } from "@/features/home/server/overview-service";
 
-// 这里让首页 route 保持很薄，只负责渲染首页 feature。
-export default createRoute((context) => {
-  return context.render(<HomePage />);
+// 首页 route：取 Overview 真实快照（资产状态计数 + 最近采集）后渲染。
+export default createRoute(async (context) => {
+  const snapshot = await getOverviewSnapshot(context.env);
+  return context.render(<HomePage snapshot={snapshot} />);
 });

@@ -10,15 +10,18 @@ export const Card = ({
   interactive = false,
   padded = true,
   class: className,
+  style,
 }: {
   children: Child;
   variant?: PanelVariant;
   interactive?: boolean;
   padded?: boolean;
   class?: string;
+  style?: string;
 }) => (
   <Panel
     variant={variant}
+    style={style}
     class={`${padded ? "p-5" : ""} ${interactive ? "cursor-pointer transition-[border-color,box-shadow,transform] duration-150 ease-glass hover:-translate-y-0.5 hover:border-brass/40 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05),0_22px_60px_rgba(0,0,0,0.5)]" : ""} ${className ?? ""}`}
   >
     {children}

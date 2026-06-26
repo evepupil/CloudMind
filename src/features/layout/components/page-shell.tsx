@@ -6,24 +6,31 @@ import {
 } from "@/features/layout/components/app-shell";
 import { PageHeader } from "@/features/layout/components/page-header";
 
-// 这里封装页面级布局，让各页直接复用统一工作台壳层和页头。
+// 页面级布局：统一工作台壳层 + 页头。title 支持 JSX（斜体黄铜强调）。
 export const PageShell = ({
   children,
   title,
   subtitle,
+  eyebrow,
   navigationKey,
   actions,
 }: {
   children: Child;
-  title: string;
-  subtitle: string;
+  title: Child;
+  subtitle?: string | undefined;
+  eyebrow?: string | undefined;
   navigationKey: NavigationKey;
   actions?: Child | undefined;
 }) => {
   return (
     <AppShell navigationKey={navigationKey}>
-      <main class="max-w-[1320px] mx-auto">
-        <PageHeader title={title} subtitle={subtitle} actions={actions} />
+      <main class="mx-auto max-w-[1180px]">
+        <PageHeader
+          title={title}
+          subtitle={subtitle}
+          eyebrow={eyebrow}
+          actions={actions}
+        />
         {children}
       </main>
     </AppShell>

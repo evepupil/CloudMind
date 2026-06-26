@@ -1,258 +1,293 @@
-import { AssetStatusBadge } from "@/features/assets/components/asset-status-badge";
 import type { AssetSummary } from "@/features/assets/model/types";
+import type { OverviewSnapshot } from "@/features/home/server/overview-service";
 import { PageShell } from "@/features/layout/components/page-shell";
+import {
+  buttonClass,
+  EmptyState,
+  Panel,
+  StatusBadge,
+  Textarea,
+} from "@/features/ui/components";
 
-const overviewMetrics = [
-  { label: "Assets indexed", value: "1,248", note: "+32 this week" },
-  { label: "Items processing", value: "07", note: "Queue active" },
-  { label: "Answer coverage", value: "84%", note: "With evidence" },
-  { label: "Failed jobs", value: "02", note: "Needs retry" },
+// 建议追问（静态引导，点击跳问答页带上 question）。
+const suggestedPrompts = [
+  "我关于 scope 隔离做过哪些决策？",
+  "提示词防火墙的核心机制是什么？",
+  "最近一周我采集了哪些工程笔记？",
+  "agent 记忆和人的记忆区别在哪？",
 ];
 
-const activityFeed: AssetSummary[] = [
-  {
-    id: "asset-ops-1",
-    type: "url",
-    title: "Cloudflare Pages deployment notes",
-    summary:
-      "Collected a deployment decision log covering Pages, D1 bindings, and service boundaries for the MVP.",
-    sourceUrl: "https://developers.cloudflare.com/",
-    sourceKind: "manual",
-    status: "ready",
-    domain: "engineering",
-    aiVisibility: "allow",
-    retrievalPriority: 50,
-    scopeId: "personal",
-    collectionKey: "site:developers.cloudflare.com",
-    capturedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "asset-ops-2",
-    type: "note",
-    title: "Knowledge ingestion backlog",
-    summary:
-      "A short operator note defining what should land in v0.1 before browser extension and export work begin.",
-    sourceUrl: null,
-    sourceKind: "manual",
-    status: "processing",
-    domain: "product",
-    aiVisibility: "allow",
-    retrievalPriority: 20,
-    scopeId: "personal",
-    collectionKey: "inbox:notes",
-    capturedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "asset-ops-3",
-    type: "chat",
-    title: "Ask Library reliability checklist",
-    summary:
-      "Captured requirements for evidence-first answers, chunk citations, and a stable retrieval loop.",
-    sourceUrl: null,
-    sourceKind: "mcp",
-    status: "pending",
-    domain: "engineering",
-    aiVisibility: "allow",
-    retrievalPriority: 35,
-    scopeId: "personal",
-    collectionKey: "inbox:mcp",
-    capturedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
+// 相对时间（简单版：天/小时/刚刚），SSR 友好。
+const relativeTime = (iso: string): string => {
+  const then = new Date(iso).getTime();
+  const now = Date.now();
+  const diffMin = Math.max(0, Math.round((now - then) / 60000));
+  if (diffMin < 1) return "刚刚";
+  if (diffMin < 60) return `${diffMin} 分钟前`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr} 小时前`;
+  const diffDay = Math.round(diffHr / 24);
+  return `${diffDay} 天前`;
+};
 
-const pipelineSteps = [
-  {
-    title: "Capture",
-    copy: "Save URLs, text, PDFs, and future MCP events through one intake layer.",
-  },
-  {
-    title: "Process",
-    copy: "Extract, clean, summarize, chunk, embed, and keep every derived artifact rebuildable.",
-  },
-  {
-    title: "Retrieve",
-    copy: "Search and Ask should operate on evidence-first retrieval, not fluent guesses.",
-  },
-];
+const Metric = ({
+  label,
+  value,
+  note,
+  accent = false,
+  spark,
+}: {
+  label: string;
+  value: string;
+  note: string;
+  accent?: boolean;
+  spark?: string;
+}) => (
+  <div class="relative bg-ink-raised p-5">
+    <p class="mb-3 font-mono text-[10.5px] uppercase tracking-[0.16em] text-bone-faint">
+      {label}
+    </p>
+    <p
+      class={`font-display text-[40px] font-medium leading-none tabular-nums ${accent ? "text-brass" : "text-bone"}`}
+    >
+      {value}
+    </p>
+    {spark ? (
+      <span class="absolute right-4 top-5 font-mono text-[11px] text-status-ready">
+        {spark}
+      </span>
+    ) : null}
+    <p class="mt-2 text-[12px] text-bone-soft">{note}</p>
+  </div>
+);
 
-const actionCards = [
-  {
-    title: "Open Library",
-    description: "Inspect assets, statuses, and summaries.",
-    href: "/assets",
-  },
-  {
-    title: "Capture Source",
-    description: "Send a webpage, note, or PDF into the ingest pipeline.",
-    href: "/capture",
-  },
-  {
-    title: "Ask with Evidence",
-    description: "Question the library and verify where the answer came from.",
-    href: "/ask",
-  },
-];
+const RecentAsset = ({
+  asset,
+  index,
+}: {
+  asset: AssetSummary;
+  index: number;
+}) => (
+  <div class="flex items-start gap-3.5 border-b border-line-soft py-3.5 last:border-none">
+    <span class="min-w-[22px] pt-0.5 font-mono text-[11px] text-bone-faint">
+      {String(index + 1).padStart(2, "0")}
+    </span>
+    <div class="min-w-0 flex-1">
+      <a
+        href={`/assets/${asset.id}`}
+        class="text-[14.5px] font-semibold leading-snug text-bone no-underline transition-colors hover:text-brass"
+      >
+        {asset.title}
+      </a>
+      <div class="mt-1 flex gap-3 font-mono text-[11px] text-bone-faint">
+        <span>{asset.type}</span>
+        <span>{asset.domain}</span>
+        <span>{relativeTime(asset.createdAt)}</span>
+      </div>
+    </div>
+    <div class="self-center">
+      <StatusBadge status={asset.status} />
+    </div>
+  </div>
+);
 
-// Notion 风格首页：白底卡片、微边框、小圆角、清晰的文字层级。
-export const HomePage = () => {
+// Observatory 首页：真实计量 + 记忆图谱占位 + 最近采集 + 速记 + 建议问询 + 整合条。
+export const HomePage = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
+  const { totalAssets, statusCounts, recentAssets } = snapshot;
+  const processingTotal = statusCounts.pending + statusCounts.processing;
+
   return (
     <PageShell
-      title="Overview"
-      subtitle="Your private knowledge workspace — capture, process, retrieve, and ask with evidence."
       navigationKey="overview"
+      eyebrow="MEMORY LAYER · 纵览"
+      title={
+        <>
+          你的<em class="italic text-brass">记忆</em>当前状态
+        </>
+      }
+      subtitle="一座私有、可导出、由你掌控的知识层。最近采集、处理动态、记忆图谱的生长，都在这里一眼可见。"
       actions={
         <>
-          <a
-            href="/capture"
-            class="inline-block px-3 py-1.5 rounded-md bg-[#37352f] text-white text-[14px] font-medium no-underline hover:bg-[#2f2d28] transition-colors"
-          >
-            New capture
+          <a class={buttonClass("subtle")} href="/ask">
+            ? 问答
           </a>
-          <a
-            href="/ask"
-            class="inline-block px-3 py-1.5 rounded-md border border-[#e8e8e7] bg-white text-[#37352f] text-[14px] font-medium no-underline hover:bg-[#f1f1f0] transition-colors"
-          >
-            Open Ask
+          <a class={buttonClass("primary")} href="/capture">
+            + 采集
           </a>
         </>
       }
     >
-      {/* --- Two-column: summary + pipeline --- */}
-      <section class="grid grid-cols-1 lg:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.9fr)] gap-4 mb-4">
-        {/* Left: Operator summary card */}
-        <article class="p-6 rounded-lg border border-[#e8e8e7] bg-white">
-          <h2 class="text-[28px] font-semibold text-[#37352f] leading-tight tracking-tight max-w-[14ch]">
-            Build a library that answers with receipts.
-          </h2>
-          <p class="mt-3 max-w-[66ch] text-[15px] text-[#787774] leading-relaxed">
-            The homepage should immediately show what entered the system, what
-            still needs processing, and what questions the user can ask next
-            without losing trust in the source chain.
-          </p>
+      {/* 计量条 */}
+      <section
+        class="rise mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line-soft md:grid-cols-4"
+        style="animation-delay: 0.08s"
+      >
+        <Metric
+          label="资产"
+          value={String(totalAssets)}
+          note="L1 事实 / 情节"
+        />
+        <Metric
+          label="处理中"
+          value={String(processingTotal)}
+          note="待处理 + 处理中"
+          accent={processingTotal > 0}
+        />
+        <Metric
+          label="就绪"
+          value={String(statusCounts.ready)}
+          note="可检索可追问"
+          {...(statusCounts.ready > 0 ? { spark: "● ready" } : {})}
+        />
+        <Metric
+          label="失败"
+          value={String(statusCounts.failed)}
+          note="需重处理"
+          accent={statusCounts.failed > 0}
+        />
+      </section>
 
-          {/* Metrics grid */}
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
-            {overviewMetrics.map((metric) => (
-              <article
-                key={metric.label}
-                class="p-4 rounded-md border border-[#ededec] bg-[#fafaf9]"
+      {/* 主网格 */}
+      <div class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        {/* 左列 */}
+        <div class="flex flex-col gap-5">
+          {/* 记忆图谱占位（Phase 5 接真实 dagre 布局） */}
+          <Panel
+            class="rise p-6"
+            variant="panel"
+            style="animation-delay: 0.16s"
+          >
+            <div class="mb-4 flex items-center justify-between">
+              <h2 class="font-display text-[19px] font-semibold text-bone">
+                记忆图谱
+              </h2>
+              <a
+                href="/memory/graph"
+                class="font-mono text-[11px] uppercase tracking-[0.08em] text-brass no-underline hover:text-brass-bright"
               >
-                <p class="text-[12px] text-[#9b9a97] mb-1">{metric.label}</p>
-                <p class="text-[28px] font-semibold text-[#37352f] tracking-tight">
-                  {metric.value}
-                </p>
-                <p class="mt-1 text-[13px] text-[#787774]">{metric.note}</p>
-              </article>
-            ))}
-          </div>
-        </article>
+                展开全图 →
+              </a>
+            </div>
+            <div class="flex h-[180px] items-center justify-center rounded-md border border-dashed border-line">
+              <p class="text-[13px] text-bone-faint">
+                实体关系图将在记忆层区上线（Phase 5）
+              </p>
+            </div>
+            <div class="mt-4 flex items-center gap-3.5 rounded-md border border-status-ready-border bg-status-ready-bg px-4 py-3.5 text-[13px] text-bone-soft">
+              <span class="font-mono text-[14px] text-status-ready">◍</span>
+              <span>
+                sleep-time 整合每日 <strong class="text-bone">03:00 UTC</strong>{" "}
+                自动运行，修复漂移边与重复陈述，保持图谱一致。
+              </span>
+            </div>
+          </Panel>
 
-        {/* Right: Processing model */}
-        <article class="p-5 rounded-lg border border-[#e8e8e7] bg-white">
-          <p class="text-[14px] font-semibold text-[#37352f] mb-4">
-            Processing model
-          </p>
-          <div class="flex flex-col gap-0">
-            {pipelineSteps.map((step, index) => (
-              <div
-                key={step.title}
-                class={`flex gap-3 py-3 ${index > 0 ? "border-t border-[#ededec]" : ""}`}
+          {/* 最近采集 */}
+          <Panel
+            class="rise p-6"
+            variant="panel"
+            style="animation-delay: 0.24s"
+          >
+            <div class="mb-2 flex items-center justify-between">
+              <h2 class="font-display text-[19px] font-semibold text-bone">
+                最近采集
+              </h2>
+              <a
+                href="/assets"
+                class="font-mono text-[11px] uppercase tracking-[0.08em] text-brass no-underline hover:text-brass-bright"
               >
-                <span class="w-6 h-6 flex-shrink-0 flex items-center justify-center text-[12px] text-[#9b9a97] bg-[#f1f1f0] rounded">
-                  {index + 1}
-                </span>
-                <div class="min-w-0">
-                  <h3 class="text-[14px] font-medium text-[#37352f] mb-1">
-                    {step.title}
-                  </h3>
-                  <p class="text-[13px] text-[#787774] leading-relaxed">
-                    {step.copy}
-                  </p>
-                </div>
+                记忆库全览 →
+              </a>
+            </div>
+            {recentAssets.length > 0 ? (
+              <div>
+                {recentAssets.map((asset, index) => (
+                  <RecentAsset key={asset.id} asset={asset} index={index} />
+                ))}
               </div>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      {/* --- Action cards --- */}
-      <section class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-        {actionCards.map((card) => (
-          <a
-            key={card.title}
-            href={card.href}
-            class="block p-5 rounded-lg border border-[#e8e8e7] bg-white no-underline text-[#37352f] hover:bg-[#fafaf9] transition-colors"
-          >
-            <h3 class="text-[16px] font-medium text-[#37352f] mb-2">
-              {card.title}
-            </h3>
-            <p class="text-[14px] text-[#787774] leading-relaxed">
-              {card.description}
-            </p>
-          </a>
-        ))}
-      </section>
-
-      {/* --- Recent activity --- */}
-      <section class="p-6 rounded-lg border border-[#e8e8e7] bg-white">
-        <div class="flex items-baseline justify-between gap-3 mb-5 flex-wrap">
-          <h2 class="text-[20px] font-semibold text-[#37352f]">
-            Recent activity
-          </h2>
-          <a
-            href="/search"
-            class="text-[14px] text-[#2383e2] no-underline hover:underline"
-          >
-            Search across assets
-          </a>
+            ) : (
+              <EmptyState
+                class="mt-4"
+                title="还没有记忆"
+                description="从采集收进第一条内容，或用 MCP 的 remember 写入高密度记忆。"
+                action={
+                  <a class={buttonClass("primary")} href="/capture">
+                    开始采集
+                  </a>
+                }
+              />
+            )}
+          </Panel>
         </div>
 
-        <div class="flex flex-col gap-3">
-          {activityFeed.map((asset) => (
-            <article
-              key={asset.id}
-              class="flex flex-col sm:flex-row sm:items-start gap-4 p-4 rounded-md border border-[#ededec] bg-[#fafaf9]"
-            >
-              <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-center gap-2 mb-2">
-                  <span class="inline-block px-2 py-0.5 text-[12px] text-[#787774] bg-[#f1f1f0] rounded">
-                    {asset.type}
-                  </span>
-                  <AssetStatusBadge status={asset.status} />
-                </div>
-                <h3 class="text-[15px] font-medium text-[#37352f] mb-1">
-                  <a
-                    href={`/assets/${asset.id}`}
-                    class="no-underline text-[#37352f] hover:text-[#2383e2] transition-colors"
-                  >
-                    {asset.title}
-                  </a>
-                </h3>
-                <p class="text-[14px] text-[#787774] leading-relaxed">
-                  {asset.summary}
-                </p>
-              </div>
-              <div class="flex flex-col gap-2 sm:min-w-[160px]">
-                <div class="px-3 py-2 rounded-md bg-white border border-[#ededec] text-[12px] text-[#787774] truncate">
-                  {asset.sourceUrl ?? "Local or manual source"}
-                </div>
-                <a
-                  href="/ask"
-                  class="block px-3 py-2 rounded-md bg-[#37352f] text-white text-[13px] font-medium no-underline text-center hover:bg-[#2f2d28] transition-colors"
+        {/* 右列 */}
+        <div class="flex flex-col gap-5">
+          {/* 速记 */}
+          <Panel
+            class="rise p-6"
+            variant="panel"
+            style="animation-delay: 0.32s"
+          >
+            <h2 class="mb-3 font-display text-[19px] font-semibold text-bone">
+              速记
+            </h2>
+            <p class="mb-3.5 text-[13px] leading-relaxed text-bone-soft">
+              把此刻想留住的东西收进来——原文、链接，或一段 AI 生成的高密度记忆。
+            </p>
+            <form action="/assets/actions/ingest-text" method="post">
+              <Textarea
+                name="content"
+                rows={4}
+                required
+                placeholder="记一下：……"
+              />
+              <div class="mt-3 flex gap-2.5">
+                <button
+                  type="submit"
+                  class={`flex-1 justify-center ${buttonClass("primary")}`}
                 >
-                  Ask from this context
+                  收录这条
+                </button>
+                <a class={buttonClass("subtle")} href="/capture?mode=url">
+                  URL
+                </a>
+                <a class={buttonClass("subtle")} href="/capture?mode=pdf">
+                  PDF
                 </a>
               </div>
-            </article>
-          ))}
+            </form>
+          </Panel>
+
+          {/* 建议问询 */}
+          <Panel class="rise p-6" variant="panel" style="animation-delay: 0.4s">
+            <div class="mb-4 flex items-center justify-between">
+              <h2 class="font-display text-[19px] font-semibold text-bone">
+                建议问询
+              </h2>
+              <a
+                href="/ask"
+                class="font-mono text-[11px] uppercase tracking-[0.08em] text-brass no-underline hover:text-brass-bright"
+              >
+                问答 →
+              </a>
+            </div>
+            <div class="flex flex-col gap-2.5">
+              {suggestedPrompts.map((prompt) => (
+                <a
+                  key={prompt}
+                  href={`/ask?question=${encodeURIComponent(prompt)}`}
+                  class="group relative rounded-md border border-line px-4 py-3 text-[13.5px] text-bone-soft no-underline transition-all duration-150 ease-glass hover:translate-x-0.5 hover:border-brass/40 hover:text-bone"
+                >
+                  {prompt}
+                  <span class="absolute right-4 text-brass opacity-0 transition-opacity group-hover:opacity-100">
+                    →
+                  </span>
+                </a>
+              ))}
+            </div>
+          </Panel>
         </div>
-      </section>
+      </div>
     </PageShell>
   );
 };

@@ -13,17 +13,21 @@ const variantSurface: Record<PanelVariant, string> = {
 };
 
 // 内容面板基底。内顶部高光发丝线（inset shadow）+ 外柔分层阴影，营造悬浮。
+// style 透传用于进场错峰动画（animation-delay）。
 export const Panel = ({
   children,
   variant = "panel",
   class: className,
+  style,
 }: {
   children: Child;
   variant?: PanelVariant;
   class?: string;
+  style?: string | undefined;
 }) => (
   <div
     class={`rounded-lg border shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03),0_18px_50px_rgba(0,0,0,0.4)] ${variantSurface[variant]} ${className ?? ""}`}
+    style={style}
   >
     {children}
   </div>
