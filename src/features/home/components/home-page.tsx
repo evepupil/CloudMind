@@ -91,9 +91,9 @@ const RecentAsset = ({
   </div>
 );
 
-// Observatory 首页：真实计量 + 记忆图谱占位 + 最近采集 + 速记 + 建议问询 + 整合条。
+// Observatory 首页：真实计量 + 记忆图谱概览 + 最近采集 + 速记 + 建议问询 + 整合条。
 export const HomePage = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
-  const { totalAssets, statusCounts, recentAssets } = snapshot;
+  const { totalAssets, statusCounts, recentAssets, graphCounts } = snapshot;
   const processingTotal = statusCounts.pending + statusCounts.processing;
 
   return (
@@ -151,7 +151,7 @@ export const HomePage = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
       <div class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         {/* 左列 */}
         <div class="flex flex-col gap-5">
-          {/* 记忆图谱占位（Phase 5 接真实 dagre 布局） */}
+          {/* 记忆图谱概览：真实计数（点击进图谱全图）+ 整合状态条 */}
           <Panel
             class="rise p-6"
             variant="panel"
@@ -168,10 +168,25 @@ export const HomePage = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
                 展开全图 →
               </a>
             </div>
-            <div class="flex h-[180px] items-center justify-center rounded-md border border-dashed border-line">
-              <p class="text-[13px] text-bone-faint">
-                实体关系图将在记忆层区上线（Phase 5）
-              </p>
+            <div class="grid grid-cols-3 gap-px overflow-hidden rounded-md border border-line bg-line-soft">
+              {[
+                { label: "实体", value: graphCounts.entities },
+                { label: "陈述", value: graphCounts.statements },
+                { label: "关系边", value: graphCounts.edges },
+              ].map((item) => (
+                <a
+                  key={item.label}
+                  href="/memory/graph"
+                  class="bg-ink-raised px-4 py-5 text-center no-underline transition-colors hover:bg-ink-panel"
+                >
+                  <div class="font-display text-[32px] font-medium tabular-nums text-brass">
+                    {item.value}
+                  </div>
+                  <div class="mt-1 text-[12px] text-bone-soft">
+                    {item.label}
+                  </div>
+                </a>
+              ))}
             </div>
             <div class="mt-4 flex items-center gap-3.5 rounded-md border border-status-ready-border bg-status-ready-bg px-4 py-3.5 text-[13px] text-bone-soft">
               <span class="font-mono text-[14px] text-status-ready">◍</span>

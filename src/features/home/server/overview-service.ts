@@ -1,10 +1,10 @@
+import type { MemoryGraphCounts } from "@/core/memory/ports";
 import type { AppBindings } from "@/env";
 import type { AssetStatus, AssetSummary } from "@/features/assets/model/types";
 import { listAssets } from "@/features/assets/server/service";
+import { getMemoryCounts } from "@/features/memory/server/memory-browse-service";
 
-// Overview 页所需的真实数据快照。
-// L1（资产）走 listAssets 真实取数；L2 图谱计数（entities/statements/edges）
-// 留待 Phase 5 的 GET /api/memory/* 后端补齐，此处先不编造。
+// Overview 页所需的真实数据快照。L1 走 listAssets，L2 图谱计数走 countGraph。
 export interface OverviewSnapshot {
   // 资产总数（未删除）
   totalAssets: number;
@@ -12,6 +12,8 @@ export interface OverviewSnapshot {
   statusCounts: Record<AssetStatus, number>;
   // 最近采集（按创建时间倒序，取前 N）
   recentAssets: AssetSummary[];
+  // L2 知识图谱计数（entities/statements/edges）
+  graphCounts: MemoryGraphCounts;
 }
 
 const STATUS_KEYS: AssetStatus[] = ["pending", "processing", "ready", "failed"];
@@ -22,8 +24,9 @@ export const getOverviewSnapshot = async (
   bindings: AppBindings | undefined,
   recentLimit = 5
 ): Promise<OverviewSnapshot> => {
-  const [recent, ...statusResults] = await Promise.all([
+  const [recent, graphCounts, ...statusResults] = await Promise.all([
     listAssets(bindings, { page: 1, pageSize: recentLimit }),
+    getMemoryCounts(bindings),
     ...STATUS_KEYS.map((status) =>
       listAssets(bindings, { status, page: 1, pageSize: 1 })
     ),
@@ -44,5 +47,6 @@ export const getOverviewSnapshot = async (
     totalAssets: recent.pagination.total,
     statusCounts,
     recentAssets: recent.items,
+    graphCounts,
   };
 };
