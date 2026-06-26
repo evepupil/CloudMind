@@ -1,3 +1,5 @@
+import type { Child } from "hono/jsx";
+
 import type {
   AssetAiVisibility,
   AssetDomain,
@@ -9,76 +11,73 @@ import type {
   AssetType,
 } from "@/features/assets/model/types";
 import { PageShell } from "@/features/layout/components/page-shell";
-
-import { AssetStatusBadge } from "./asset-status-badge";
+import {
+  buttonClass,
+  EmptyState,
+  FlashMessage,
+  Panel,
+  StatusBadge,
+} from "@/features/ui/components";
 
 const assetStatusOptions: Array<{ label: string; value: AssetStatus | "" }> = [
-  { label: "All status", value: "" },
-  { label: "Pending", value: "pending" },
-  { label: "Processing", value: "processing" },
-  { label: "Ready", value: "ready" },
-  { label: "Failed", value: "failed" },
+  { label: "全部状态", value: "" },
+  { label: "待处理", value: "pending" },
+  { label: "处理中", value: "processing" },
+  { label: "就绪", value: "ready" },
+  { label: "失败", value: "failed" },
 ];
 
 const assetTypeOptions: Array<{ label: string; value: AssetType | "" }> = [
-  { label: "All types", value: "" },
+  { label: "全部类型", value: "" },
   { label: "URL", value: "url" },
   { label: "PDF", value: "pdf" },
-  { label: "Note", value: "note" },
-  { label: "Image", value: "image" },
-  { label: "Chat", value: "chat" },
+  { label: "笔记", value: "note" },
+  { label: "图片", value: "image" },
+  { label: "对话", value: "chat" },
 ];
 
 const assetDomainOptions: Array<{ label: string; value: AssetDomain | "" }> = [
-  { label: "All domains", value: "" },
-  { label: "Engineering", value: "engineering" },
-  { label: "Product", value: "product" },
-  { label: "Research", value: "research" },
-  { label: "Personal", value: "personal" },
-  { label: "Finance", value: "finance" },
-  { label: "Health", value: "health" },
-  { label: "Archive", value: "archive" },
-  { label: "General", value: "general" },
+  { label: "全部领域", value: "" },
+  { label: "工程", value: "engineering" },
+  { label: "产品", value: "product" },
+  { label: "研究", value: "research" },
+  { label: "个人", value: "personal" },
+  { label: "财务", value: "finance" },
+  { label: "健康", value: "health" },
+  { label: "归档", value: "archive" },
+  { label: "通用", value: "general" },
 ];
 
 const assetSourceKindOptions: Array<{
   label: string;
   value: AssetSourceKind | "";
 }> = [
-  { label: "All source kinds", value: "" },
-  { label: "Manual", value: "manual" },
-  { label: "Browser Extension", value: "browser_extension" },
-  { label: "Upload", value: "upload" },
+  { label: "全部来源", value: "" },
+  { label: "手动", value: "manual" },
+  { label: "浏览器插件", value: "browser_extension" },
+  { label: "上传", value: "upload" },
   { label: "MCP", value: "mcp" },
-  { label: "Import", value: "import" },
+  { label: "导入", value: "import" },
 ];
 
 const assetAiVisibilityOptions: Array<{
   label: string;
   value: AssetAiVisibility | "";
 }> = [
-  { label: "All visibility", value: "" },
-  { label: "Allow", value: "allow" },
-  { label: "Summary Only", value: "summary_only" },
-  { label: "Deny", value: "deny" },
+  { label: "全部可见性", value: "" },
+  { label: "允许", value: "allow" },
+  { label: "仅摘要", value: "summary_only" },
+  { label: "拒绝", value: "deny" },
 ];
 
-const formatDate = (value: string): string => {
-  return new Date(value).toLocaleString("zh-CN", {
-    hour12: false,
-  });
-};
+const formatDate = (value: string): string =>
+  new Date(value).toLocaleString("zh-CN", { hour12: false });
 
-const formatDateInputValue = (value: string | undefined): string => {
-  if (!value) {
-    return "";
-  }
+const formatDateInputValue = (value: string | undefined): string =>
+  value ? value.slice(0, 10) : "";
 
-  return value.slice(0, 10);
-};
-
-const formatLabel = (value: string): string => {
-  return value
+const formatLabel = (value: string): string =>
+  value
     .split("_")
     .map((segment) =>
       segment.length > 0
@@ -86,7 +85,6 @@ const formatLabel = (value: string): string => {
         : segment
     )
     .join(" ");
-};
 
 const buildAssetTags = (asset: AssetSummary): string[] => {
   const tags = [
@@ -99,49 +97,21 @@ const buildAssetTags = (asset: AssetSummary): string[] => {
   return Array.from(new Set(tags));
 };
 
-const buildFilterSummary = (filters: AssetListQuery): string => {
-  const segments = [];
+// 筛选区下拉：复用同一套 Observatory 暗底样式。
+const selectClass =
+  "w-full rounded-md border border-line bg-ink-raised px-3 py-2 text-[14px] text-bone outline-none transition-colors focus:border-brass";
+const fieldLabelClass = "text-[12px] font-medium text-bone-soft";
 
-  if (filters.status) {
-    segments.push(`status: ${filters.status}`);
-  }
+const Field = ({ label, children }: { label: string; children: Child }) => (
+  // label 隐式包裹表单控件（W3C 合法关联）；biome 静态分析认不出动态 children。
+  // biome-ignore lint/a11y/noLabelWithoutControl: children 总是表单控件，隐式关联成立
+  <label class="grid gap-1.5">
+    <span class={fieldLabelClass}>{label}</span>
+    {children}
+  </label>
+);
 
-  if (filters.type) {
-    segments.push(`type: ${filters.type}`);
-  }
-
-  if (filters.domain) {
-    segments.push(`domain: ${filters.domain}`);
-  }
-
-  if (filters.sourceKind) {
-    segments.push(`source: ${filters.sourceKind}`);
-  }
-
-  if (filters.aiVisibility) {
-    segments.push(`visibility: ${filters.aiVisibility}`);
-  }
-
-  if (filters.createdAtFrom) {
-    segments.push(`from: ${filters.createdAtFrom.slice(0, 10)}`);
-  }
-
-  if (filters.createdAtTo) {
-    segments.push(`to: ${filters.createdAtTo.slice(0, 10)}`);
-  }
-
-  if (filters.sourceHost) {
-    segments.push(`host: ${filters.sourceHost}`);
-  }
-
-  if (filters.query) {
-    segments.push(`query: ${filters.query}`);
-  }
-
-  return segments.length > 0 ? segments.join(" \u2022 ") : "All assets";
-};
-
-// 这里重做 Library 页原型，让它先具备知识浏览器的结构，而不是表单堆叠页。
+// 记忆库：知识浏览器结构——计量 + 多维筛选 + 资产卡片流 + 分页。
 export const AssetsPage = ({
   items,
   pagination,
@@ -160,49 +130,26 @@ export const AssetsPage = ({
     pagination.page < pagination.totalPages ? pagination.page + 1 : null;
   const currentParams = new URLSearchParams();
 
-  if (filters.status) {
-    currentParams.set("status", filters.status);
-  }
-
-  if (filters.type) {
-    currentParams.set("type", filters.type);
-  }
-
-  if (filters.domain) {
-    currentParams.set("domain", filters.domain);
-  }
-
-  if (filters.sourceKind) {
-    currentParams.set("sourceKind", filters.sourceKind);
-  }
-
-  if (filters.aiVisibility) {
-    currentParams.set("aiVisibility", filters.aiVisibility);
-  }
-
-  if (filters.createdAtFrom) {
-    currentParams.set("createdAtFrom", filters.createdAtFrom);
-  }
-
-  if (filters.createdAtTo) {
-    currentParams.set("createdAtTo", filters.createdAtTo);
-  }
-
+  const setParam = (key: string, value: string | undefined | null) => {
+    if (value) {
+      currentParams.set(key, value);
+    }
+  };
+  setParam("status", filters.status);
+  setParam("type", filters.type);
+  setParam("domain", filters.domain);
+  setParam("sourceKind", filters.sourceKind);
+  setParam("aiVisibility", filters.aiVisibility);
+  setParam("createdAtFrom", filters.createdAtFrom);
+  setParam("createdAtTo", filters.createdAtTo);
   if (filters.timezoneOffsetMinutes !== undefined) {
     currentParams.set(
       "timezoneOffsetMinutes",
       String(filters.timezoneOffsetMinutes)
     );
   }
-
-  if (filters.sourceHost) {
-    currentParams.set("sourceHost", filters.sourceHost);
-  }
-
-  if (filters.query) {
-    currentParams.set("query", filters.query);
-  }
-
+  setParam("sourceHost", filters.sourceHost);
+  setParam("query", filters.query);
   if (filters.pageSize) {
     currentParams.set("pageSize", String(filters.pageSize));
   }
@@ -210,71 +157,58 @@ export const AssetsPage = ({
   const buildPageHref = (page: number) => {
     const params = new URLSearchParams(currentParams);
     params.set("page", String(page));
-
     return `/assets?${params.toString()}`;
   };
 
   return (
     <PageShell
-      title="Library"
-      subtitle="Browse your saved knowledge as a living library. Filter by type and state, then jump into detail or keep capturing new material."
       navigationKey="library"
+      eyebrow="工作区 · 记忆库"
+      title={
+        <>
+          你的<em class="italic text-brass">记忆</em>馆藏
+        </>
+      }
+      subtitle="把收进来的知识当作一座活的图书馆浏览。按类型、状态、领域筛选，再钻进详情或继续采集。"
       actions={
-        <div class="flex gap-2">
-          <a
-            href="/capture"
-            class="inline-flex items-center rounded-md bg-[#37352f] px-4 py-2 text-[14px] font-bold text-white no-underline hover:bg-[#2f2d28]"
-          >
-            Capture New
+        <>
+          <a class={buttonClass("subtle")} href="/ask">
+            ? 问答
           </a>
-          <a
-            href="/ask"
-            class="inline-flex items-center rounded-md border border-[#e8e8e7] bg-white px-4 py-2 text-[14px] font-bold text-[#37352f] no-underline hover:bg-[#f1f1f0]"
-          >
-            Ask Library
+          <a class={buttonClass("primary")} href="/capture">
+            + 采集
           </a>
-        </div>
+        </>
       }
     >
       {flashMessage ? (
-        <section class="mb-4 rounded-lg border border-[#b7dbbf] bg-[#e3f2e8] px-4 py-3 text-[#2e6c3e]">
+        <FlashMessage kind="success" class="mb-4">
           {flashMessage}
-        </section>
+        </FlashMessage>
       ) : null}
-
       {errorMessage ? (
-        <section class="mb-4 rounded-lg border border-[#e8b7b7] bg-[#f9e3e3] px-4 py-3 text-[#9c2e2e]">
+        <FlashMessage kind="error" class="mb-4">
           {errorMessage}
-        </section>
+        </FlashMessage>
       ) : null}
 
-      <section class="mb-5 grid grid-cols-[minmax(0,0.9fr)_minmax(260px,0.45fr)] gap-4">
-        <article class="rounded-lg border border-[#e8e8e7] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-          <h2 class="m-0 text-[24px] font-semibold text-[#37352f]">
-            {pagination.total} assets
-          </h2>
-          <p class="mt-2 leading-relaxed text-[#787774]">
-            {buildFilterSummary(filters)}
-          </p>
-        </article>
+      {/* 计量条 */}
+      <div class="mb-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span class="font-display text-[28px] font-medium tabular-nums text-bone">
+          {pagination.total}
+        </span>
+        <span class="text-[14px] text-bone-soft">条记忆</span>
+        <span class="font-mono text-[12px] text-bone-faint">
+          · 第 {pagination.page} / {Math.max(1, pagination.totalPages)} 页
+        </span>
+      </div>
 
-        <article class="rounded-lg border border-[#e8e8e7] bg-white p-5">
-          <h2 class="mt-0 text-[16px] font-semibold text-[#37352f]">
-            Use this page to
-          </h2>
-          <ul class="m-0 list-disc pl-5 leading-loose text-[#787774]">
-            <li>Scan recent knowledge at a glance</li>
-            <li>Filter by type, domain, visibility, and source</li>
-            <li>Jump to detail or keep capturing new material</li>
-          </ul>
-        </article>
-      </section>
-
-      <section class="mb-5 rounded-lg border border-[#e8e8e7] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+      {/* 筛选区 */}
+      <Panel class="mb-5 p-5" variant="panel">
         <form
           method="get"
           action="/assets"
-          class="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3"
+          class="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3"
         >
           <input
             id="assets-timezone-offset"
@@ -286,12 +220,11 @@ export const AssetsPage = ({
                 : ""
             }
           />
-          <label class="grid gap-2">
-            <span class="text-[13px] font-semibold text-[#37352f]">Status</span>
+          <Field label="状态">
             <select
               name="status"
               defaultValue={filters.status ?? ""}
-              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
+              class={selectClass}
             >
               {assetStatusOptions.map((option) => (
                 <option key={option.label} value={option.value}>
@@ -299,13 +232,12 @@ export const AssetsPage = ({
                 </option>
               ))}
             </select>
-          </label>
-          <label class="grid gap-2">
-            <span class="text-[13px] font-semibold text-[#37352f]">Type</span>
+          </Field>
+          <Field label="类型">
             <select
               name="type"
               defaultValue={filters.type ?? ""}
-              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
+              class={selectClass}
             >
               {assetTypeOptions.map((option) => (
                 <option key={option.label} value={option.value}>
@@ -313,13 +245,12 @@ export const AssetsPage = ({
                 </option>
               ))}
             </select>
-          </label>
-          <label class="grid gap-2">
-            <span class="text-[13px] font-semibold text-[#37352f]">Domain</span>
+          </Field>
+          <Field label="领域">
             <select
               name="domain"
               defaultValue={filters.domain ?? ""}
-              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
+              class={selectClass}
             >
               {assetDomainOptions.map((option) => (
                 <option key={option.label} value={option.value}>
@@ -327,15 +258,12 @@ export const AssetsPage = ({
                 </option>
               ))}
             </select>
-          </label>
-          <label class="grid gap-2">
-            <span class="text-[13px] font-semibold text-[#37352f]">
-              Source Kind
-            </span>
+          </Field>
+          <Field label="来源">
             <select
               name="sourceKind"
               defaultValue={filters.sourceKind ?? ""}
-              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
+              class={selectClass}
             >
               {assetSourceKindOptions.map((option) => (
                 <option key={option.label} value={option.value}>
@@ -343,15 +271,12 @@ export const AssetsPage = ({
                 </option>
               ))}
             </select>
-          </label>
-          <label class="grid gap-2">
-            <span class="text-[13px] font-semibold text-[#37352f]">
-              AI Visibility
-            </span>
+          </Field>
+          <Field label="AI 可见性">
             <select
               name="aiVisibility"
               defaultValue={filters.aiVisibility ?? ""}
-              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
+              class={selectClass}
             >
               {assetAiVisibilityOptions.map((option) => (
                 <option key={option.label} value={option.value}>
@@ -359,63 +284,50 @@ export const AssetsPage = ({
                 </option>
               ))}
             </select>
-          </label>
-          <label class="grid gap-2">
-            <span class="text-[13px] font-semibold text-[#37352f]">
-              Created From
-            </span>
+          </Field>
+          <Field label="创建起">
             <input
               name="createdAtFrom"
               type="date"
               defaultValue={formatDateInputValue(filters.createdAtFrom)}
-              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
+              class={selectClass}
             />
-          </label>
-          <label class="grid gap-2">
-            <span class="text-[13px] font-semibold text-[#37352f]">
-              Created To
-            </span>
+          </Field>
+          <Field label="创建止">
             <input
               name="createdAtTo"
               type="date"
               defaultValue={formatDateInputValue(filters.createdAtTo)}
-              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
+              class={selectClass}
             />
-          </label>
-          <label class="grid gap-2">
-            <span class="text-[13px] font-semibold text-[#37352f]">
-              Source Host
-            </span>
+          </Field>
+          <Field label="来源主机">
             <input
               name="sourceHost"
               type="search"
               defaultValue={filters.sourceHost ?? ""}
               placeholder="developers.cloudflare.com"
-              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
+              class={selectClass}
             />
-          </label>
-          <label class="grid gap-2">
-            <span class="text-[13px] font-semibold text-[#37352f]">Search</span>
+          </Field>
+          <Field label="搜索">
             <input
               name="query"
               type="search"
               defaultValue={filters.query ?? ""}
-              placeholder="Title, summary, or source URL"
-              class="w-full rounded-md border border-[#e8e8e7] px-3 py-1.5 text-[14px] text-[#37352f] focus:outline-none focus:border-[#2383e2]"
+              placeholder="标题、摘要或来源 URL"
+              class={selectClass}
             />
-          </label>
-          <div class="flex flex-wrap items-end gap-2">
-            <button
-              type="submit"
-              class="cursor-pointer rounded-md border-none bg-[#37352f] px-4 py-2 text-[14px] font-bold text-white hover:bg-[#2f2d28]"
-            >
-              Apply
+          </Field>
+          <div class="flex items-end gap-3">
+            <button type="submit" class={buttonClass("primary")}>
+              应用筛选
             </button>
             <a
               href="/assets"
-              class="text-[14px] font-bold text-[#787774] no-underline hover:text-[#37352f]"
+              class="text-[14px] font-medium text-bone-soft no-underline transition-colors hover:text-bone"
             >
-              Reset
+              重置
             </a>
           </div>
         </form>
@@ -430,111 +342,108 @@ export const AssetsPage = ({
               "});",
           }}
         />
-      </section>
+      </Panel>
 
-      {pagination.totalPages > 1 ? (
-        <div class="mb-4 flex items-center justify-between gap-3">
-          <span class="text-[14px] text-[#787774]">
-            Page {pagination.page} / {pagination.totalPages}
-          </span>
-          <div class="flex gap-3">
-            {previousPage ? (
-              <a
-                href={buildPageHref(previousPage)}
-                class="text-[14px] font-semibold text-[#2383e2] no-underline hover:underline"
-              >
-                Previous
-              </a>
-            ) : (
-              <span class="text-[14px] text-[#9b9a97]">Previous</span>
-            )}
-            {nextPage ? (
-              <a
-                href={buildPageHref(nextPage)}
-                class="text-[14px] font-semibold text-[#2383e2] no-underline hover:underline"
-              >
-                Next
-              </a>
-            ) : (
-              <span class="text-[14px] text-[#9b9a97]">Next</span>
-            )}
-          </div>
-        </div>
-      ) : null}
-
+      {/* 资产卡片流 */}
       {items.length === 0 ? (
-        <article class="rounded-lg border border-dashed border-[#e8e8e7] bg-white p-6 text-[#787774]">
-          Your library is still empty. Start from{" "}
-          <a
-            href="/capture"
-            class="text-[#2383e2] no-underline hover:underline"
-          >
-            Capture
-          </a>{" "}
-          and bring in your first URL, note, or PDF.
-        </article>
+        <EmptyState
+          title="记忆库还是空的"
+          description="从采集收进第一条 URL、笔记或 PDF，或用 MCP 的 remember 写入。"
+          action={
+            <a class={buttonClass("primary")} href="/capture">
+              开始采集
+            </a>
+          }
+        />
       ) : (
-        <div class="grid gap-3">
+        <div class="flex flex-col gap-3">
           {items.map((asset) => (
-            <article
-              key={asset.id}
-              class="rounded-lg border border-[#e8e8e7] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-            >
+            <Panel key={asset.id} class="p-5" variant="panel">
               {buildAssetTags(asset).length > 0 ? (
-                <div class="mb-3 flex flex-wrap gap-1.5">
+                <div class="mb-2.5 flex flex-wrap gap-1.5">
                   {buildAssetTags(asset).map((tag) => (
                     <span
                       key={`${asset.id}:${tag}`}
-                      class="rounded bg-[#f1f1f0] px-2 py-0.5 text-[12px] text-[#787774]"
+                      class="rounded bg-ink-raised px-2 py-0.5 font-mono text-[11px] text-bone-soft"
                     >
                       {formatLabel(tag)}
                     </span>
                   ))}
                 </div>
               ) : null}
-              <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <div>
+              <div class="mb-2.5 flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
                   <a
                     href={`/assets/${asset.id}`}
-                    class="text-[16px] font-semibold text-[#37352f] no-underline hover:text-[#2383e2]"
+                    class="text-[16px] font-semibold text-bone no-underline transition-colors hover:text-brass"
                   >
                     {asset.title}
                   </a>
-                  <div class="mt-1 text-[13px] text-[#787774]">
-                    {asset.type} &bull; Created {formatDate(asset.createdAt)}
+                  <div class="mt-1 font-mono text-[11px] text-bone-faint">
+                    {asset.type} · 创建于 {formatDate(asset.createdAt)}
                   </div>
                 </div>
-                <AssetStatusBadge status={asset.status} />
+                <StatusBadge status={asset.status} />
               </div>
-              <p class="mb-2 leading-relaxed text-[#787774]">
-                {asset.summary ??
-                  "Summary has not been generated yet. This record is currently showing raw metadata."}
+              <p class="mb-3 text-[14px] leading-relaxed text-bone-soft">
+                {asset.summary ?? "摘要尚未生成，当前展示原始元数据。"}
               </p>
               <div class="flex flex-wrap items-center justify-between gap-3">
-                <div class="text-[13px] text-[#9b9a97]">
-                  {asset.sourceHost ??
-                    asset.sourceUrl ??
-                    `Asset ID: ${asset.id}`}
+                <div class="min-w-0 truncate font-mono text-[12px] text-bone-faint">
+                  {asset.sourceHost ?? asset.sourceUrl ?? `ID: ${asset.id}`}
                 </div>
-                <div class="flex gap-3">
+                <div class="flex gap-4">
                   <a
                     href={`/assets/${asset.id}`}
-                    class="text-[14px] font-semibold text-[#2383e2] no-underline hover:underline"
+                    class="text-[13px] font-semibold text-brass no-underline hover:text-brass-bright"
                   >
-                    Open Detail
-                  </a>
-                  <a
-                    href="/ask"
-                    class="text-[14px] font-semibold text-[#2383e2] no-underline hover:underline"
-                  >
-                    Ask From Here
+                    查看详情 →
                   </a>
                 </div>
               </div>
-            </article>
+            </Panel>
           ))}
         </div>
       )}
+
+      {/* 分页 */}
+      {pagination.totalPages > 1 ? (
+        <div class="mt-5 flex items-center justify-between gap-3">
+          <span class="font-mono text-[12px] text-bone-faint">
+            第 {pagination.page} / {pagination.totalPages} 页
+          </span>
+          <div class="flex gap-2.5">
+            {previousPage ? (
+              <a
+                class={buttonClass("subtle", "sm")}
+                href={buildPageHref(previousPage)}
+              >
+                ← 上一页
+              </a>
+            ) : (
+              <span
+                class={`${buttonClass("subtle", "sm")} pointer-events-none opacity-40`}
+              >
+                ← 上一页
+              </span>
+            )}
+            {nextPage ? (
+              <a
+                class={buttonClass("subtle", "sm")}
+                href={buildPageHref(nextPage)}
+              >
+                下一页 →
+              </a>
+            ) : (
+              <span
+                class={`${buttonClass("subtle", "sm")} pointer-events-none opacity-40`}
+              >
+                下一页 →
+              </span>
+            )}
+          </div>
+        </div>
+      ) : null}
     </PageShell>
   );
 };

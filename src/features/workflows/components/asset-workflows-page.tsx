@@ -2,6 +2,12 @@ import { AssetPageActions } from "@/features/assets/components/asset-page-action
 import { AssetTabs } from "@/features/assets/components/asset-tabs";
 import type { AssetDetail } from "@/features/assets/model/types";
 import { PageShell } from "@/features/layout/components/page-shell";
+import {
+  FlashMessage,
+  Panel,
+  StatusBadge,
+  type StatusKind,
+} from "@/features/ui/components";
 import type {
   AssetArtifactRecord,
   WorkflowRunDetail,
@@ -15,10 +21,7 @@ const formatDate = (value: string | null): string => {
   if (!value) {
     return "N/A";
   }
-
-  return new Date(value).toLocaleString("zh-CN", {
-    hour12: false,
-  });
+  return new Date(value).toLocaleString("zh-CN", { hour12: false });
 };
 
 const formatDuration = (
@@ -28,23 +31,19 @@ const formatDuration = (
   if (!startedAt || !finishedAt) {
     return "N/A";
   }
-
   const durationMs =
     new Date(finishedAt).getTime() - new Date(startedAt).getTime();
-
   if (!Number.isFinite(durationMs) || durationMs < 0) {
     return "N/A";
   }
-
   if (durationMs < 1000) {
     return `${durationMs}ms`;
   }
-
   return `${(durationMs / 1000).toFixed(durationMs < 10_000 ? 1 : 0)}s`;
 };
 
-const formatLabel = (value: string): string => {
-  return value
+const formatLabel = (value: string): string =>
+  value
     .split("_")
     .map((segment) =>
       segment.length > 0
@@ -52,7 +51,6 @@ const formatLabel = (value: string): string => {
         : segment
     )
     .join(" ");
-};
 
 const formatJsonPreview = (
   value: string | null,
@@ -61,90 +59,66 @@ const formatJsonPreview = (
   if (!value) {
     return null;
   }
-
   let preview = value;
-
   try {
     preview = JSON.stringify(JSON.parse(value), null, 2);
   } catch {
     // 不是合法 JSON，保持原始字符串用于预览
   }
-
   if (preview.length <= limit) {
     return preview;
   }
-
   return `${preview.slice(0, limit).trimEnd()}\n...`;
 };
 
-const getRunStatusClasses = (status: WorkflowRunStatus): string => {
+// 工作流/步骤状态 → StatusBadge 的四态语义映射。
+const runStatusKind = (status: WorkflowRunStatus): StatusKind => {
   switch (status) {
     case "succeeded":
-      return "bg-[#e3f2e8] text-[#2e6c3e] border-[#b7dbbf]";
+      return "ready";
     case "failed":
-      return "bg-[#f9e3e3] text-[#9c2e2e] border-[#e8b7b7]";
+      return "failed";
     case "running":
-      return "bg-[#e8f0fa] text-[#2383e2] border-[#c8daf5]";
-    case "cancelled":
-      return "bg-[#f5efe4] text-[#8a5a00] border-[#e3d0ac]";
+      return "processing";
     default:
-      return "bg-[#f3f3f2] text-[#787774] border-[#e8e8e7]";
+      return "pending";
   }
 };
 
-const getStepStatusClasses = (status: WorkflowStepStatus): string => {
+const stepStatusKind = (status: WorkflowStepStatus): StatusKind => {
   switch (status) {
     case "succeeded":
-      return "bg-[#e3f2e8] text-[#2e6c3e] border-[#b7dbbf]";
+      return "ready";
     case "failed":
-      return "bg-[#f9e3e3] text-[#9c2e2e] border-[#e8b7b7]";
+      return "failed";
     case "running":
-      return "bg-[#e8f0fa] text-[#2383e2] border-[#c8daf5]";
-    case "skipped":
-      return "bg-[#f5efe4] text-[#8a5a00] border-[#e3d0ac]";
+      return "processing";
     default:
-      return "bg-[#f3f3f2] text-[#787774] border-[#e8e8e7]";
+      return "pending";
   }
 };
 
-const StatusChip = ({
-  label,
-  className,
-}: {
-  label: string;
-  className: string;
-}) => {
-  return (
-    <span
-      class={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-bold uppercase tracking-[0.08em] ${className}`}
-    >
+const buildRunHref = (assetId: string, runId: string): string =>
+  `/assets/${assetId}/workflows?runId=${encodeURIComponent(runId)}`;
+
+// 等宽预览块（JSON / 正文片段）。
+const CodeBlock = ({ children }: { children: string }) => (
+  <pre class="m-0 whitespace-pre-wrap break-words rounded-md border border-line bg-ink-raised p-3 font-mono text-[13px] leading-[1.7] text-bone-soft">
+    {children}
+  </pre>
+);
+
+// 小元数据格子。
+const MetaCell = ({ label, value }: { label: string; value: string }) => (
+  <div class="rounded-md border border-line bg-ink-raised px-4 py-3">
+    <div class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-bone-faint">
       {label}
-    </span>
-  );
-};
-
-const MessageBanner = ({
-  children,
-  tone,
-}: {
-  children: string;
-  tone: "success" | "error";
-}) => {
-  const toneClasses =
-    tone === "success"
-      ? "bg-[#e3f2e8] text-[#2e6c3e] border-[#b7dbbf]"
-      : "bg-[#f9e3e3] text-[#9c2e2e] border-[#e8b7b7]";
-
-  return (
-    <section class={`mb-[18px] px-4 py-3 rounded-md border ${toneClasses}`}>
-      {children}
-    </section>
-  );
-};
-
-const buildRunHref = (assetId: string, runId: string): string => {
-  return `/assets/${assetId}/workflows?runId=${encodeURIComponent(runId)}`;
-};
+    </div>
+    <div class="mt-1.5 break-words text-[14px] font-medium text-bone">
+      {value}
+    </div>
+  </div>
+);
 
 const renderArtifactBody = (artifact: AssetArtifactRecord) => {
   const contentPreview = artifact.contentText?.trim()
@@ -154,29 +128,21 @@ const renderArtifactBody = (artifact: AssetArtifactRecord) => {
 
   return (
     <div class="grid gap-2.5">
-      <div class="text-[#787774] text-[13px]">
-        Created: {formatDate(artifact.createdAt)}
+      <div class="font-mono text-[12px] text-bone-faint">
+        创建于 {formatDate(artifact.createdAt)}
       </div>
       {artifact.r2Key ? (
-        <div class="rounded-md bg-[#fafaf9] border border-[#ededec] px-3 py-2.5">
-          <div class="text-[#9b9a97] text-[11px] font-bold uppercase tracking-[0.08em]">
+        <div class="rounded-md border border-line bg-ink-raised px-3 py-2.5">
+          <div class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-bone-faint">
             R2 Key
           </div>
-          <div class="mt-1.5 break-words font-[IBM_Plex_Mono,SFMono-Regular,Consolas,monospace] text-[13px] text-[#37352f]">
+          <div class="mt-1.5 break-words font-mono text-[13px] text-bone">
             {artifact.r2Key}
           </div>
         </div>
       ) : null}
-      {contentPreview ? (
-        <pre class="m-0 whitespace-pre-wrap break-words rounded-md bg-[#fafaf9] border border-[#ededec] p-3 font-[IBM_Plex_Mono,SFMono-Regular,Consolas,monospace] text-[13px] leading-[1.7] text-[#37352f]">
-          {contentPreview}
-        </pre>
-      ) : null}
-      {metadataPreview ? (
-        <pre class="m-0 whitespace-pre-wrap break-words rounded-md bg-[#fafaf9] border border-[#ededec] p-3 font-[IBM_Plex_Mono,SFMono-Regular,Consolas,monospace] text-[13px] leading-[1.7] text-[#37352f]">
-          {metadataPreview}
-        </pre>
-      ) : null}
+      {contentPreview ? <CodeBlock>{contentPreview}</CodeBlock> : null}
+      {metadataPreview ? <CodeBlock>{metadataPreview}</CodeBlock> : null}
     </div>
   );
 };
@@ -185,54 +151,37 @@ const StepCard = ({ step }: { step: WorkflowStepRecord }) => {
   const outputPreview = formatJsonPreview(step.outputJson, 480);
 
   return (
-    <article class="rounded-lg border border-[#e8e8e7] bg-white p-5">
-      <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+    <Panel class="p-5" variant="raised">
+      <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div class="text-[16px] font-semibold text-[#37352f]">
+          <div class="text-[15px] font-semibold text-bone">
             {formatLabel(step.stepKey)}
           </div>
-          <div class="mt-1 text-[13px] text-[#787774]">
-            Type {formatLabel(step.stepType)} · Attempt {step.attempt}
+          <div class="mt-1 font-mono text-[12px] text-bone-faint">
+            {formatLabel(step.stepType)} · 第 {step.attempt} 次
           </div>
         </div>
-        <StatusChip
-          label={step.status}
-          className={getStepStatusClasses(step.status)}
+        <StatusBadge status={stepStatusKind(step.status)} label={step.status} />
+      </div>
+      <div class="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
+        <MetaCell label="开始" value={formatDate(step.startedAt)} />
+        <MetaCell label="结束" value={formatDate(step.finishedAt)} />
+        <MetaCell
+          label="耗时"
+          value={formatDuration(step.startedAt, step.finishedAt)}
         />
       </div>
-      <div class="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3">
-        <div class="rounded-md bg-[#fafaf9] border border-[#ededec] px-3 py-2.5">
-          <div class="text-[#9b9a97] text-[11px] font-bold uppercase tracking-[0.08em]">
-            Started
-          </div>
-          <div class="mt-1.5 text-[#37352f]">{formatDate(step.startedAt)}</div>
-        </div>
-        <div class="rounded-md bg-[#fafaf9] border border-[#ededec] px-3 py-2.5">
-          <div class="text-[#9b9a97] text-[11px] font-bold uppercase tracking-[0.08em]">
-            Finished
-          </div>
-          <div class="mt-1.5 text-[#37352f]">{formatDate(step.finishedAt)}</div>
-        </div>
-        <div class="rounded-md bg-[#fafaf9] border border-[#ededec] px-3 py-2.5">
-          <div class="text-[#9b9a97] text-[11px] font-bold uppercase tracking-[0.08em]">
-            Duration
-          </div>
-          <div class="mt-1.5 text-[#37352f]">
-            {formatDuration(step.startedAt, step.finishedAt)}
-          </div>
-        </div>
-      </div>
       {step.errorMessage ? (
-        <p class="mt-3 mb-0 rounded-md border border-[#e8b7b7] bg-[#f9e3e3] px-3 py-2.5 text-[#9c2e2e] leading-[1.7]">
+        <p class="mt-3 rounded-md border border-status-failed-border bg-status-failed-bg px-3 py-2.5 text-[13px] leading-[1.7] text-status-failed">
           {step.errorMessage}
         </p>
       ) : null}
       {outputPreview ? (
-        <pre class="mt-3 mb-0 whitespace-pre-wrap break-words rounded-md bg-[#fafaf9] border border-[#ededec] p-3 font-[IBM_Plex_Mono,SFMono-Regular,Consolas,monospace] text-[13px] leading-[1.7] text-[#37352f]">
-          {outputPreview}
-        </pre>
+        <div class="mt-3">
+          <CodeBlock>{outputPreview}</CodeBlock>
+        </div>
       ) : null}
-    </article>
+    </Panel>
   );
 };
 
@@ -252,14 +201,15 @@ export const AssetWorkflowsPage = ({
   if (!item) {
     return (
       <PageShell
-        title="Workflow Inspection"
-        subtitle="Inspect workflow runs, steps, and generated artifacts for a single asset."
         navigationKey="library"
+        eyebrow="工作区 · 记忆库"
+        title="工作流检视"
+        subtitle="查看单条资产的工作流运行、步骤与生成产物。"
         actions={<AssetPageActions />}
       >
-        <MessageBanner tone="error">
-          {errorMessage ?? "Asset not found."}
-        </MessageBanner>
+        <FlashMessage kind="error">
+          {errorMessage ?? "未找到该资产。"}
+        </FlashMessage>
       </PageShell>
     );
   }
@@ -272,110 +222,118 @@ export const AssetWorkflowsPage = ({
 
   return (
     <PageShell
-      title={item.title}
-      subtitle="Inspect workflow runs, step timing, and generated artifacts in a dedicated view instead of crowding the asset detail page."
       navigationKey="library"
+      eyebrow="工作区 · 记忆库 / 工作流"
+      title={item.title}
+      subtitle="在独立视图里检视工作流运行、步骤耗时与生成产物，不让详情页拥挤。"
       actions={<AssetPageActions assetId={item.id} />}
     >
       {errorMessage ? (
-        <MessageBanner tone="error">{errorMessage}</MessageBanner>
+        <FlashMessage kind="error" class="mb-4">
+          {errorMessage}
+        </FlashMessage>
       ) : null}
 
       <AssetTabs assetId={item.id} activeTab="workflows" />
 
-      <section class="mb-[18px] grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
-        <article class="rounded-lg border border-[#e8e8e7] bg-white px-5 py-4">
-          <div class="text-[#9b9a97] text-[12px] font-bold uppercase tracking-[0.08em]">
-            Workflow Runs
+      {/* 计量条 */}
+      <section class="mb-5 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-px overflow-hidden rounded-lg border border-line bg-line-soft">
+        <div class="bg-ink-raised px-5 py-4">
+          <div class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-bone-faint">
+            运行次数
           </div>
-          <div class="mt-2 text-[28px] font-semibold text-[#37352f]">
+          <div class="mt-2 font-display text-[28px] font-medium tabular-nums text-bone">
             {runs.length}
           </div>
-        </article>
-        <article class="rounded-lg border border-[#e8e8e7] bg-white px-5 py-4">
-          <div class="text-[#9b9a97] text-[12px] font-bold uppercase tracking-[0.08em]">
-            Latest Status
+        </div>
+        <div class="bg-ink-raised px-5 py-4">
+          <div class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-bone-faint">
+            最新状态
           </div>
-          <div class="mt-2">
+          <div class="mt-2.5">
             {latestRun ? (
-              <StatusChip
+              <StatusBadge
+                status={runStatusKind(latestRun.status)}
                 label={latestRun.status}
-                className={getRunStatusClasses(latestRun.status)}
               />
             ) : (
-              <span class="text-[#787774]">No runs yet</span>
+              <span class="text-[14px] text-bone-soft">尚无运行</span>
             )}
           </div>
-        </article>
-        <article class="rounded-lg border border-[#e8e8e7] bg-white px-5 py-4">
-          <div class="text-[#9b9a97] text-[12px] font-bold uppercase tracking-[0.08em]">
-            Active Run
+        </div>
+        <div class="bg-ink-raised px-5 py-4">
+          <div class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-bone-faint">
+            当前运行
           </div>
-          <div class="mt-2 text-[#37352f] font-semibold break-words">
+          <div class="mt-2 break-words font-mono text-[13px] font-medium text-bone">
             {activeRunId ?? "N/A"}
           </div>
-        </article>
-        <article class="rounded-lg border border-[#e8e8e7] bg-white px-5 py-4">
-          <div class="text-[#9b9a97] text-[12px] font-bold uppercase tracking-[0.08em]">
-            Selected Artifacts
+        </div>
+        <div class="bg-ink-raised px-5 py-4">
+          <div class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-bone-faint">
+            选中产物
           </div>
-          <div class="mt-2 text-[28px] font-semibold text-[#37352f]">
+          <div class="mt-2 font-display text-[28px] font-medium tabular-nums text-bone">
             {selectedArtifacts.length}
           </div>
-        </article>
+        </div>
       </section>
 
       {runs.length === 0 ? (
-        <article class="rounded-lg border border-dashed border-[#e8e8e7] bg-white p-6 text-[#787774]">
-          No workflow runs have been created for this asset yet.
-        </article>
+        <Panel class="p-6" variant="panel">
+          <p class="text-[14px] text-bone-soft">该资产尚无工作流运行记录。</p>
+        </Panel>
       ) : (
-        <section class="grid grid-cols-[minmax(280px,0.62fr)_minmax(0,1.38fr)] gap-[18px]">
-          <aside class="grid gap-[18px]">
-            <article class="rounded-lg border border-[#e8e8e7] bg-white p-5">
-              <div class="flex items-center justify-between gap-3 mb-3">
-                <h2 class="m-0 text-[20px]">Runs</h2>
-                <span class="text-[13px] text-[#787774]">Latest first</span>
+        <section class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(280px,0.62fr)_minmax(0,1.38fr)]">
+          {/* 左：运行列表 */}
+          <aside>
+            <Panel class="p-5" variant="panel">
+              <div class="mb-3 flex items-center justify-between gap-3">
+                <h2 class="font-display text-[18px] font-semibold text-bone">
+                  运行
+                </h2>
+                <span class="font-mono text-[11px] text-bone-faint">
+                  最新在前
+                </span>
               </div>
-              <div class="grid gap-3">
+              <div class="flex flex-col gap-3">
                 {runs.map((run) => {
                   const isActive = run.id === activeRunId;
-
                   return (
                     <a
                       key={run.id}
                       href={buildRunHref(item.id, run.id)}
                       class={`rounded-lg border p-4 no-underline transition-colors ${
                         isActive
-                          ? "border-[#37352f] bg-[#f7f6f3]"
-                          : "border-[#ededec] bg-[#fafaf9] hover:border-[#d7d7d6] hover:bg-white"
+                          ? "border-brass/50 bg-brass-soft"
+                          : "border-line bg-ink-raised hover:border-brass/30"
                       }`}
                     >
                       <div class="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <div class="text-[15px] font-semibold text-[#37352f] break-words">
+                        <div class="min-w-0">
+                          <div class="break-words text-[14.5px] font-semibold text-bone">
                             {formatLabel(run.workflowType)}
                           </div>
-                          <div class="mt-1 text-[13px] text-[#787774]">
+                          <div class="mt-1 font-mono text-[11px] text-bone-faint">
                             {formatLabel(run.triggerType)} ·{" "}
                             {formatDate(run.createdAt)}
                           </div>
                         </div>
-                        <StatusChip
+                        <StatusBadge
+                          status={runStatusKind(run.status)}
                           label={run.status}
-                          className={getRunStatusClasses(run.status)}
                         />
                       </div>
-                      <div class="mt-3 text-[13px] text-[#787774]">
-                        Current step:{" "}
-                        <span class="text-[#37352f]">
+                      <div class="mt-3 text-[12px] text-bone-soft">
+                        当前步骤：{" "}
+                        <span class="text-bone">
                           {run.currentStep
                             ? formatLabel(run.currentStep)
                             : "N/A"}
                         </span>
                       </div>
                       {run.errorMessage ? (
-                        <p class="mt-3 mb-0 text-[13px] leading-[1.7] text-[#9c2e2e]">
+                        <p class="mt-2.5 text-[12px] leading-[1.7] text-status-failed">
                           {run.errorMessage}
                         </p>
                       ) : null}
@@ -383,136 +341,126 @@ export const AssetWorkflowsPage = ({
                   );
                 })}
               </div>
-            </article>
+            </Panel>
           </aside>
 
-          <div class="grid gap-[18px]">
+          {/* 右：运行详情 */}
+          <div class="flex flex-col gap-4">
             {selectedRun ? (
               <>
-                <article class="rounded-lg border border-[#e8e8e7] bg-white p-6">
-                  <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+                <Panel class="p-6" variant="panel">
+                  <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <div class="text-[#787774] text-[13px]">
+                      <div class="font-mono text-[12px] text-bone-faint">
                         Run ID {selectedRun.run.id}
                       </div>
-                      <h2 class="mt-1 mb-0 text-[24px]">
+                      <h2 class="mt-1 font-display text-[22px] font-semibold text-bone">
                         {formatLabel(selectedRun.run.workflowType)}
                       </h2>
                     </div>
-                    <StatusChip
+                    <StatusBadge
+                      status={runStatusKind(selectedRun.run.status)}
                       label={selectedRun.run.status}
-                      className={getRunStatusClasses(selectedRun.run.status)}
                     />
                   </div>
-                  <div class="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
-                    <div class="rounded-md bg-[#fafaf9] border border-[#ededec] px-4 py-3.5">
-                      <div class="text-[#9b9a97] text-[12px] font-bold uppercase tracking-[0.08em]">
-                        Trigger
-                      </div>
-                      <div class="mt-2 text-[#37352f] font-bold">
-                        {formatLabel(selectedRun.run.triggerType)}
-                      </div>
-                    </div>
-                    <div class="rounded-md bg-[#fafaf9] border border-[#ededec] px-4 py-3.5">
-                      <div class="text-[#9b9a97] text-[12px] font-bold uppercase tracking-[0.08em]">
-                        Current Step
-                      </div>
-                      <div class="mt-2 text-[#37352f] font-bold">
-                        {selectedRun.run.currentStep
+                  <div class="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
+                    <MetaCell
+                      label="触发"
+                      value={formatLabel(selectedRun.run.triggerType)}
+                    />
+                    <MetaCell
+                      label="当前步骤"
+                      value={
+                        selectedRun.run.currentStep
                           ? formatLabel(selectedRun.run.currentStep)
-                          : "N/A"}
-                      </div>
-                    </div>
-                    <div class="rounded-md bg-[#fafaf9] border border-[#ededec] px-4 py-3.5">
-                      <div class="text-[#9b9a97] text-[12px] font-bold uppercase tracking-[0.08em]">
-                        Started
-                      </div>
-                      <div class="mt-2 text-[#37352f] font-bold">
-                        {formatDate(selectedRun.run.startedAt)}
-                      </div>
-                    </div>
-                    <div class="rounded-md bg-[#fafaf9] border border-[#ededec] px-4 py-3.5">
-                      <div class="text-[#9b9a97] text-[12px] font-bold uppercase tracking-[0.08em]">
-                        Finished
-                      </div>
-                      <div class="mt-2 text-[#37352f] font-bold">
-                        {formatDate(selectedRun.run.finishedAt)}
-                      </div>
-                    </div>
+                          : "N/A"
+                      }
+                    />
+                    <MetaCell
+                      label="开始"
+                      value={formatDate(selectedRun.run.startedAt)}
+                    />
+                    <MetaCell
+                      label="结束"
+                      value={formatDate(selectedRun.run.finishedAt)}
+                    />
                   </div>
                   {selectedRun.run.errorMessage ? (
-                    <p class="mt-4 mb-0 rounded-md border border-[#e8b7b7] bg-[#f9e3e3] px-4 py-3 text-[#9c2e2e] leading-[1.7]">
+                    <p class="mt-4 rounded-md border border-status-failed-border bg-status-failed-bg px-4 py-3 text-[13px] leading-[1.7] text-status-failed">
                       {selectedRun.run.errorMessage}
                     </p>
                   ) : null}
                   {parsedState ? (
-                    <pre class="mt-4 mb-0 whitespace-pre-wrap break-words rounded-md bg-[#fafaf9] border border-[#ededec] p-4 font-[IBM_Plex_Mono,SFMono-Regular,Consolas,monospace] text-[13px] leading-[1.7] text-[#37352f]">
-                      {parsedState}
-                    </pre>
+                    <div class="mt-4">
+                      <CodeBlock>{parsedState}</CodeBlock>
+                    </div>
                   ) : null}
-                </article>
+                </Panel>
 
-                <article class="rounded-lg border border-[#e8e8e7] bg-white p-6">
-                  <div class="flex items-center justify-between gap-3 mb-4">
-                    <h2 class="m-0 text-[22px]">Steps</h2>
-                    <span class="text-[13px] text-[#787774]">
-                      {selectedSteps.length} recorded
+                <Panel class="p-6" variant="panel">
+                  <div class="mb-4 flex items-center justify-between gap-3">
+                    <h2 class="font-display text-[20px] font-semibold text-bone">
+                      步骤
+                    </h2>
+                    <span class="font-mono text-[11px] text-bone-faint">
+                      {selectedSteps.length} 条
                     </span>
                   </div>
                   {selectedSteps.length === 0 ? (
-                    <p class="mb-0 text-[#787774]">No step records yet.</p>
+                    <p class="text-[14px] text-bone-soft">暂无步骤记录。</p>
                   ) : (
-                    <div class="grid gap-3">
+                    <div class="flex flex-col gap-3">
                       {selectedSteps.map((step) => (
                         <StepCard key={step.id} step={step} />
                       ))}
                     </div>
                   )}
-                </article>
+                </Panel>
 
-                <article class="rounded-lg border border-[#e8e8e7] bg-white p-6">
-                  <div class="flex items-center justify-between gap-3 mb-4">
-                    <h2 class="m-0 text-[22px]">Artifacts</h2>
-                    <span class="text-[13px] text-[#787774]">
-                      {selectedArtifacts.length} generated
+                <Panel class="p-6" variant="panel">
+                  <div class="mb-4 flex items-center justify-between gap-3">
+                    <h2 class="font-display text-[20px] font-semibold text-bone">
+                      产物
+                    </h2>
+                    <span class="font-mono text-[11px] text-bone-faint">
+                      {selectedArtifacts.length} 个
                     </span>
                   </div>
                   {selectedArtifacts.length === 0 ? (
-                    <p class="mb-0 text-[#787774]">
-                      No artifacts were persisted for this run.
+                    <p class="text-[14px] text-bone-soft">
+                      本次运行未持久化任何产物。
                     </p>
                   ) : (
-                    <div class="grid gap-3">
+                    <div class="flex flex-col gap-3">
                       {selectedArtifacts.map((artifact) => (
-                        <article
-                          key={artifact.id}
-                          class="rounded-lg border border-[#ededec] bg-[#fafaf9] p-4"
-                        >
-                          <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+                        <Panel key={artifact.id} class="p-4" variant="raised">
+                          <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
                             <div>
-                              <div class="text-[16px] font-semibold text-[#37352f]">
+                              <div class="text-[15px] font-semibold text-bone">
                                 {formatLabel(artifact.artifactType)}
                               </div>
-                              <div class="mt-1 text-[13px] text-[#787774]">
-                                Version {artifact.version} ·{" "}
+                              <div class="mt-1 font-mono text-[12px] text-bone-faint">
+                                v{artifact.version} ·{" "}
                                 {formatLabel(artifact.storageKind)}
                               </div>
                             </div>
-                            <span class="text-[12px] font-bold uppercase tracking-[0.08em] text-[#9b9a97]">
+                            <span class="font-mono text-[11px] text-bone-faint">
                               {artifact.id}
                             </span>
                           </div>
                           {renderArtifactBody(artifact)}
-                        </article>
+                        </Panel>
                       ))}
                     </div>
                   )}
-                </article>
+                </Panel>
               </>
             ) : (
-              <article class="rounded-lg border border-dashed border-[#e8e8e7] bg-white p-6 text-[#787774]">
-                Select a workflow run to inspect step-by-step execution details.
-              </article>
+              <Panel class="p-6" variant="panel">
+                <p class="text-[14px] text-bone-soft">
+                  选择左侧一次运行，查看逐步执行细节。
+                </p>
+              </Panel>
             )}
           </div>
         </section>

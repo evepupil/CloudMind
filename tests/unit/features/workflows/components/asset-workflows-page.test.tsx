@@ -120,7 +120,7 @@ describe("AssetWorkflowsPage", () => {
       />
     );
 
-    expect(html).toContain("Workflow Inspection");
+    expect(html).toContain("工作流检视");
     expect(html).toContain('href="/assets/asset-1"');
     expect(html).toContain('href="/assets/asset-1/workflows"');
     expect(html).toContain("Classify");
@@ -133,8 +133,6 @@ describe("AssetWorkflowsPage", () => {
       <AssetWorkflowsPage item={createAssetDetail()} runs={[]} />
     );
 
-    expect(html).toContain(
-      "No workflow runs have been created for this asset yet."
-    );
+    expect(html).toContain("该资产尚无工作流运行记录。");
   });
 });
