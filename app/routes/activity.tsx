@@ -1,16 +1,10 @@
 import { createRoute } from "honox/factory";
 
-import { ComingSoonPage } from "@/features/layout/components/coming-soon-page";
+import { ActivityPage } from "@/features/activity/components/activity-page";
+import { getActivitySnapshot } from "@/features/activity/server/activity-service";
 
-// 活动/任务页占位（Phase 6 接处理中/失败任务集中视图）。
-export default createRoute((context) => {
-  return context.render(
-    <ComingSoonPage
-      navigationKey="activity"
-      eyebrow="系统 · 活动"
-      title="活动 / 任务"
-      phase="Phase 6"
-      description="处理中与失败任务的集中视图，提供重试、查看失败原因与跳转资产入口。"
-    />
-  );
+// 活动/任务页：取失败 + 处理中资产快照（按 status 过滤），失败可一键重试。
+export default createRoute(async (context) => {
+  const snapshot = await getActivitySnapshot(context.env);
+  return context.render(<ActivityPage snapshot={snapshot} />);
 });
