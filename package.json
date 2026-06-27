@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "version": "0.1.0",
+  "packageManager": "pnpm@10.21.0",
   "scripts": {
     "dev": "vite",
     "build:css": "npx tailwindcss -i src/styles/app.css -o public/styles.css --minify",

@@ -8,3 +8,4 @@ coverage
 *.tsbuildinfo
 *.log
 public/styles.css
+package-lock.json
