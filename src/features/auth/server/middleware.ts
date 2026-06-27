@@ -4,7 +4,6 @@ import { jwt } from "hono/jwt";
 
 import type { AuthSessionPayload } from "@/core/auth/types";
 import type { AppEnv } from "@/env";
-import { ensurePrimaryAccount } from "./service";
 import {
   AUTH_SESSION_COOKIE_NAME,
   clearSessionCookie,
@@ -80,7 +79,9 @@ export const authMiddleware: MiddlewareHandler<AppEnv> = async (
     return next();
   }
 
-  await ensurePrimaryAccount(context.env);
+  // 注：不在此处 ensurePrimaryAccount。主账号由 /login 页与 /auth/login 兜底创建；
+  // 受保护请求能通过下面的 JWT 验证就证明账号已存在，每次导航再查一次 D1 纯属浪费
+  // （且阻塞在 JWT 验证之前，拖高每页 TTFB）。
 
   const jwtMiddleware = jwt({
     secret: getJwtSecret(context.env),
