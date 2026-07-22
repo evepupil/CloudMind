@@ -421,11 +421,9 @@ npm run test
 
 ## Roadmap
 
-| 阶段 | 重点 |
-| --- | --- |
-| v0.1 | URL、文本、PDF 采集；workflows；摘要；标签；embeddings；搜索；资产详情 |
-| v0.2 | 更强的问答体验、MCP 易用性、浏览器插件工作流、导出、重处理 |
-| v0.3 | 更好的相关推荐、更丰富的元数据、多 AI provider、迁移准备 |
+当前里程碑状态、依赖和退出标准统一维护在
+[`docs/roadmap.md`](./docs/roadmap.md)。记忆层、前端和代码质量的旧计划保存在
+`docs/roadmap-archive/`，仅供查阅历史决策。
 
 ## Contributing
 

@@ -1,7 +1,7 @@
 # CloudMind 愿景与定位（North Star）
 
 > 状态：定盘 · 2026-06-07
-> 这是 CloudMind 的**设计宪法**。方向类决策以本文为准；架构（[`memory-layer-architecture.md`](memory-layer-architecture.md)）与路线图（[`memory-layer-roadmap.md`](memory-layer-roadmap.md)）服从本文。
+> 这是 CloudMind 的**设计宪法**。方向类决策以本文为准；架构（[`memory-layer-architecture.md`](memory-layer-architecture.md)）与路线图（[`roadmap.md`](roadmap.md)）服从本文。
 
 ---
 

@@ -426,11 +426,9 @@ npm run test
 
 ## Roadmap
 
-| Stage | Focus |
-| --- | --- |
-| v0.1 | URL, text, PDF ingest; workflows; summaries; tags; embeddings; search; asset detail |
-| v0.2 | Stronger Q&A, MCP ergonomics, browser extension workflow, export, reprocessing |
-| v0.3 | Better recommendations, richer metadata, multi-provider AI, migration readiness |
+The authoritative roadmap, current milestone status, dependencies, and exit
+criteria live in [`docs/roadmap.md`](./docs/roadmap.md). Historical memory,
+frontend, and code-quality plans are preserved under `docs/roadmap-archive/`.
 
 ## Contributing
 

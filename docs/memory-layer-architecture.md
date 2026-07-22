@@ -239,6 +239,9 @@ Cloudflare **Cron Trigger + Queue/Workflows** 跑后台"睡眠期"维护：
 
 ## 十二、分阶段路线图（增量交付，不 big-bang 重写）
 
+> 本节保留记忆层的架构分期。项目当前状态、跨模块依赖与后续顺序统一以
+> [`docs/roadmap.md`](roadmap.md) 为准。
+
 | 阶段 | 主题 | 主要内容 | 产出 |
 |---|---|---|---|
 | **P1 地基** | 检索可信 | 结构/token 切块、RRF 融合、bge-reranker 重排、FTS5 中文、Vectorize 原生过滤、bge-m3 prefix、3 个 bug、最小 eval harness | 真正好用的私有 RAG/搜索 |
