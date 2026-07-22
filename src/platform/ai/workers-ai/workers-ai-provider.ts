@@ -13,10 +13,6 @@ const TEXT_GENERATION_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
 const RERANKER_MODEL = "@cf/baai/bge-reranker-base";
 const PROVIDER_NAME = "workers_ai";
 
-interface WorkersAIRerankOutput {
-  response?: Array<{ id?: number; score?: number }> | undefined;
-}
-
 // bge-m3 支持非对称检索：给 query 加指令前缀、passage 不加。
 // 这样既启用了之前形同虚设的 purpose 标志，又保持 passage 向量不变（无需重嵌语料）。
 const QUERY_EMBEDDING_INSTRUCTION =
@@ -163,12 +159,18 @@ export class WorkersAIProvider implements AIProvider {
       return [];
     }
 
-    // bge-reranker-base：输入 query + contexts，输出 [{ id(=contexts 下标), score }]。
-    const output = (await this.ai.run(RERANKER_MODEL, {
+    // Cloudflare 官方 schema 要求 query，但当前 workers-types 漏掉了该字段。
+    // 先用本地类型完整建模，再传给 Ai.run，保留运行时必填值并规避上游误报。
+    const modelInput: {
+      query: string;
+      contexts: Array<{ text: string }>;
+      top_k: number;
+    } = {
       query: input.query,
       contexts: input.documents.map((text) => ({ text })),
       top_k: input.topN ?? input.documents.length,
-    })) as WorkersAIRerankOutput;
+    };
+    const output = await this.ai.run(RERANKER_MODEL, modelInput);
 
     return (output.response ?? [])
       .filter(

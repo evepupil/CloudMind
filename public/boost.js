@@ -129,8 +129,7 @@
 
   // —— 点击拦截（事件委托）——
   document.addEventListener("click", (event) => {
-    const anchor =
-      event.target && event.target.closest ? event.target.closest("a") : null;
+    const anchor = event.target?.closest ? event.target.closest("a") : null;
     if (!anchor || !shouldBoost(anchor, event)) {
       return;
     }
@@ -153,8 +152,7 @@
     });
   };
   const onHover = (event) => {
-    const anchor =
-      event.target && event.target.closest ? event.target.closest("a") : null;
+    const anchor = event.target?.closest ? event.target.closest("a") : null;
     if (anchor && shouldBoost(anchor, { button: 0 })) {
       prefetch(anchor);
     }

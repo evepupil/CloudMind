@@ -455,6 +455,7 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
   type: "extract_entities",
   execute: async (context) => {
     const memoryRepository = context.services.memoryRepository;
+    const graphVectorStore = context.services.graphVectorStore;
     const normalizedContent = context.state.normalizedContent;
 
     if (
@@ -496,10 +497,9 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
       graph,
       {
         // 可选 embedding 消歧：graph VectorStore 未绑定时省略（退回精确归一化名匹配）。
-        embedDeduplicate: context.services.graphVectorStore
+        embedDeduplicate: graphVectorStore
           ? {
               embedAndUpsert: async (entityId, name) => {
-                const graphVS = context.services.graphVectorStore!;
                 const ai = context.services.aiProvider;
 
                 // 1. embed 实体名
@@ -513,29 +513,30 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
                 }
 
                 // 2. ANN 查 graph_entities namespace
-                const matches = await graphVS.search({
+                const matches = await graphVectorStore.search({
                   values,
                   topK: 1,
                   // scope 隔离：只在同 scope 内找近邻，防 agent/personal 同名实体合并。
                   filter: { scopeId: { $eq: context.asset.scopeId } },
                 });
+                const bestMatch = matches[0];
 
                 // 3. 超阈值 → 合并到已有实体
                 if (
-                  matches.length > 0 &&
-                  matches[0]!.score >= 0.86 &&
-                  matches[0]!.id !== entityId
+                  bestMatch &&
+                  bestMatch.score >= 0.86 &&
+                  bestMatch.id !== entityId
                 ) {
                   const existing = await memoryRepository.getEntityByVectorId(
-                    matches[0]!.id,
+                    bestMatch.id,
                     context.asset.scopeId
                   );
 
                   if (existing) {
                     // 把新实体的向量也 upsert 进去（增加覆盖面）
-                    await graphVS.upsert([
+                    await graphVectorStore.upsert([
                       {
-                        id: matches[0]!.id,
+                        id: bestMatch.id,
                         values,
                         metadataJson: JSON.stringify({
                           canonicalName: name,
@@ -545,7 +546,7 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
                     ]);
 
                     return {
-                      vectorId: matches[0]!.id,
+                      vectorId: bestMatch.id,
                       mergedEntityId: existing.id,
                     };
                   }
@@ -553,7 +554,7 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
 
                 // 4. 无合并 → upsert 新向量 + 回填 entity
                 const vectorId = `graph:${entityId}`;
-                await graphVS.upsert([
+                await graphVectorStore.upsert([
                   {
                     id: vectorId,
                     values,

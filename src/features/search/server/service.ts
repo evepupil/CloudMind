@@ -455,8 +455,7 @@ const buildGraphEvidence = async (
 
       // 仅纳入可检索（aiVisibility=allow）、符合 context profile、且落在时间窗内的资产。
       if (
-        !asset ||
-        asset.aiVisibility !== "allow" ||
+        asset?.aiVisibility !== "allow" ||
         !matchesContextPolicyAsset(asset, contextPolicy) ||
         !isAssetWithinCreatedWindow(asset.createdAt, createdAtFrom, createdAtTo)
       ) {

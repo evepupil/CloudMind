@@ -105,6 +105,8 @@
 
 **目标**：Turn CloudMind's "RAG that calls itself a memory layer" into a trustworthy private retrieval engine: stop destroying document structure before chunking, replace cross-dimension score-sort fusion with rank-based RRF, add a bge-reranker-base cross-encoder + MMR stage behind the AIProvider port, light up a real CJK-capable D1 FTS5/BM25 lexical channel, push filters into Vectorize native metadata (dropping the over-fetch ladder/240 ceiling via a one-time index recreate aligned with the L1 fresh rebuild), make the bge-m3 query/passage instruction prefix actually fire, add embedding-model/dim + content_hash columns for incremental re-embed and migratability, fix the 3 retrieval/indexing bugs, and ship a golden-query eval harness so every change is measurable. P1 is the load-bearing wall (ADR-002) and its re-embed must precede the P2 migration (roadmap dependency line). MVP scope: default scope_id only (ADR-004); no L1 data migration script (ADR-003, fresh rebuild).
 
+模块归档：[`docs/模块设计/检索与记忆处理.md`](模块设计/检索与记忆处理.md)
+
 ### 任务
 
 - [x] **P1-T0 · Eval harness scaffold: golden query set + metrics runner (measure-before-change)** — `M` · 依赖: — ✅ 2026-06-05（基线 Recall@10=1.0000 MRR=0.9750 nDCG@10=0.9815 MAP=0.9750）
@@ -206,7 +208,7 @@
     - No 0.38/0.89/0.93/0.82 absolute floors/ceilings drive cross-channel ordering anymore
     - Eval (P1-T0): aggregate MRR/nDCG@10 improve vs baseline; no golden query regresses below baseline
 
-- [ ] **P1-T7 · bge-reranker-base cross-encoder rerank + MMR over top-N, behind AIProvider port** — `L` · 依赖: P1-T6
+- [x] **P1-T7 · bge-reranker-base cross-encoder rerank + MMR over top-N, behind AIProvider port** — `L` · 依赖: P1-T6 ✅ 2026-06-06（commit 613dad2；2026-07-22 对齐 Cloudflare 官方 schema 并恢复严格类型门禁）
   - **为什么**：Doc §8 read path: after RRF, run bge-reranker-base cross-encoder rerank on top-N then MMR for diversity. Workers AI has @cf/baai/bge-reranker-base on the existing AI binding (doc §2 platform-facts row). The AIProvider port (core/ai/ports.ts) has only generateText/createEmbeddings — add a rerank capability so the reranker is provider-swappable, then apply MMR over the reranked candidates to de-duplicate near-identical chunks.
   - **改动**：
     - src/core/ai/ports.ts — add rerank(input:{query, documents:string[], topN?}) → {index, score}[] to AIProvider
@@ -235,7 +237,7 @@
     - A partial embedding failure re-embeds/skips only the affected chunks; the asset still finalizes with the chunks that succeeded — unit test
     - Eval (P1-T0): deleting a golden asset removes it from results on the next query
 
-- [ ] **P1-T9 · Wire eval harness into the final pipeline + lock P1 acceptance metrics** — `S` · 依赖: P1-T1, P1-T6, P1-T7, P1-T8
+- [x] **P1-T9 · Wire eval harness into the final pipeline + lock P1 acceptance metrics** — `S` · 依赖: P1-T1, P1-T6, P1-T7, P1-T8 ✅ 2026-06-06（commit 96f3f6e；Wave B 后基线已重新校准）
   - **为什么**：Close the loop started in P1-T0: re-point the harness at the full post-P1 pipeline (structural chunking + RRF + rerank/MMR + FTS5 + native filter) and ratchet the committed thresholds upward so regressions in P2+ are caught. This is the measurable 'real RAG that's actually good' exit gate for the phase (roadmap P1 产出: '真正好用的私有 RAG/搜索').
   - **改动**：
     - tests/eval/eval.test.ts — raise baseline thresholds to the post-P1 metrics; add per-stage breakdown (lexical-only, dense-only, fused, fused+rerank) so future regressions localize

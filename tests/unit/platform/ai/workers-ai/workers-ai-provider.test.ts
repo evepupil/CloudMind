@@ -187,3 +187,42 @@ describe("WorkersAIProvider.createEmbeddings", () => {
     expect(runMock).not.toHaveBeenCalled();
   });
 });
+
+describe("WorkersAIProvider.rerank", () => {
+  it("sends the official reranker payload and maps valid scores", async () => {
+    const runMock = vi.fn(async () => ({
+      response: [
+        { id: 1, score: 0.9 },
+        { id: 0, score: 0.6 },
+        { id: "invalid", score: 0.5 },
+      ],
+    }));
+    const provider = new WorkersAIProvider({ run: runMock } as unknown as Ai);
+
+    const result = await provider.rerank({
+      query: "memory architecture",
+      documents: ["document one", "document two"],
+      topN: 2,
+    });
+
+    expect(runMock).toHaveBeenCalledWith("@cf/baai/bge-reranker-base", {
+      query: "memory architecture",
+      contexts: [{ text: "document one" }, { text: "document two" }],
+      top_k: 2,
+    });
+    expect(result).toEqual([
+      { index: 1, score: 0.9 },
+      { index: 0, score: 0.6 },
+    ]);
+  });
+
+  it("returns empty without calling the model when documents are empty", async () => {
+    const runMock = vi.fn();
+    const provider = new WorkersAIProvider({ run: runMock } as unknown as Ai);
+
+    await expect(
+      provider.rerank({ query: "unused", documents: [] })
+    ).resolves.toEqual([]);
+    expect(runMock).not.toHaveBeenCalled();
+  });
+});
