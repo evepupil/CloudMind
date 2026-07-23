@@ -8,20 +8,70 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { JobQueueMessage } from "@/core/queue/ports";
 import { consumeQueueBatch } from "@/features/workflows/server/queue-batch-consumer";
+import { loadOrCreateTextSourceSnapshot } from "@/features/workflows/server/text-source-snapshot";
+import { R2BlobStore } from "@/platform/blob/r2/r2-blob-store";
+import { D1AssetRepository } from "@/platform/db/d1/repositories/d1-asset-repository";
 import { D1WorkflowRepository } from "@/platform/db/d1/repositories/d1-workflow-repository";
 
-const insertAsset = async (assetId: string): Promise<void> => {
+const insertAsset = async (
+  assetId: string,
+  contentText: string | null = null
+): Promise<void> => {
   const now = new Date().toISOString();
 
   await env.DB.prepare(
-    "INSERT INTO assets (id, type, title, status, created_at, updated_at) " +
-      "VALUES (?, 'note', 'Queue gate fixture', 'pending', ?, ?)"
+    "INSERT INTO assets " +
+      "(id, type, title, status, content_text, created_at, updated_at) " +
+      "VALUES (?, 'note', 'Queue gate fixture', 'pending', ?, ?, ?)"
   )
-    .bind(assetId, now, now)
+    .bind(assetId, contentText, now, now)
     .run();
 };
 
 describe("Workers runtime quality gate", () => {
+  it("preserves text snapshots across real D1 and R2 bindings", async () => {
+    const assetId = crypto.randomUUID();
+    const original = "  exact MCP text\r\nwith original spacing  ";
+    await insertAsset(assetId, original);
+
+    const repository = new D1AssetRepository(env.DB);
+    const blobStore = new R2BlobStore(env.ASSET_FILES);
+    const asset = await repository.getAssetById(assetId);
+    const created = await loadOrCreateTextSourceSnapshot(
+      asset,
+      repository,
+      blobStore
+    );
+
+    expect(created.source).toBe("created");
+    expect(created.content).toBe(original);
+
+    const storedAsset = await repository.getAssetById(assetId);
+    expect(storedAsset.rawR2Key).toBe(created.rawR2Key);
+
+    await env.DB.prepare("UPDATE assets SET content_text = ? WHERE id = ?")
+      .bind("mutable preview", assetId)
+      .run();
+
+    const reused = await loadOrCreateTextSourceSnapshot(
+      await repository.getAssetById(assetId),
+      repository,
+      blobStore
+    );
+
+    expect(reused.source).toBe("archive");
+    expect(reused.content).toBe(original);
+    await expect(
+      repository.attachAssetRawSnapshot(assetId, created.rawR2Key)
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.attachAssetRawSnapshot(
+        assetId,
+        `assets/${assetId}/raw/replacement.txt`
+      )
+    ).rejects.toThrow("already references a different raw snapshot");
+  });
+
   it("atomically claims a workflow step only once", async () => {
     const assetId = crypto.randomUUID();
     await insertAsset(assetId);

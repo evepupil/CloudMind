@@ -12,7 +12,10 @@ import {
   sql,
 } from "drizzle-orm";
 
-import { AssetNotFoundError } from "@/core/assets/errors";
+import {
+  AssetNotFoundError,
+  AssetRawSnapshotConflictError,
+} from "@/core/assets/errors";
 import type {
   AssetRepository,
   AssetSearchInput,
@@ -535,6 +538,38 @@ export class D1AssetRepository implements AssetRepository {
     });
 
     return this.getAssetById(input.id);
+  }
+
+  public async attachAssetRawSnapshot(
+    id: string,
+    rawR2Key: string
+  ): Promise<void> {
+    const updated = await this.db
+      .update(assets)
+      .set({
+        rawR2Key,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(and(eq(assets.id, id), isNull(assets.rawR2Key)))
+      .returning({ id: assets.id });
+
+    if (updated.length === 1) {
+      return;
+    }
+
+    const [existing] = await this.db
+      .select({ rawR2Key: assets.rawR2Key })
+      .from(assets)
+      .where(eq(assets.id, id))
+      .limit(1);
+
+    if (!existing) {
+      throw new AssetNotFoundError(id);
+    }
+
+    if (existing.rawR2Key !== rawR2Key) {
+      throw new AssetRawSnapshotConflictError(id);
+    }
   }
 
   public async markAssetProcessing(id: string): Promise<void> {

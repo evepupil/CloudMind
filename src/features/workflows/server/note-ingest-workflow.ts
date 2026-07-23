@@ -10,26 +10,62 @@ import type {
 } from "@/features/assets/model/types";
 import { enqueueWorkflow, type WorkflowDefinition } from "./runtime";
 import { buildSharedIngestSteps } from "./shared-workflow-steps";
+import { loadOrCreateTextSourceSnapshot } from "./text-source-snapshot";
 
 export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => ({
   type: "note_ingest_v1",
-  steps: buildSharedIngestSteps({
-    cleanContent: {
-      getContent: (asset) => {
-        const content = asset.contentText?.trim();
+  steps: [
+    {
+      key: "load_source",
+      type: "load_source",
+      execute: async (context) => {
+        const snapshot = await loadOrCreateTextSourceSnapshot(
+          context.asset,
+          context.services.assetRepository,
+          context.services.blobStore
+        );
 
-        if (!content) {
-          throw new Error("Asset content is empty and cannot be processed.");
-        }
-
-        // 这里保留原始换行结构，交由 clean_content 的结构保留清洗处理，避免切块前丢失段落/标题。
-        return content;
+        return {
+          output: {
+            rawR2Key: snapshot.rawR2Key,
+            sourceLength: snapshot.content.length,
+            source: snapshot.source,
+          },
+          state: {
+            rawR2Key: snapshot.rawR2Key,
+            sourceContent: snapshot.content,
+          },
+        };
       },
     },
-    summarize: {
-      generateTitle: true,
-    },
-  }),
+    ...buildSharedIngestSteps({
+      cleanContent: {
+        getContent: (_asset, state) => {
+          const sourceContent = state.sourceContent;
+
+          if (typeof sourceContent !== "string") {
+            throw new Error("Workflow state is missing archived text content.");
+          }
+
+          const content = sourceContent.trim();
+
+          if (!content) {
+            throw new Error("Asset content is empty and cannot be processed.");
+          }
+
+          // 原始快照保留完整输入；这里只清理处理副本两端空白。
+          return content;
+        },
+      },
+      summarize: {
+        generateTitle: true,
+      },
+      finalize: {
+        getRawR2Key: (state) =>
+          typeof state.rawR2Key === "string" ? state.rawR2Key : null,
+      },
+    }),
+  ],
 });
 
 export const runNoteIngestWorkflow = async (

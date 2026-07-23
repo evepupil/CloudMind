@@ -127,6 +127,8 @@ class InMemoryAssetRepository implements AssetRepository {
       title: input.title?.trim() || this.asset.title,
       contentText: input.content,
       sourceKind: input.sourceKind ?? "manual",
+      scopeId: input.scopeId ?? "personal",
+      aiVisibility: input.aiVisibility ?? "allow",
       source: {
         kind: input.sourceKind ?? "manual",
         sourceUrl: null,
@@ -187,6 +189,21 @@ class InMemoryAssetRepository implements AssetRepository {
     };
 
     return structuredClone(this.asset);
+  }
+
+  public async attachAssetRawSnapshot(
+    id: string,
+    rawR2Key: string
+  ): Promise<void> {
+    if (id !== this.asset.id) {
+      throw new Error(`Asset "${id}" not found.`);
+    }
+
+    if (this.asset.rawR2Key && this.asset.rawR2Key !== rawR2Key) {
+      throw new Error(`Asset "${id}" already has a raw snapshot.`);
+    }
+
+    this.asset.rawR2Key = rawR2Key;
   }
 
   public async markAssetProcessing(): Promise<void> {}
@@ -438,6 +455,62 @@ describe("ingest service", () => {
     );
     expect(await repository.getAssetById("asset-mem-1")).toMatchObject({
       contentText: "The user prefers TypeScript with 2-space indentation.",
+      source: {
+        kind: "mcp" satisfies AssetSourceKind,
+      },
+    });
+  });
+
+  it("rememberAgentMemory keeps agent scope on the shared text processor", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        id: "asset-agent-1",
+        title: "Original title",
+      })
+    );
+    const processedAsset = createAsset({
+      id: "asset-agent-1",
+      status: "ready",
+      scopeId: "agent",
+      sourceKind: "mcp",
+    });
+    const service = createIngestService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getBlobStore: getBlobStoreMock.mockResolvedValue(blobStoreMock),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStoreMock),
+      getWorkflowRepository: getWorkflowRepositoryMock.mockResolvedValue(
+        workflowRepositoryMock
+      ),
+      getJobQueue: getJobQueueMock.mockResolvedValue(jobQueueMock),
+      getAIProvider: getAIProviderMock.mockResolvedValue(aiProviderMock),
+      getWebPageFetcher:
+        getWebPageFetcherMock.mockResolvedValue(webPageFetcherMock),
+      processTextAsset: processTextAssetMock.mockResolvedValue(processedAsset),
+      processUrlAsset: processUrlAssetMock,
+      processPdfAsset: processPdfAssetMock,
+      getProcessTextAssetForced: processTextAssetForcedMock,
+      getProcessUrlAssetForced: processUrlAssetForcedMock,
+      getProcessPdfAssetForced: processPdfAssetForcedMock,
+    });
+
+    const result = await service.rememberAgentMemory(env, {
+      content: "Agent completed the M6 snapshot design.",
+      title: "M6 progress",
+    });
+
+    expect(result).toEqual(processedAsset);
+    expect(processTextAssetMock).toHaveBeenCalledWith(
+      repository,
+      workflowRepositoryMock,
+      blobStoreMock,
+      vectorStoreMock,
+      aiProviderMock,
+      jobQueueMock,
+      "asset-agent-1"
+    );
+    expect(await repository.getAssetById("asset-agent-1")).toMatchObject({
+      contentText: "Agent completed the M6 snapshot design.",
+      scopeId: "agent",
       source: {
         kind: "mcp" satisfies AssetSourceKind,
       },

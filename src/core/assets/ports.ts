@@ -117,6 +117,7 @@ export interface AssetIngestRepository {
   createTextAsset(input: CreateTextAssetInput): Promise<AssetDetail>;
   createUrlAsset(input: CreateUrlAssetInput): Promise<AssetDetail>;
   createFileAsset(input: CreateFileAssetInput): Promise<AssetDetail>;
+  attachAssetRawSnapshot(id: string, rawR2Key: string): Promise<void>;
   markAssetProcessing(id: string): Promise<void>;
   completeAssetProcessing(
     id: string,

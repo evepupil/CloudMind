@@ -5,3 +5,10 @@ export class AssetNotFoundError extends Error {
     this.name = "AssetNotFoundError";
   }
 }
+
+export class AssetRawSnapshotConflictError extends Error {
+  public constructor(id: string) {
+    super(`Asset "${id}" already references a different raw snapshot.`);
+    this.name = "AssetRawSnapshotConflictError";
+  }
+}

@@ -205,6 +205,19 @@ class InMemoryAssetRepository implements AssetRepository {
     return structuredClone(this.asset);
   }
 
+  public async attachAssetRawSnapshot(
+    id: string,
+    rawR2Key: string
+  ): Promise<void> {
+    this.assertId(id);
+
+    if (this.asset.rawR2Key && this.asset.rawR2Key !== rawR2Key) {
+      throw new Error(`Asset "${id}" already has a raw snapshot.`);
+    }
+
+    this.asset.rawR2Key = rawR2Key;
+  }
+
   public async markAssetProcessing(id: string): Promise<void> {
     this.assertId(id);
     this.asset.status = "processing";
@@ -1135,12 +1148,12 @@ describe("processTextAsset", () => {
       ),
     ]);
 
-    const cleanStep = workflowRepository.steps.find(
-      (step) => step.stepKey === "clean_content"
+    const loadSourceStep = workflowRepository.steps.find(
+      (step) => step.stepKey === "load_source"
     );
 
-    expect(cleanStep?.status).toBe("succeeded");
-    expect(cleanStep?.attempt).toBe(1);
+    expect(loadSourceStep?.status).toBe("succeeded");
+    expect(loadSourceStep?.attempt).toBe(1);
     expect(jobQueue.messages).toHaveLength(1);
   });
 
@@ -1188,6 +1201,12 @@ describe("processTextAsset", () => {
     expect(result.summary).toBe(
       "AI summary for the original CloudMind content."
     );
+    expect(result.rawR2Key).toBe("assets/asset-1/raw/input.txt");
+    const rawSnapshot = await blobStore.get("assets/asset-1/raw/input.txt");
+    expect(rawSnapshot).not.toBeNull();
+    expect(new TextDecoder().decode(rawSnapshot?.body)).toBe(
+      "  CloudMind keeps the original content and generates a concise summary.  "
+    );
     expect(result.contentR2Key).toBe("assets/asset-1/content/content.txt");
     expect(result.contentText).toBe(
       "CloudMind keeps the original content and generates a concise summary."
@@ -1225,6 +1244,7 @@ describe("processTextAsset", () => {
       }),
     ]);
     expect(workflowRepository.steps.map((step) => step.stepKey)).toEqual([
+      "load_source",
       "clean_content",
       "summarize",
       "classify",
@@ -1320,6 +1340,149 @@ describe("processTextAsset", () => {
         currentStep: "clean_content",
       })
     );
+    expect(result.rawR2Key).toBe("assets/asset-1/raw/input.txt");
+    const rawSnapshot = await blobStore.get("assets/asset-1/raw/input.txt");
+    expect(new TextDecoder().decode(rawSnapshot?.body)).toBe("   ");
+  });
+
+  it("retries a failed raw snapshot write before processing content", async () => {
+    const original = "  CloudMind must preserve this exact MCP input.  ";
+    const repository = new InMemoryAssetRepository(
+      createAsset({ contentText: original })
+    );
+    const blobStore = new InMemoryBlobStore();
+    vi.spyOn(blobStore, "put").mockRejectedValueOnce(
+      new Error("R2 unavailable")
+    );
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new ConfigurableAIProvider("Recovered summary.");
+    const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
+
+    await processTextAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      "asset-1"
+    );
+
+    await expect(
+      drainWorkflowQueue(
+        jobQueue,
+        repository,
+        workflowRepository,
+        blobStore,
+        vectorStore,
+        aiProvider
+      )
+    ).rejects.toThrow("R2 unavailable");
+
+    const failed = await repository.getAssetById("asset-1");
+    expect(failed.status).toBe("failed");
+    expect(failed.contentText).toBe(original);
+    expect(failed.rawR2Key).toBeNull();
+    expect(aiProvider.generateTextCalls).toHaveLength(0);
+
+    const run = workflowRepository.runs[0];
+    expect(run).toBeDefined();
+    const definition = getWorkflowDefinition(
+      run?.workflowType ?? "note_ingest_v1"
+    );
+
+    await consumeWorkflowStepMessage(
+      definition,
+      {
+        runId: run?.id ?? "",
+        stepKey: "load_source",
+      },
+      {
+        assetRepository: repository,
+        workflowRepository,
+        blobStore,
+        vectorStore,
+        aiProvider,
+        jobQueue,
+      }
+    );
+    await drainWorkflowQueue(
+      jobQueue,
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider
+    );
+
+    const recovered = await repository.getAssetById("asset-1");
+    const rawSnapshot = await blobStore.get("assets/asset-1/raw/input.txt");
+    const loadSourceStep = workflowRepository.steps.find(
+      (step) => step.stepKey === "load_source"
+    );
+
+    expect(recovered.status).toBe("ready");
+    expect(recovered.rawR2Key).toBe("assets/asset-1/raw/input.txt");
+    expect(new TextDecoder().decode(rawSnapshot?.body)).toBe(original);
+    expect(loadSourceStep?.attempt).toBe(2);
+  });
+
+  it("reprocesses text from the immutable snapshot without overwriting it", async () => {
+    const rawR2Key = "assets/asset-1/raw/input.txt";
+    const archived = "  Archived original text for reprocessing.  ";
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        status: "ready",
+        summary: "Old summary",
+        contentText: "mutable processed preview",
+        rawR2Key,
+        jobs: [createJob({ status: "succeeded" })],
+      })
+    );
+    const blobStore = new InMemoryBlobStore([
+      {
+        key: rawR2Key,
+        body: new TextEncoder().encode(archived).buffer as ArrayBuffer,
+        size: archived.length,
+        contentType: "text/plain; charset=utf-8",
+      },
+    ]);
+    const put = vi.spyOn(blobStore, "put");
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new ConfigurableAIProvider("Reprocessed summary.");
+    const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
+
+    await processTextAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      "asset-1",
+      { force: true }
+    );
+    await drainWorkflowQueue(
+      jobQueue,
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider
+    );
+
+    const result = await repository.getAssetById("asset-1");
+    const rawSnapshot = await blobStore.get(rawR2Key);
+
+    expect(result.status).toBe("ready");
+    expect(result.contentText).toBe("Archived original text for reprocessing.");
+    expect(result.rawR2Key).toBe(rawR2Key);
+    expect(new TextDecoder().decode(rawSnapshot?.body)).toBe(archived);
+    expect(
+      put.mock.calls.filter(([input]) => input.key === rawR2Key)
+    ).toHaveLength(0);
   });
 
   it("returns early for assets that are already ready", async () => {

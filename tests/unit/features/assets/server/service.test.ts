@@ -122,6 +122,19 @@ class InMemoryAssetRepository implements AssetRepository {
     return structuredClone(this.asset);
   }
 
+  public async attachAssetRawSnapshot(
+    id: string,
+    rawR2Key: string
+  ): Promise<void> {
+    await this.getAssetById(id);
+
+    if (this.asset.rawR2Key && this.asset.rawR2Key !== rawR2Key) {
+      throw new Error(`Asset "${id}" already has a raw snapshot.`);
+    }
+
+    this.asset.rawR2Key = rawR2Key;
+  }
+
   public async markAssetProcessing(): Promise<void> {}
 
   public async completeAssetProcessing(): Promise<void> {}
