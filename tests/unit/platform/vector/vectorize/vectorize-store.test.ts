@@ -7,7 +7,7 @@ describe("VectorizeStore.search", () => {
     const query = vi.fn(async (_values: number[], _options: unknown) => ({
       matches: [],
     }));
-    const store = new VectorizeStore({ query } as unknown as Vectorize);
+    const store = new VectorizeStore({ query } as unknown as VectorizeIndex);
 
     await store.search({
       values: [0.1, 0.2],
@@ -33,7 +33,7 @@ describe("VectorizeStore.search", () => {
     const query = vi.fn(async (_values: number[], _options: unknown) => ({
       matches: [],
     }));
-    const store = new VectorizeStore({ query } as unknown as Vectorize);
+    const store = new VectorizeStore({ query } as unknown as VectorizeIndex);
 
     await store.search({ values: [0.1], topK: 80 });
 
@@ -45,7 +45,7 @@ describe("VectorizeStore.search", () => {
     const query = vi.fn(async (_values: number[], _options: unknown) => ({
       matches: [],
     }));
-    const store = new VectorizeStore({ query } as unknown as Vectorize);
+    const store = new VectorizeStore({ query } as unknown as VectorizeIndex);
 
     await store.search({ values: [0.1], topK: 3 });
 

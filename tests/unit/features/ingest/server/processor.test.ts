@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { AIProvider } from "@/core/ai/ports";
 import type {
@@ -693,13 +693,21 @@ class InMemoryWorkflowRepository implements WorkflowRepository {
     run.updatedAt = "2026-03-19T00:03:00.000Z";
   }
 
-  public async markWorkflowStepRunning(stepId: string): Promise<void> {
+  public async markWorkflowStepRunning(stepId: string): Promise<boolean> {
     const step = this.getStep(stepId);
+
+    if (step.status !== "pending" && step.status !== "failed") {
+      return false;
+    }
 
     step.status = "running";
     step.attempt += 1;
+    step.errorMessage = null;
     step.startedAt = "2026-03-19T00:01:00.000Z";
+    step.finishedAt = null;
     step.updatedAt = "2026-03-19T00:01:00.000Z";
+
+    return true;
   }
 
   public async completeWorkflowStep(
@@ -981,6 +989,159 @@ describe("processTextAsset", () => {
     expect(result.errorMessage).toBe(
       "AI summary generation returned empty text."
     );
+  });
+
+  it("retries a failed workflow step and restores the asset and job", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        contentText: "CloudMind should recover this note after a queue retry.",
+      })
+    );
+    const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new ScriptedAIProvider([
+      "   ",
+      "Recovered summary.",
+      "Recovered title",
+    ]);
+    const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
+
+    await processTextAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      "asset-1"
+    );
+
+    await expect(
+      drainWorkflowQueue(
+        jobQueue,
+        repository,
+        workflowRepository,
+        blobStore,
+        vectorStore,
+        aiProvider
+      )
+    ).rejects.toThrow("AI summary generation returned empty text.");
+
+    const run = workflowRepository.runs[0];
+    expect(run).toBeDefined();
+
+    const definition = getWorkflowDefinition(
+      run?.workflowType ?? "note_ingest_v1"
+    );
+    const retryPayload = {
+      runId: run?.id ?? "",
+      stepKey: "summarize",
+    };
+    const services = {
+      assetRepository: repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+    };
+    vi.spyOn(repository, "markAssetProcessing").mockRejectedValueOnce(
+      new Error("restore failed")
+    );
+
+    await expect(
+      consumeWorkflowStepMessage(definition, retryPayload, services)
+    ).rejects.toThrow("restore failed");
+
+    const failedRestoreStep = workflowRepository.steps.find(
+      (step) => step.stepKey === "summarize"
+    );
+    expect(failedRestoreStep?.status).toBe("failed");
+    expect(failedRestoreStep?.attempt).toBe(2);
+
+    await consumeWorkflowStepMessage(definition, retryPayload, services);
+
+    await drainWorkflowQueue(
+      jobQueue,
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider
+    );
+
+    const result = await repository.getAssetById("asset-1");
+    const summaryStep = workflowRepository.steps.find(
+      (step) => step.stepKey === "summarize"
+    );
+
+    expect(result.status).toBe("ready");
+    expect(result.jobs[0]?.status).toBe("succeeded");
+    expect(result.summary).toBe("Recovered summary.");
+    expect(summaryStep?.status).toBe("succeeded");
+    expect(summaryStep?.attempt).toBe(3);
+  });
+
+  it("executes a duplicated workflow message only once", async () => {
+    const repository = new InMemoryAssetRepository(
+      createAsset({
+        contentText: "CloudMind should claim this workflow step atomically.",
+      })
+    );
+    const blobStore = new InMemoryBlobStore();
+    const vectorStore = new InMemoryVectorStore();
+    const aiProvider = new ConfigurableAIProvider("Atomic claim summary.");
+    const workflowRepository = new InMemoryWorkflowRepository();
+    const jobQueue = new InMemoryJobQueue();
+
+    await processTextAsset(
+      repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+      "asset-1"
+    );
+
+    const message = jobQueue.messages.shift();
+    const payload = message ? parseWorkflowStepQueuePayload(message) : null;
+    expect(payload).not.toBeNull();
+
+    const run = workflowRepository.runs[0];
+    const definition = getWorkflowDefinition(
+      run?.workflowType ?? "note_ingest_v1"
+    );
+    const services = {
+      assetRepository: repository,
+      workflowRepository,
+      blobStore,
+      vectorStore,
+      aiProvider,
+      jobQueue,
+    };
+
+    await Promise.all([
+      consumeWorkflowStepMessage(
+        definition,
+        payload ?? { runId: "", stepKey: "" },
+        services
+      ),
+      consumeWorkflowStepMessage(
+        definition,
+        payload ?? { runId: "", stepKey: "" },
+        services
+      ),
+    ]);
+
+    const cleanStep = workflowRepository.steps.find(
+      (step) => step.stepKey === "clean_content"
+    );
+
+    expect(cleanStep?.status).toBe("succeeded");
+    expect(cleanStep?.attempt).toBe(1);
+    expect(jobQueue.messages).toHaveLength(1);
   });
 
   it("promotes a pending text asset to ready and completes the latest job", async () => {

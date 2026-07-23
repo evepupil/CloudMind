@@ -18,11 +18,16 @@
     "deploy:one-click": "node scripts/one-click-deploy.mjs",
     "db:generate": "drizzle-kit generate",
     "test": "vitest run",
+    "test:workers": "vitest run --config vitest.workers.config.ts",
     "eval": "vitest run tests/eval",
     "e2e:smoke": "node scripts/e2e-smoke.mjs",
+    "bindings:generate": "wrangler types worker-configuration.d.ts --env-interface CloudflareBindings --include-runtime=false",
+    "bindings:check": "wrangler types worker-configuration.d.ts --env-interface CloudflareBindings --include-runtime=false --check",
+    "config:check": "node scripts/check-worker-config.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
+    "gate": "pnpm config:check && pnpm bindings:check && pnpm typecheck && pnpm lint && pnpm test && pnpm eval && pnpm build && pnpm test:workers",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy"
   },
@@ -45,14 +50,16 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.8",
-    "@cloudflare/workers-types": "^4.20260301.1",
+    "@cloudflare/vitest-pool-workers": "^0.18.7",
+    "@cloudflare/workers-types": "^5.20260723.1",
     "@hono/vite-build": "^1.10.0",
     "@tailwindcss/cli": "^4.2.2",
     "@types/node": "^24.5.2",
     "drizzle-kit": "^0.31.10",
+    "jsonc-parser": "^3.3.1",
     "typescript": "^5.9.3",
     "vite": "^8.0.1",
     "vitest": "^4.1.0",
-    "wrangler": "^4.75.0"
+    "wrangler": "^4.113.0"
   }
 }

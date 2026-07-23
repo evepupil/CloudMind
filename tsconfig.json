@@ -2,7 +2,12 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "baseUrl": ".",
-    "types": ["node", "vite/client", "@cloudflare/workers-types"],
+    "types": [
+      "node",
+      "vite/client",
+      "@cloudflare/workers-types",
+      "./worker-configuration.d.ts"
+    ],
     "jsx": "react-jsx",
     "jsxImportSource": "hono/jsx",
     "paths": {
@@ -16,7 +21,9 @@
     "src/**/*.tsx",
     "tests/**/*.ts",
     "tests/**/*.tsx",
+    "worker-configuration.d.ts",
     "vitest.config.ts",
+    "vitest.workers.config.ts",
     "vite.config.ts"
   ]
 }

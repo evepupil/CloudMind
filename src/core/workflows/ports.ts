@@ -58,7 +58,7 @@ export interface WorkflowRepository {
     currentStep: string | null,
     message: string
   ): Promise<void>;
-  markWorkflowStepRunning(stepId: string): Promise<void>;
+  markWorkflowStepRunning(stepId: string): Promise<boolean>;
   completeWorkflowStep(
     stepId: string,
     outputJson?: string | null

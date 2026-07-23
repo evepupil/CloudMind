@@ -2,7 +2,7 @@
 
 > 文档定位：项目唯一的现行路线图。
 >
-> 状态依据：截至 2026-07-23 的 `main` 分支代码、测试与提交记录。
+> 状态依据：截至 2026-07-24 的 `main` 分支代码、测试与提交记录。
 >
 > 状态只使用：`未开始`、`进行中`、`阻塞`、`已完成`。
 
@@ -89,14 +89,14 @@ Library、Asset Detail、Capture、Ask、Search、记忆图谱、时间线、整
 
 ## M7 工程质量与发布
 
-strict TypeScript、Biome、Vitest、检索 eval 和生产构建已恢复全绿；当前基线为
-35 个测试文件、278 个测试、0 lint warning。前置阶段仍需补 CI、自动生成并校验
-Cloudflare 绑定类型、密钥配置检查、队列幂等与 DLQ 验证，以及 Workers 集成测试。
-发布收尾阶段再处理版本、CHANGELOG、迁移、部署、回滚和生产冒烟。
+开发前置门禁已落地：GitHub Actions 与本地统一执行 `pnpm gate`，覆盖 Cloudflare
+绑定类型漂移、密钥配置边界、Queue 原子认领/失败重投/DLQ，以及 Miniflare 中的
+真实 D1 migrations 和 Queue ack/retry。M7 继续保持进行中；发布收尾阶段仍需处理
+版本、CHANGELOG、远端迁移、部署、回滚和生产冒烟。
 
 ## 当前推进顺序
 
-1. M7 前置门禁 + M6 阶段 A：先补持续集成、关键基础设施验证和不可变原始快照。
+1. M6 阶段 A：为文本、MCP 和 Agent 输入补不可变原始快照。
 2. M3：完成自动情节捕获、专用更新/遗忘、Agent Web 管理和 scope 验证。
 3. M6 阶段 B：完成完整导出、导入、重建和恢复演练。
 4. M5：按 eval 样本推进相对时间、评价、聚合、强化和关联能力。

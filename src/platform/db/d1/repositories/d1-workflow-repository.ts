@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { WorkflowRunNotFoundError } from "@/core/workflows/errors";
 import type {
@@ -230,6 +230,7 @@ export class D1WorkflowRepository implements WorkflowRepository {
         currentStep,
         errorMessage: null,
         startedAt: now,
+        finishedAt: null,
         updatedAt: now,
       })
       .where(eq(workflowRuns.id, runId));
@@ -269,19 +270,28 @@ export class D1WorkflowRepository implements WorkflowRepository {
       .where(eq(workflowRuns.id, runId));
   }
 
-  public async markWorkflowStepRunning(stepId: string): Promise<void> {
+  public async markWorkflowStepRunning(stepId: string): Promise<boolean> {
     const now = new Date().toISOString();
 
-    await this.db
+    const claimed = await this.db
       .update(workflowSteps)
       .set({
         status: "running",
         attempt: sql`${workflowSteps.attempt} + 1`,
         errorMessage: null,
         startedAt: now,
+        finishedAt: null,
         updatedAt: now,
       })
-      .where(eq(workflowSteps.id, stepId));
+      .where(
+        and(
+          eq(workflowSteps.id, stepId),
+          inArray(workflowSteps.status, ["pending", "failed"])
+        )
+      )
+      .returning({ id: workflowSteps.id });
+
+    return claimed.length === 1;
   }
 
   public async completeWorkflowStep(

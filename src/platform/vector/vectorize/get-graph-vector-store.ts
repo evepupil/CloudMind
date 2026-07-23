@@ -5,7 +5,7 @@ import { VectorizeStore } from "./vectorize-store";
 
 const getGraphVectorizeBinding = (
   bindings: AppBindings | undefined
-): Vectorize => {
+): VectorizeIndex => {
   if (!bindings?.GRAPH_VECTORS) {
     throw new Error(
       'Cloudflare Vectorize binding "GRAPH_VECTORS" is not configured. ' +

@@ -281,11 +281,7 @@ export const consumeWorkflowStepMessage = async (
     );
   }
 
-  if (
-    run.status === "succeeded" ||
-    run.status === "failed" ||
-    run.status === "cancelled"
-  ) {
+  if (run.status === "succeeded" || run.status === "cancelled") {
     return;
   }
 
@@ -300,24 +296,43 @@ export const consumeWorkflowStepMessage = async (
     return;
   }
 
+  if (run.status === "failed" && step.status !== "failed") {
+    return;
+  }
+
+  const claimed = await services.workflowRepository.markWorkflowStepRunning(
+    step.id
+  );
+
+  if (!claimed) {
+    return;
+  }
+
   const stepDefinition = getStepDefinition(definition, payload.stepKey);
   const state = parseStateJson(run.stateJson);
   const startedAt = Date.now();
 
-  await services.workflowRepository.markWorkflowRunRunning(
-    run.id,
-    step.stepKey
-  );
-  await services.workflowRepository.markWorkflowStepRunning(step.id);
-  workflowLogger.info("step_started", {
-    runId: run.id,
-    assetId: asset.id,
-    workflowType: run.workflowType,
-    stepKey: step.stepKey,
-    attempt: step.attempt + 1,
-  });
-
   try {
+    if (run.status === "failed") {
+      await services.assetRepository.markAssetProcessing(asset.id);
+
+      if (latestJob) {
+        await services.assetRepository.markIngestJobRunning(latestJob.id);
+      }
+    }
+
+    await services.workflowRepository.markWorkflowRunRunning(
+      run.id,
+      step.stepKey
+    );
+    workflowLogger.info("step_started", {
+      runId: run.id,
+      assetId: asset.id,
+      workflowType: run.workflowType,
+      stepKey: step.stepKey,
+      attempt: step.attempt + 1,
+    });
+
     const result = await stepDefinition.execute({
       asset,
       runId: run.id,

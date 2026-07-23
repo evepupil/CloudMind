@@ -2,7 +2,7 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "cloudmind",
   "main": "dist/index.js",
-  "compatibility_date": "2026-03-20",
+  "compatibility_date": "2026-07-24",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true,
@@ -79,7 +79,8 @@
         "queue": "cloudmind-workflows",
         "max_batch_size": 1,
         "max_batch_timeout": 1,
-        "max_retries": 3
+        "max_retries": 3,
+        "dead_letter_queue": "cloudmind-workflows-dlq"
       }
     ]
   },
@@ -90,8 +91,5 @@
   // （漂移边失效 + 重复 statement 去重）。仅 D1、幂等。
   "triggers": {
     "crons": ["0 3 * * *"]
-  },
-  "vars": {
-    "JWT_SECRET": "change-me-before-production"
   }
 }

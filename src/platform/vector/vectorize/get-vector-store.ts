@@ -3,7 +3,9 @@ import type { AppBindings } from "@/env";
 
 import { VectorizeStore } from "./vectorize-store";
 
-const getVectorizeBinding = (bindings: AppBindings | undefined): Vectorize => {
+const getVectorizeBinding = (
+  bindings: AppBindings | undefined
+): VectorizeIndex => {
   if (!bindings?.ASSET_VECTORS) {
     throw new Error(
       'Cloudflare Vectorize binding "ASSET_VECTORS" is not configured. ' +

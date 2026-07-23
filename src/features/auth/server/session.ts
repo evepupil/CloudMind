@@ -7,7 +7,6 @@ import type { AppBindings } from "@/env";
 
 export const AUTH_SESSION_COOKIE_NAME = "cloudmind_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
-const DEFAULT_JWT_SECRET = "cloudmind-dev-jwt-secret-change-me";
 
 const isHttpsRequest = (requestUrl: string): boolean => {
   try {
@@ -38,7 +37,15 @@ export const sanitizeNextPath = (
 };
 
 export const getJwtSecret = (bindings: AppBindings | undefined): string => {
-  return bindings?.JWT_SECRET?.trim() || DEFAULT_JWT_SECRET;
+  const secret = bindings?.JWT_SECRET?.trim();
+
+  if (!secret) {
+    throw new Error(
+      "JWT_SECRET is required. Configure it as a Cloudflare secret or in .dev.vars."
+    );
+  }
+
+  return secret;
 };
 
 const getSessionCookieOptions = (context: Context) => {

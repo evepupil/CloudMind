@@ -1,0 +1,3 @@
+JWT_SECRET=replace-with-a-long-random-value
+# JINA_API_KEY 可选；留空时使用未认证的 Reader 降级路径。
+JINA_API_KEY=

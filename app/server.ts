@@ -12,6 +12,7 @@ import { registerMcpRoutes } from "@/features/mcp/server/routes";
 import { registerMcpTokenRoutes } from "@/features/mcp-tokens/server/routes";
 import { registerMemoryRoutes } from "@/features/memory/server/routes";
 import { registerSearchRoutes } from "@/features/search/server/routes";
+import { consumeQueueBatch } from "@/features/workflows/server/queue-batch-consumer";
 import { consumeWorkflowQueueMessage } from "@/features/workflows/server/queue-consumer";
 import { consumeScheduledEvent } from "@/features/workflows/server/scheduled-consumer";
 
@@ -37,10 +38,9 @@ export default {
     batch: MessageBatch<unknown>,
     env: AppEnv["Bindings"]
   ): Promise<void> => {
-    for (const message of batch.messages) {
-      await consumeWorkflowQueueMessage(message.body as JobQueueMessage, env);
-      message.ack();
-    }
+    await consumeQueueBatch(batch, async (body) => {
+      await consumeWorkflowQueueMessage(body as JobQueueMessage, env);
+    });
   },
   // Cron 触发的 sleep-time 维护（知识图谱一致性修复，后续叠加遗忘/整合/社区）。
   scheduled: async (

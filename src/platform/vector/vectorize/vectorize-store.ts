@@ -9,6 +9,11 @@ import type {
 // 适配器统一用 returnMetadata:"all"（业务需要 textPreview / 元数据词项），故在此钳制 topK。
 const MAX_TOP_K_WITH_FULL_METADATA = 50;
 
+type VectorizeBinding = Pick<
+  VectorizeIndex,
+  "query" | "upsert" | "deleteByIds"
+>;
+
 const parseMetadataJson = (
   metadataJson: string | undefined
 ): Record<string, VectorizeVectorMetadata> | undefined => {
@@ -26,9 +31,9 @@ const parseMetadataJson = (
 
 // 这里封装 Cloudflare Vectorize，避免业务层直接依赖具体索引 API。
 export class VectorizeStore implements VectorStore {
-  private readonly index: Vectorize;
+  private readonly index: VectorizeBinding;
 
-  public constructor(index: Vectorize) {
+  public constructor(index: VectorizeBinding) {
     this.index = index;
   }
 

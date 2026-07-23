@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { parse, printParseErrorCode } from "jsonc-parser";
 
 const NPX = process.platform === "win32" ? "npx.cmd" : "npx";
 const NPM = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -71,8 +72,17 @@ const normalizePrefix = (rawPrefix) => {
 
 const readWranglerConfig = (filePath) => {
   const content = readFileSync(filePath, "utf8");
+  const errors = [];
+  const config = parse(content, errors);
 
-  return JSON.parse(content);
+  if (errors.length > 0 || !config || typeof config !== "object") {
+    const error = errors[0];
+    const detail = error ? printParseErrorCode(error.error) : "invalid root";
+
+    throw new Error(`Failed to parse wrangler.jsonc: ${detail}.`);
+  }
+
+  return config;
 };
 
 const writeWranglerConfig = (filePath, config) => {
@@ -111,6 +121,7 @@ const ensureBootstrapConfig = (queueName, workerName) => {
         max_batch_size: 1,
         max_batch_timeout: 1,
         max_retries: 3,
+        dead_letter_queue: `${queueName}-dlq`,
       },
     ],
   };
@@ -142,6 +153,7 @@ const ensureFinalConfig = (queueName) => {
         max_batch_size: 1,
         max_batch_timeout: 1,
         max_retries: 3,
+        dead_letter_queue: `${queueName}-dlq`,
       },
     ],
   };
@@ -208,6 +220,12 @@ const main = () => {
   ]);
 
   runCommand("创建 Queue", NPX, ["wrangler", "queues", "create", queueName]);
+  runCommand("创建 Queue DLQ", NPX, [
+    "wrangler",
+    "queues",
+    "create",
+    `${queueName}-dlq`,
+  ]);
 
   ensureFinalConfig(queueName);
 
