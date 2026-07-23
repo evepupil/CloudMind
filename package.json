@@ -27,7 +27,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "gate": "pnpm config:check && pnpm bindings:check && pnpm typecheck && pnpm lint && pnpm test && pnpm eval && pnpm build && pnpm test:workers",
+    "gate": "pnpm config:check && pnpm typecheck && pnpm lint && pnpm test && pnpm eval && pnpm build && pnpm bindings:check && pnpm test:workers",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy"
   },
