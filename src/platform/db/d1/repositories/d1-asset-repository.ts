@@ -70,9 +70,11 @@ import {
 
 // 这里实现面向 D1 的资产仓储；后续如切数据库，只替换这一层。
 export class D1AssetRepository implements AssetRepository {
+  private readonly database: D1Database;
   private readonly db: ReturnType<typeof createDb>;
 
   public constructor(database: D1Database) {
+    this.database = database;
     this.db = createDb(database);
   }
 
@@ -119,8 +121,14 @@ export class D1AssetRepository implements AssetRepository {
     const records = await this.db
       .select()
       .from(assets)
-      // 排除软删资产，避免图检索把已删除资产作为证据带回。
-      .where(and(inArray(assets.id, ids), isNull(assets.deletedAt)));
+      // 排除软删和被取代资产，避免图检索把历史版本作为当前证据带回。
+      .where(
+        and(
+          inArray(assets.id, ids),
+          isNull(assets.deletedAt),
+          isNull(assets.supersededAt)
+        )
+      );
 
     return records.map(mapAssetSummary);
   }
@@ -276,7 +284,8 @@ export class D1AssetRepository implements AssetRepository {
           eq(assetChunks.contentText, ""),
           inArray(assets.type, ["note", "pdf", "chat"]),
           inArray(assets.status, ["ready", "failed"]),
-          isNull(assets.deletedAt)
+          isNull(assets.deletedAt),
+          isNull(assets.supersededAt)
         )
       )
       .orderBy(asc(assetChunks.assetId))
@@ -285,11 +294,19 @@ export class D1AssetRepository implements AssetRepository {
     return rows.map((row) => row.assetId);
   }
 
-  public async getAssetById(id: string): Promise<AssetDetail> {
+  public async getAssetById(
+    id: string,
+    options?: { includeDeleted?: boolean | undefined }
+  ): Promise<AssetDetail> {
     const [assetRecord] = await this.db
       .select()
       .from(assets)
-      .where(and(eq(assets.id, id), isNull(assets.deletedAt)))
+      .where(
+        and(
+          eq(assets.id, id),
+          options?.includeDeleted ? undefined : isNull(assets.deletedAt)
+        )
+      )
       .limit(1);
 
     if (!assetRecord) {
@@ -346,6 +363,7 @@ export class D1AssetRepository implements AssetRepository {
     const jobId = crypto.randomUUID();
     const title = input.title?.trim() || "Untitled Note";
     const sourceKind = input.sourceKind ?? "manual";
+    const recordKind = input.recordKind ?? LIBRARY_RECORD_KIND;
 
     await this.db.insert(assets).values({
       id: assetId,
@@ -359,10 +377,18 @@ export class D1AssetRepository implements AssetRepository {
       // 显式 pin 时用 pin 值作初值，使 enqueue 后的快照即正确；classify 步骤会保留它。
       aiVisibility: input.aiVisibility ?? "allow",
       retrievalPriority: 0,
-      recordKind: input.recordKind ?? LIBRARY_RECORD_KIND,
+      recordKind,
       // 写入归属 scope：默认 personal（人记忆）；remember_agent 传 agent。
       scopeId: input.scopeId ?? PERSONAL_SCOPE,
       contextKey: normalizeContextKey(input.contextKey),
+      memoryRootId:
+        recordKind === "memory" ? (input.memoryRootId ?? assetId) : null,
+      memoryVersion:
+        recordKind === "memory" ? (input.memoryVersion ?? 1) : null,
+      previousVersionId:
+        recordKind === "memory" ? (input.previousVersionId ?? null) : null,
+      supersededById: null,
+      supersededAt: null,
       sourceHost: null,
       collectionKey: null,
       capturedAt: now,
@@ -598,6 +624,84 @@ export class D1AssetRepository implements AssetRepository {
     input: CompleteAssetProcessingInput
   ): Promise<void> {
     const now = new Date().toISOString();
+    const [version] = await this.db
+      .select({
+        recordKind: assets.recordKind,
+        scopeId: assets.scopeId,
+        contextKey: assets.contextKey,
+        previousVersionId: assets.previousVersionId,
+      })
+      .from(assets)
+      .where(eq(assets.id, id))
+      .limit(1);
+
+    if (!version) {
+      throw new AssetNotFoundError(id);
+    }
+
+    if (version.recordKind === "memory" && version.previousVersionId) {
+      const results = await this.database.batch([
+        this.database
+          .prepare(
+            `UPDATE assets
+             SET superseded_by_id = ?, superseded_at = ?, updated_at = ?
+             WHERE id = ? AND record_kind = 'memory' AND scope_id = ?
+               AND context_key = ? AND deleted_at IS NULL
+               AND (superseded_at IS NULL OR superseded_by_id = ?)
+               AND EXISTS (
+                 SELECT 1 FROM assets next
+                 WHERE next.id = ? AND next.previous_version_id = assets.id
+                   AND next.scope_id = assets.scope_id
+                   AND next.context_key = assets.context_key
+               )`
+          )
+          .bind(
+            id,
+            now,
+            now,
+            version.previousVersionId,
+            version.scopeId,
+            version.contextKey,
+            id,
+            id
+          ),
+        this.database
+          .prepare(
+            `UPDATE assets
+             SET status = 'ready', summary = ?, error_message = NULL,
+                 failed_at = NULL, processed_at = ?, updated_at = ?,
+                 content_text = ?, raw_r2_key = ?, content_r2_key = ?
+             WHERE id = ? AND record_kind = 'memory' AND scope_id = ?
+               AND context_key = ? AND deleted_at IS NULL
+               AND EXISTS (
+                 SELECT 1 FROM assets previous
+                 WHERE previous.id = ? AND previous.superseded_by_id = assets.id
+               )`
+          )
+          .bind(
+            input.summary,
+            now,
+            now,
+            input.contentText ?? null,
+            input.rawR2Key ?? null,
+            input.contentR2Key ?? null,
+            id,
+            version.scopeId,
+            version.contextKey,
+            version.previousVersionId
+          ),
+      ]);
+
+      if (
+        (results[0]?.meta.changes ?? 0) !== 1 ||
+        (results[1]?.meta.changes ?? 0) !== 1
+      ) {
+        throw new Error("Memory version activation could not be committed.");
+      }
+
+      return;
+    }
+
     const updatePayload: Partial<typeof assets.$inferInsert> = {
       status: "ready",
       summary: input.summary,

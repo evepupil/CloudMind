@@ -96,6 +96,12 @@ export interface AssetSummary {
   // scope 隔离：personal=用户显式记忆、agent=Agent 主动沉淀的工作记忆。
   scopeId: string;
   contextKey: ContextKey;
+  memoryRootId?: string | null | undefined;
+  memoryVersion?: number | null | undefined;
+  previousVersionId?: string | null | undefined;
+  supersededById?: string | null | undefined;
+  supersededAt?: string | null | undefined;
+  deletedAt?: string | null | undefined;
   sourceHost?: string | null | undefined;
   collectionKey: string | null;
   capturedAt: string | null;

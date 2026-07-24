@@ -60,7 +60,7 @@ Agent Web        -> filterable list/detail -> update / forget / restore
 
 | 分组 | 工具与目标 |
 | --- | --- |
-| 个人记忆 | `remember`、`recall`、`update_memory`、`forget` |
+| 个人记忆 | `remember`、`recall`、`update_memory`、`forget`、`restore_memory` |
 | Agent 记忆 | `remember_agent`、`recall_agent`；写入固定 `scopeId=agent` |
 | 知识库 | `save_asset`、`list_assets`、`search_assets`、`get_asset`、`ask_library` 和资产管理工具 |
 | 运维 | `list_asset_workflows`、`get_workflow_run`，后续通过独立配置暴露 |
@@ -89,14 +89,22 @@ Agent Web        -> filterable list/detail -> update / forget / restore
   出现时明确拒绝。
 - `recall` 默认应用 `memory + personal`；`recall_agent` 默认应用
   `memory + personal|agent + global`。所有读工具返回 `appliedRecordFilters`。
+- `update_memory` 创建带根版本、版本号和上一版本指针的新 memory 候选；候选通过
+  Queue 完成处理后，D1 原子地将旧版本标记为 superseded 并激活新版本。候选失败时
+  旧版本继续有效。
+- `forget` 和 `restore_memory` 要求精确 `scopeId + contextKey`。forget 软删除 D1
+  记录并清理 chunk 向量；restore 从首次不可变 R2 快照重新处理并重建向量。
+- 列表、FTS、摘要、dense 命中补齐和图证据 hydration 均排除 superseded 版本；
+  按 ID 仍可读取版本历史。
 - Web 现有资产、搜索、问答、首页和活动页继续显式限制 personal，Agent Web 留给 A3。
 
 ## 验证方式
 
-MCP schema/路由、过滤规范化、D1 条件、Vectorize `$in`、Ask、图召回和工具默认值
-均有单元测试。Workers 集成测试用两个都含 `M1` 的项目验证 D1 图查询的数组 OR 与
-跨维度 AND。生产回填已确认 24 条可检索资产向量和 91 条图向量归属完整；D1 另有
-5 个指针属于同一条已软删且 `deny` 的资产，Vectorize 无对应记录符合预期。
+MCP schema/路由、过滤规范化、D1 条件、Vectorize `$in`、Ask、图召回、工具默认值
+和生命周期服务均有单元测试。Workers 集成测试用两个都含 `M1` 的项目验证 D1 图
+查询的数组 OR 与跨维度 AND，并在真实 0017 migration 后验证新旧 memory 版本原子
+切换。生产回填已确认 24 条可检索资产向量和 91 条图向量归属完整；D1 另有 5 个
+指针属于同一条已软删且 `deny` 的资产，Vectorize 无对应记录符合预期。
 
 部署后使用 `scripts/record-filter-acceptance.mjs` 做只读真实 MCP 验收；完整记忆质量
 仍可用 `scripts/recall-acceptance.mjs` 和 `scripts/recall-schema-acceptance.mjs` 检查。
@@ -118,7 +126,7 @@ MCP schema/路由、过滤规范化、D1 条件、Vectorize `$in`、Ask、图召
 - recall/search 支持三个维度数组过滤，落实“维度内 OR、维度间 AND、省略不限制”。
 - 兼容期保留旧工具名和 global 默认值，并在返回中暴露实际应用的三维过滤条件。
 
-### M3-A2：专用生命周期
+### M3-A2：专用生命周期（已完成）
 
 - `update_memory` 创建新版本，旧版本保留并标记 superseded。
 - `forget` 先做可恢复软删除；恢复时重建缺失向量，硬删除规则由 M6 约束。
@@ -132,12 +140,13 @@ MCP schema/路由、过滤规范化、D1 条件、Vectorize `$in`、Ask、图召
 
 ## 待扩展项
 
-- 下一步完成 M3-A2 专用更新/遗忘，再推进 M3-A3 Agent Web 与端到端验收；
-  `reinforce`、`link` 继续归 M5。
+- 下一步推进 M3-A3 Agent Web 与端到端项目隔离验收；`reinforce`、`link` 继续归 M5。
 - 完整会话归档作为显式 library 能力评估，不进入 Agent 记忆默认路径。
 
 ## 改动历史
 
+- 2026-07-24：完成 M3-A2，增加 memory 版本链、异步成功后原子激活、专用
+  `update_memory`/`forget`/`restore_memory`、严格 scope/context 校验和恢复重索引。
 - 2026-07-24：完成 M3-A1，三维数组过滤贯穿 D1、Vectorize、图召回和 MCP；保留
   旧单值参数并增加冲突校验、默认策略、过滤回显、生产向量回填和只读验收脚本。
 - 2026-07-24：完成 M3-A0，移除 episode，落地三维字段、项目隔离、迁移保护、

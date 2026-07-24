@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { AssetNotFoundError } from "@/core/assets/errors";
 import { createLogger } from "@/core/logging/logger";
+import { MemoryLifecycleError } from "@/core/memory/errors";
 import { AGENT_SCOPE, PERSONAL_SCOPE } from "@/core/memory/scope";
 import {
   GLOBAL_CONTEXT_KEY,
@@ -50,6 +51,11 @@ import {
   getContextProfileSummary,
   resolveContextRetrievalPolicy,
 } from "@/features/mcp/server/context-profiles";
+import {
+  forgetMemory,
+  restoreMemory,
+  updateMemory,
+} from "@/features/memory/server/lifecycle-service";
 import {
   assetSearchPayloadRawSchema,
   normalizeCreatedAtFilters,
@@ -107,6 +113,21 @@ const rememberAgentInputSchema = z.object({
   title: z.string().trim().min(1).max(300).optional(),
   contextKey: contextKeySchema.optional(),
 });
+
+const memoryTargetSchemaShape = {
+  id: z.string().trim().min(1),
+  scopeId: memoryScopeSchema,
+  contextKey: contextKeySchema,
+};
+
+const updateMemoryInputSchema = z.object({
+  ...memoryTargetSchemaShape,
+  content: z.string().trim().min(1).max(20000),
+  title: z.string().trim().min(1).max(300).optional(),
+});
+
+const forgetMemoryInputSchema = z.object(memoryTargetSchemaShape);
+const restoreMemoryInputSchema = z.object(memoryTargetSchemaShape);
 
 // 注意：MCP inputSchema 必须保持纯 object（可带 .superRefine），绝不能 .transform()——
 // 否则对外暴露的 JSON schema 退化为空 properties，桥接层不知道 queries 是数组而序列化失败。
@@ -377,6 +398,18 @@ const getErrorMessage = (error: unknown): string => {
   }
 
   return "Unknown MCP tool error.";
+};
+
+const getMemoryLifecycleErrorCode = (error: unknown): string => {
+  if (error instanceof AssetNotFoundError) {
+    return "MEMORY_NOT_FOUND";
+  }
+
+  if (error instanceof MemoryLifecycleError) {
+    return `MEMORY_${error.code}`;
+  }
+
+  return "TOOL_ERROR";
 };
 
 const getInputKeys = (input: unknown): string[] => {
@@ -811,6 +844,91 @@ export const createMcpServer = (
         return createToolResult(result);
       } catch (error) {
         return createToolErrorResult(getErrorMessage(error));
+      }
+    })
+  );
+
+  server.registerTool(
+    "update_memory",
+    {
+      title: "Update Memory",
+      description:
+        "Create a new immutable version of one memory. The current version " +
+        "stays active until the new version finishes processing. scopeId " +
+        "and contextKey are required and must exactly match the target.",
+      inputSchema: updateMemoryInputSchema,
+    },
+    withToolLogging("update_memory", async (input) => {
+      try {
+        const result = await updateMemory(bindings, {
+          id: input.id,
+          content: input.content,
+          title: normalizeOptionalString(input.title),
+          scopeId: input.scopeId,
+          contextKey: input.contextKey,
+        });
+
+        return createToolResult({
+          ...result,
+          activation: "after_processing",
+        });
+      } catch (error) {
+        return createToolErrorResult(
+          getErrorMessage(error),
+          getMemoryLifecycleErrorCode(error)
+        );
+      }
+    })
+  );
+
+  server.registerTool(
+    "forget",
+    {
+      title: "Forget Memory",
+      description:
+        "Soft delete one memory and remove its chunk vectors. The operation " +
+        "requires the exact scopeId and contextKey and can be reversed with " +
+        "restore_memory.",
+      inputSchema: forgetMemoryInputSchema,
+    },
+    withToolLogging("forget", async (input) => {
+      try {
+        const result = await forgetMemory(bindings, input);
+
+        return createToolResult({
+          ok: true,
+          id: input.id,
+          ...result,
+        });
+      } catch (error) {
+        return createToolErrorResult(
+          getErrorMessage(error),
+          getMemoryLifecycleErrorCode(error)
+        );
+      }
+    })
+  );
+
+  server.registerTool(
+    "restore_memory",
+    {
+      title: "Restore Memory",
+      description:
+        "Restore one soft-deleted memory and reprocess its immutable raw " +
+        "snapshot so missing chunk vectors are rebuilt. scopeId and " +
+        "contextKey must exactly match the target.",
+      inputSchema: restoreMemoryInputSchema,
+    },
+    withToolLogging("restore_memory", async (input) => {
+      try {
+        const item = await restoreMemory(bindings, input);
+
+        return createToolResult({ item, reindexing: true });
+      } catch (error) {
+        return createToolErrorResult(
+          getErrorMessage(error),
+          getMemoryLifecycleErrorCode(error)
+        );
       }
     })
   );

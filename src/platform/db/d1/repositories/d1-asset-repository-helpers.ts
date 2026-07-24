@@ -42,6 +42,12 @@ export const mapAssetSummary = (
     recordKind: record.recordKind,
     scopeId: record.scopeId,
     contextKey: record.contextKey,
+    memoryRootId: record.memoryRootId,
+    memoryVersion: record.memoryVersion,
+    previousVersionId: record.previousVersionId,
+    supersededById: record.supersededById,
+    supersededAt: record.supersededAt,
+    deletedAt: record.deletedAt,
     sourceHost: record.sourceHost,
     collectionKey: record.collectionKey,
     capturedAt: record.capturedAt,
@@ -99,6 +105,7 @@ export const buildAssetListWhereClause = (query?: AssetListQuery) => {
       : query?.deleted === "include"
         ? []
         : [isNull(assets.deletedAt)];
+  conditions.push(isNull(assets.supersededAt));
   const recordFilters = normalizeRecordFilters(query);
 
   if (query?.status) {
@@ -167,7 +174,11 @@ export const buildAssetListWhereClause = (query?: AssetListQuery) => {
 export const buildAssetSearchFilterConditions = (
   filters?: AssetSearchFilters
 ) => {
-  const conditions = [isNull(assets.deletedAt), eq(assets.status, "ready")];
+  const conditions = [
+    isNull(assets.deletedAt),
+    isNull(assets.supersededAt),
+    eq(assets.status, "ready"),
+  ];
   const recordFilters = normalizeRecordFilters(filters);
 
   if (filters?.type) {

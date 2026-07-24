@@ -24,6 +24,9 @@ export interface CreateTextAssetInput {
   scopeId?: MemoryScope | undefined;
   recordKind?: RecordKind | undefined;
   contextKey?: ContextKey | undefined;
+  memoryRootId?: string | undefined;
+  memoryVersion?: number | undefined;
+  previousVersionId?: string | undefined;
 }
 
 export interface CreateUrlAssetInput {
@@ -93,10 +96,17 @@ export interface UpdateAssetIndexingInput {
   capturedAt?: string | null | undefined;
 }
 
+export interface GetAssetOptions {
+  includeDeleted?: boolean | undefined;
+}
+
 // 这里定义资产读取侧接口，供列表与详情等读模型复用。
 export interface AssetQueryRepository {
   listAssets(query?: AssetListQuery): Promise<AssetListResult>;
-  getAssetById(id: string): Promise<AssetDetail>;
+  getAssetById(
+    id: string,
+    options?: GetAssetOptions | undefined
+  ): Promise<AssetDetail>;
 }
 
 // 这里单独抽出搜索端口，避免未来把语义检索继续堆进列表接口。

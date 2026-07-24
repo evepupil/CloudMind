@@ -1,6 +1,7 @@
 import type { AIProvider } from "@/core/ai/ports";
 import type { AssetIngestRepository } from "@/core/assets/ports";
 import type { BlobStore } from "@/core/blob/ports";
+import { createLogger } from "@/core/logging/logger";
 import type { JobQueue } from "@/core/queue/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
@@ -11,6 +12,8 @@ import type {
 import { enqueueWorkflow, type WorkflowDefinition } from "./runtime";
 import { buildSharedIngestSteps } from "./shared-workflow-steps";
 import { loadOrCreateTextSourceSnapshot } from "./text-source-snapshot";
+
+const logger = createLogger("note_ingest_workflow");
 
 export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => ({
   type: "note_ingest_v1",
@@ -63,6 +66,35 @@ export const createNoteIngestWorkflowDefinition = (): WorkflowDefinition => ({
       finalize: {
         getRawR2Key: (state) =>
           typeof state.rawR2Key === "string" ? state.rawR2Key : null,
+        afterFinalize: async (context) => {
+          const previousVersionId = context.asset.previousVersionId;
+
+          if (!previousVersionId) {
+            return;
+          }
+
+          try {
+            const previous =
+              await context.services.assetRepository.getAssetById(
+                previousVersionId
+              );
+            const vectorIds = previous.chunks
+              .map((chunk) => chunk.vectorId)
+              .filter((value): value is string => Boolean(value));
+
+            if (vectorIds.length > 0) {
+              await context.services.vectorStore.deleteByIds(vectorIds);
+            }
+          } catch (error) {
+            // 新版本已经原子激活；旧向量清理失败只会造成可重试的 ghost vector，
+            // D1 hydration 仍会排除 superseded 版本，不能让清理故障回滚新版本。
+            logger.warn(
+              "superseded_vector_cleanup_pending",
+              { assetId: previousVersionId },
+              { error }
+            );
+          }
+        },
       },
     }),
   ],

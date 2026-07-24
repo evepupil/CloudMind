@@ -46,6 +46,12 @@ export const assets = sqliteTable(
     // scope 隔离：personal=用户显式记忆（默认）、agent=Agent 主动沉淀的工作记忆。
     scopeId: text("scope_id").notNull().default("personal"),
     contextKey: text("context_key").notNull().default("global"),
+    // memory 版本链：首版 root=id/version=1；library 记录保持 null。
+    memoryRootId: text("memory_root_id"),
+    memoryVersion: integer("memory_version"),
+    previousVersionId: text("previous_version_id"),
+    supersededById: text("superseded_by_id"),
+    supersededAt: text("superseded_at"),
     sourceHost: text("source_host"),
     collectionKey: text("collection_key"),
     capturedAt: text("captured_at"),
@@ -75,6 +81,11 @@ export const assets = sqliteTable(
     index("assets_scope_id_idx").on(table.scopeId),
     index("assets_record_kind_idx").on(table.recordKind),
     index("assets_context_key_idx").on(table.contextKey),
+    index("assets_memory_root_version_idx").on(
+      table.memoryRootId,
+      table.memoryVersion
+    ),
+    index("assets_superseded_at_idx").on(table.supersededAt),
     index("assets_record_scope_context_idx").on(
       table.recordKind,
       table.scopeId,

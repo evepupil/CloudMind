@@ -10,6 +10,18 @@ import {
 const dialect = new SQLiteSyncDialect();
 
 describe("三维归属 · L1 检索条件", () => {
+  it("列表和检索默认排除已被取代的 memory 版本", () => {
+    const listWhere = buildAssetListWhereClause();
+    const searchWhere = and(...buildAssetSearchFilterConditions());
+
+    if (!listWhere || !searchWhere) {
+      throw new Error("资产过滤条件不应为空");
+    }
+
+    expect(dialect.sqlToQuery(listWhere).sql).toContain("superseded_at");
+    expect(dialect.sqlToQuery(searchWhere).sql).toContain("superseded_at");
+  });
+
   it("省略归属维度时不添加 scope 条件", () => {
     const where = buildAssetListWhereClause();
     if (!where) {

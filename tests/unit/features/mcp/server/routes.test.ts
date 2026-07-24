@@ -16,6 +16,7 @@ import * as ingestService from "@/features/ingest/server/service";
 import { registerMcpRoutes } from "@/features/mcp/server/routes";
 import type { McpTokenRecord } from "@/features/mcp-tokens/model/types";
 import { hashMcpTokenValue } from "@/features/mcp-tokens/server/token-secret";
+import * as memoryLifecycleService from "@/features/memory/server/lifecycle-service";
 import type { SearchResult } from "@/features/search/model/types";
 import * as searchService from "@/features/search/server/service";
 import * as workflowService from "@/features/workflows/server/service";
@@ -44,6 +45,14 @@ vi.mock("@/features/ingest/server/service", () => {
     ingestUrlAsset: vi.fn(),
     rememberMemory: vi.fn(),
     rememberAgentMemory: vi.fn(),
+  };
+});
+
+vi.mock("@/features/memory/server/lifecycle-service", () => {
+  return {
+    updateMemory: vi.fn(),
+    forgetMemory: vi.fn(),
+    restoreMemory: vi.fn(),
   };
 });
 
@@ -730,6 +739,9 @@ describe("mcp routes", () => {
       "search_assets_for_context",
       "recall",
       "recall_agent",
+      "update_memory",
+      "forget",
+      "restore_memory",
       "get_asset",
       "update_asset",
       "delete_asset",
@@ -1010,6 +1022,96 @@ describe("mcp routes", () => {
         scopeIds: ["personal", "agent"],
         contextKeys: ["global"],
       })
+    );
+  });
+
+  it("update_memory, forget and restore_memory enforce and forward exact ownership", async () => {
+    const app = createApp();
+    const previous = createAssetDetail({
+      id: "memory-v1",
+      recordKind: "memory",
+      scopeId: "agent",
+      contextKey: "project:github:evepupil/CloudMind",
+      memoryRootId: "memory-v1",
+      memoryVersion: 1,
+    });
+    const current = createAssetDetail({
+      ...previous,
+      id: "memory-v2",
+      status: "processing",
+      memoryVersion: 2,
+      previousVersionId: "memory-v1",
+    });
+    vi.mocked(memoryLifecycleService.updateMemory).mockResolvedValue({
+      previous,
+      current,
+    });
+    vi.mocked(memoryLifecycleService.forgetMemory).mockResolvedValue({
+      item: { ...current, deletedAt: "2026-07-24T00:00:00.000Z" },
+      vectorCleanupPending: false,
+    });
+    vi.mocked(memoryLifecycleService.restoreMemory).mockResolvedValue({
+      ...current,
+      deletedAt: null,
+    });
+    const connected = await createConnectedClient(app);
+
+    client = connected.client;
+    transport = connected.transport;
+
+    const target = {
+      id: "memory-v1",
+      scopeId: "agent",
+      contextKey: "project:github:evepupil/CloudMind",
+    } as const;
+    const updateCall = await client.callTool({
+      name: "update_memory",
+      arguments: {
+        ...target,
+        content: "M3-A2 lifecycle is in progress.",
+      },
+    });
+    const forgetCall = await client.callTool({
+      name: "forget",
+      arguments: target,
+    });
+    const restoreCall = await client.callTool({
+      name: "restore_memory",
+      arguments: target,
+    });
+    const invalidCall = await client.callTool({
+      name: "forget",
+      arguments: { id: "memory-v1", scopeId: "agent" },
+    });
+
+    expect(getStructuredContent(updateCall)).toEqual({
+      previous,
+      current,
+      activation: "after_processing",
+    });
+    expect(getStructuredContent(forgetCall)).toEqual({
+      ok: true,
+      id: "memory-v1",
+      item: expect.objectContaining({ id: "memory-v2" }),
+      vectorCleanupPending: false,
+    });
+    expect(getStructuredContent(restoreCall)).toEqual({
+      item: expect.objectContaining({ id: "memory-v2" }),
+      reindexing: true,
+    });
+    expect(invalidCall.isError).toBe(true);
+    expect(memoryLifecycleService.updateMemory).toHaveBeenCalledWith(env, {
+      ...target,
+      content: "M3-A2 lifecycle is in progress.",
+      title: undefined,
+    });
+    expect(memoryLifecycleService.forgetMemory).toHaveBeenCalledWith(
+      env,
+      target
+    );
+    expect(memoryLifecycleService.restoreMemory).toHaveBeenCalledWith(
+      env,
+      target
     );
   });
 

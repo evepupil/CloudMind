@@ -423,6 +423,11 @@ export const createFinalizeStep = (options?: {
 
     const rawR2Key = options?.getRawR2Key?.(context.state) ?? null;
 
+    await context.services.assetRepository.replaceAssetChunks(
+      context.asset.id,
+      indexedChunks
+    );
+    // chunk 元数据先落 D1，最后一步才把资产切到 ready；memory 更新也在这里原子激活新版本。
     await context.services.assetRepository.completeAssetProcessing(
       context.asset.id,
       {
@@ -431,10 +436,6 @@ export const createFinalizeStep = (options?: {
         contentText: persistedContent.contentText,
         contentR2Key: persistedContent.contentR2Key,
       }
-    );
-    await context.services.assetRepository.replaceAssetChunks(
-      context.asset.id,
-      indexedChunks
     );
 
     if (options?.afterFinalize) {
