@@ -24,6 +24,8 @@ const statement = (
 ): MemoryStatement => ({
   id,
   scopeId: "default",
+  contextKey: "global",
+  recordKind: "library",
   subjectEntityId,
   predicate: "rel",
   objectEntityId: null,
@@ -47,6 +49,8 @@ const edge = (
 ): MemoryEdge => ({
   id,
   scopeId: "default",
+  contextKey: "global",
+  recordKind: "library",
   srcEntityId,
   dstEntityId,
   relation: "rel",
@@ -65,12 +69,15 @@ const PROVENANCE: Record<string, string> = { s1: "a1", s2: "a2", s3: "a3" };
 class FakeGraphRepository implements GraphRecallRepository {
   // 记录种子映射收到的 scopeId，断言 scope 隔离一路下推到仓储层。
   public lastFindScopeId: string | undefined;
+  public lastFindContextKey: string | undefined;
 
   public async findEntityIdsByVectorIds(
     vectorIds: string[],
-    scopeId?: string
+    scopeId?: string,
+    contextKey?: string
   ): Promise<EntityVectorRef[]> {
     this.lastFindScopeId = scopeId;
+    this.lastFindContextKey = contextKey;
     return vectorIds.flatMap((vectorId) => {
       const entityId = ENTITY_BY_VECTOR[vectorId];
       return entityId ? [{ vectorId, entityId }] : [];
@@ -99,9 +106,7 @@ class FakeGraphRepository implements GraphRecallRepository {
   ): Promise<MemoryProvenanceRef[]> {
     return memoryIds.flatMap((memoryId) => {
       const assetId = PROVENANCE[memoryId];
-      return assetId
-        ? [{ memoryId, assetId, episodeId: null, chunkIndex: null }]
-        : [];
+      return assetId ? [{ memoryId, assetId, chunkIndex: null }] : [];
     });
   }
 }
@@ -209,8 +214,10 @@ describe("recallGraphStatements", () => {
 
     expect(store.lastSearchInput?.filter).toEqual({
       scopeId: { $eq: "personal" },
+      contextKey: { $eq: "global" },
     });
     expect(repo.lastFindScopeId).toBe("personal");
+    expect(repo.lastFindContextKey).toBe("global");
   });
 
   it("种子检索传 scopeId=agent 时按 agent 过滤并透传", async () => {
@@ -222,11 +229,14 @@ describe("recallGraphStatements", () => {
       repository: repo,
       graphVectorStore: store,
       scopeId: "agent",
+      contextKey: "project:github:evepupil/CloudMind",
     });
 
     expect(store.lastSearchInput?.filter).toEqual({
       scopeId: { $eq: "agent" },
+      contextKey: { $eq: "project:github:evepupil/CloudMind" },
     });
     expect(repo.lastFindScopeId).toBe("agent");
+    expect(repo.lastFindContextKey).toBe("project:github:evepupil/CloudMind");
   });
 });

@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [
     cloudflareTest(async () => ({
       miniflare: {
-        d1Databases: ["DB"],
+        d1Databases: ["DB", "MIGRATION_DB"],
         r2Buckets: ["ASSET_FILES"],
         bindings: {
           TEST_MIGRATIONS: await readD1Migrations("drizzle"),

@@ -29,7 +29,9 @@ export const mapAssetSummary = (
     domain: record.domain,
     aiVisibility: record.aiVisibility,
     retrievalPriority: record.retrievalPriority,
+    recordKind: record.recordKind,
     scopeId: record.scopeId,
+    contextKey: record.contextKey,
     sourceHost: record.sourceHost,
     collectionKey: record.collectionKey,
     capturedAt: record.capturedAt,
@@ -98,6 +100,14 @@ export const buildAssetListWhereClause = (query?: AssetListQuery) => {
     conditions.push(eq(assets.type, query.type));
   }
 
+  if (query?.recordKind) {
+    conditions.push(eq(assets.recordKind, query.recordKind));
+  }
+
+  if (query?.contextKey) {
+    conditions.push(eq(assets.contextKey, query.contextKey));
+  }
+
   if (query?.domain) {
     conditions.push(eq(assets.domain, query.domain));
   }
@@ -153,6 +163,14 @@ export const buildAssetSearchFilterConditions = (
 
   if (filters?.type) {
     conditions.push(eq(assets.type, filters.type));
+  }
+
+  if (filters?.recordKind) {
+    conditions.push(eq(assets.recordKind, filters.recordKind));
+  }
+
+  if (filters?.contextKey) {
+    conditions.push(eq(assets.contextKey, filters.contextKey));
   }
 
   if (filters?.domain) {

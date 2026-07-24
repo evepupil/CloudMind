@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { contextKeySchema, recordKindSchema } from "@/core/records/schemas";
+
 const emptyStringToUndefined = (value: unknown) => {
   if (typeof value !== "string") {
     return value;
@@ -148,6 +150,8 @@ const assetListRawQuerySchema = z.object({
   ),
   status: z.preprocess(emptyStringToUndefined, assetStatusSchema.optional()),
   type: z.preprocess(emptyStringToUndefined, assetTypeSchema.optional()),
+  recordKind: z.preprocess(emptyStringToUndefined, recordKindSchema.optional()),
+  contextKey: z.preprocess(emptyStringToUndefined, contextKeySchema.optional()),
   domain: z.preprocess(emptyStringToUndefined, assetDomainSchema.optional()),
   sourceKind: z.preprocess(
     emptyStringToUndefined,

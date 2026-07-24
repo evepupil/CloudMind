@@ -67,6 +67,8 @@ const getSearchFilters = (input: AssetSearchFilters): AssetSearchFilters => {
     tag: input.tag,
     collection: input.collection,
     scopeId: input.scopeId,
+    recordKind: input.recordKind,
+    contextKey: input.contextKey,
   };
 };
 
@@ -319,6 +321,12 @@ const buildSemanticVectorFilter = (
   if (applied.type) {
     filter.type = { $eq: applied.type };
   }
+  if (applied.recordKind) {
+    filter.recordKind = { $eq: applied.recordKind };
+  }
+  if (applied.contextKey) {
+    filter.contextKey = { $eq: applied.contextKey };
+  }
   if (applied.domain) {
     filter.domain = { $eq: applied.domain };
   }
@@ -401,7 +409,9 @@ const buildGraphEvidence = async (
   contextPolicy?: ContextRetrievalPolicy,
   createdAtFrom?: string,
   createdAtTo?: string,
-  scopeId?: string
+  scopeId?: string,
+  contextKey?: string,
+  recordKind?: AssetSearchFilters["recordKind"]
 ): Promise<EvidenceItem[]> => {
   const getMemory = dependencies.getMemoryRepository;
   const getGraph = dependencies.getGraphVectorStore;
@@ -426,6 +436,8 @@ const buildGraphEvidence = async (
       graphVectorStore,
       // L2 图通道与 dense/lexical 一致：默认 personal，显式传入时查指定 scope。
       scopeId: scopeId ?? PERSONAL_SCOPE,
+      contextKey,
+      recordKind,
     });
 
     const hydrate = assetRepository.getAssetSummariesByIds;
@@ -649,7 +661,9 @@ export const createSearchService = (
             contextPolicy,
             input.createdAtFrom,
             input.createdAtTo,
-            input.scopeId
+            input.scopeId,
+            input.contextKey,
+            input.recordKind
           )
         : [];
       const fusedEvidence =
@@ -760,6 +774,8 @@ export const createSearchService = (
             pageSize: RECALL_PER_QUERY_PAGE_SIZE,
             ...(input.domain ? { domain: input.domain } : {}),
             ...(input.scopeId ? { scopeId: input.scopeId } : {}),
+            ...(input.recordKind ? { recordKind: input.recordKind } : {}),
+            ...(input.contextKey ? { contextKey: input.contextKey } : {}),
             // 时间窗（已规范化 ISO）下推检索：向量层原生过滤 + D1 兜底，召回不被 topK 截断。
             ...(input.createdAtFrom
               ? { createdAtFrom: input.createdAtFrom }

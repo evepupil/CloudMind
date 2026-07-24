@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AIProvider } from "@/core/ai/ports";
-import type { VectorStore } from "@/core/vector/ports";
+import type { VectorRecord, VectorStore } from "@/core/vector/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
 import {
   type ChunkEmbeddingPlanItem,
@@ -297,10 +297,20 @@ describe("planChunkEmbeddings", () => {
 
 describe("indexPlannedChunks", () => {
   const makeAsset = (chunks: AssetDetail["chunks"]): AssetDetail =>
-    ({ id: "asset", chunks }) as unknown as AssetDetail;
+    ({
+      id: "asset",
+      type: "note",
+      domain: "engineering",
+      aiVisibility: "allow",
+      recordKind: "memory",
+      scopeId: "agent",
+      contextKey: "project:github:evepupil/CloudMind",
+      createdAt: "2026-07-24T00:00:00.000Z",
+      chunks,
+    }) as unknown as AssetDetail;
 
   it("only upserts changed chunks, reuses unchanged ones, and stamps model/dim/hash", async () => {
-    const upsert = vi.fn(async (_records: unknown) => undefined);
+    const upsert = vi.fn(async (_records: VectorRecord[]) => undefined);
     const deleteByIds = vi.fn(async (_ids: string[]) => undefined);
     const store: VectorStore = {
       upsert,
@@ -358,6 +368,12 @@ describe("indexPlannedChunks", () => {
     expect(upsert).toHaveBeenCalledWith([
       expect.objectContaining({ id: "asset:1" }),
     ]);
+    const metadataJson = upsert.mock.calls[0]?.[0][0]?.metadataJson;
+    expect(JSON.parse(metadataJson ?? "{}")).toMatchObject({
+      recordKind: "memory",
+      scopeId: "agent",
+      contextKey: "project:github:evepupil/CloudMind",
+    });
     // 全部 chunk 都带上 model / dim / hash
     expect(result).toHaveLength(2);
     expect(

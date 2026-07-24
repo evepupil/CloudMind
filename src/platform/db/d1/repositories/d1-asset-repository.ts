@@ -30,6 +30,11 @@ import type {
   UpdateAssetMetadataInput,
 } from "@/core/assets/ports";
 import { PERSONAL_SCOPE } from "@/core/memory/scope";
+import {
+  GLOBAL_CONTEXT_KEY,
+  LIBRARY_RECORD_KIND,
+  normalizeContextKey,
+} from "@/core/records/classification";
 import type {
   AssetChunkMatch,
   AssetDetail,
@@ -103,11 +108,7 @@ export class D1AssetRepository implements AssetRepository {
   }
 
   public async searchAssets(input: AssetSearchInput): Promise<AssetListResult> {
-    return this.listAssets({
-      query: input.query,
-      page: input.page,
-      pageSize: input.pageSize,
-    });
+    return this.listAssets(input);
   }
 
   public async getAssetSummariesByIds(ids: string[]): Promise<AssetSummary[]> {
@@ -358,8 +359,10 @@ export class D1AssetRepository implements AssetRepository {
       // 显式 pin 时用 pin 值作初值，使 enqueue 后的快照即正确；classify 步骤会保留它。
       aiVisibility: input.aiVisibility ?? "allow",
       retrievalPriority: 0,
+      recordKind: input.recordKind ?? LIBRARY_RECORD_KIND,
       // 写入归属 scope：默认 personal（人记忆）；remember_agent 传 agent。
       scopeId: input.scopeId ?? PERSONAL_SCOPE,
+      contextKey: normalizeContextKey(input.contextKey),
       sourceHost: null,
       collectionKey: null,
       capturedAt: now,
@@ -426,6 +429,9 @@ export class D1AssetRepository implements AssetRepository {
       domain: "general",
       aiVisibility: "allow",
       retrievalPriority: 0,
+      recordKind: LIBRARY_RECORD_KIND,
+      scopeId: PERSONAL_SCOPE,
+      contextKey: normalizeContextKey(input.contextKey),
       sourceHost: null,
       collectionKey: null,
       capturedAt: now,
@@ -491,6 +497,9 @@ export class D1AssetRepository implements AssetRepository {
       domain: "general",
       aiVisibility: "allow",
       retrievalPriority: 0,
+      recordKind: LIBRARY_RECORD_KIND,
+      scopeId: PERSONAL_SCOPE,
+      contextKey: normalizeContextKey(input.contextKey),
       sourceHost: null,
       collectionKey: null,
       capturedAt: now,
@@ -623,10 +632,27 @@ export class D1AssetRepository implements AssetRepository {
       return;
     }
 
+    const [asset] = await this.db
+      .select({
+        recordKind: assets.recordKind,
+        scopeId: assets.scopeId,
+        contextKey: assets.contextKey,
+      })
+      .from(assets)
+      .where(eq(assets.id, assetId))
+      .limit(1);
+
+    if (!asset) {
+      throw new AssetNotFoundError(assetId);
+    }
+
     const now = new Date().toISOString();
     const rows = chunks.map((chunk) => ({
       id: crypto.randomUUID(),
       assetId,
+      recordKind: asset.recordKind,
+      scopeId: asset.scopeId,
+      contextKey: asset.contextKey ?? GLOBAL_CONTEXT_KEY,
       chunkIndex: chunk.chunkIndex,
       textPreview: chunk.textPreview,
       contentText: chunk.contentText,

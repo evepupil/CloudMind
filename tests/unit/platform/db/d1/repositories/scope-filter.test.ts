@@ -60,4 +60,29 @@ describe("scope 隔离 · L1 检索条件", () => {
     expect(params).toContain("agent");
     expect(params).not.toContain("personal");
   });
+
+  it("三维过滤同时编译为 record、scope 和 context 条件", () => {
+    const conditions = buildAssetSearchFilterConditions({
+      recordKind: "memory",
+      scopeId: "agent",
+      contextKey: "project:github:evepupil/CloudMind",
+    });
+    const combined = and(...conditions);
+
+    if (!combined) {
+      throw new Error("buildAssetSearchFilterConditions 不应为空");
+    }
+
+    const { sql, params } = dialect.sqlToQuery(combined);
+    expect(sql).toContain("record_kind");
+    expect(sql).toContain("scope_id");
+    expect(sql).toContain("context_key");
+    expect(params).toEqual(
+      expect.arrayContaining([
+        "memory",
+        "agent",
+        "project:github:evepupil/CloudMind",
+      ])
+    );
+  });
 });

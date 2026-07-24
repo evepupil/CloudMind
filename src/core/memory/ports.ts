@@ -1,27 +1,13 @@
-// L2 语义记忆层（知识图谱）+ L1 情节流的写侧端口。
-// 与基础设施实现解耦：业务层只依赖本接口，D1 实现可替换（未来 pg）。
+import type { RecordKind } from "@/core/records/classification";
 
-export type EpisodeKind =
-  | "ingest"
-  | "chat_turn"
-  | "agent_assert"
-  | "correction";
+// L2 语义记忆层写侧端口。
+// 与基础设施实现解耦：业务层只依赖本接口，D1 实现可替换（未来 pg）。
 
 export type MemoryKind = "statement" | "entity" | "edge";
 
-export interface CreateEpisodeInput {
-  scopeId?: string | undefined;
-  kind: EpisodeKind;
-  assetId?: string | null | undefined;
-  rawText?: string | null | undefined;
-  rawR2Key?: string | null | undefined;
-  actor?: string | null | undefined;
-  occurredAt?: string | null | undefined;
-  recordedAt?: string | undefined;
-}
-
 export interface UpsertEntityInput {
   scopeId?: string | undefined;
+  contextKey?: string | undefined;
   canonicalName: string;
   normalizedName: string;
   type?: string | null | undefined;
@@ -32,6 +18,7 @@ export interface UpsertEntityInput {
 export interface MemoryEntity {
   id: string;
   scopeId: string;
+  contextKey: string;
   canonicalName: string;
   normalizedName: string;
   type: string | null;
@@ -42,6 +29,8 @@ export interface MemoryEntity {
 export interface MemoryStatement {
   id: string;
   scopeId: string;
+  contextKey: string;
+  recordKind: RecordKind;
   subjectEntityId: string;
   predicate: string;
   objectEntityId: string | null;
@@ -68,6 +57,8 @@ export interface InvalidateStatementInput {
 // 调和失效一条实体宾语的 statement 时，需同步失效其投影出的图边，避免图遍历读到陈旧关系。
 export interface InvalidateEdgesInput {
   scopeId?: string | undefined;
+  contextKey?: string | undefined;
+  recordKind?: RecordKind | undefined;
   srcEntityId: string;
   dstEntityId: string;
   relation: string;
@@ -77,6 +68,8 @@ export interface InvalidateEdgesInput {
 export interface MemoryEdge {
   id: string;
   scopeId: string;
+  contextKey: string;
+  recordKind: RecordKind;
   srcEntityId: string;
   dstEntityId: string;
   relation: string;
@@ -88,11 +81,10 @@ export interface EntityVectorRef {
   entityId: string;
 }
 
-// 出处引用读模型（记忆 → L1 资产/情节）。供图证据钻取回 L1 原文引用。
+// 出处引用读模型（记忆 → L1 资产/chunk）。供图证据钻取回 L1 原文引用。
 export interface MemoryProvenanceRef {
   memoryId: string;
   assetId: string | null;
-  episodeId: string | null;
   chunkIndex: number | null;
 }
 
@@ -108,6 +100,7 @@ export interface DuplicateStatementRef {
 export interface MemoryGraphEntity {
   id: string;
   scopeId: string;
+  contextKey: string;
   canonicalName: string;
   type: string | null;
   salience: number;
@@ -120,6 +113,8 @@ export interface MemoryGraphEntity {
 export interface MemoryGraphEdge {
   id: string;
   scopeId: string;
+  contextKey: string;
+  recordKind: RecordKind;
   srcEntityId: string;
   dstEntityId: string;
   relation: string;
@@ -135,6 +130,8 @@ export interface MemoryGraphCounts {
 // listStatements 的过滤/分页选项。
 export interface ListStatementsOptions {
   scopeId?: string | undefined;
+  contextKey?: string | undefined;
+  recordKind?: RecordKind | undefined;
   subjectEntityId?: string | undefined;
   // 是否包含已失效（expired_at 非空）的陈述；时间线视图需要看完整历史。
   includeExpired?: boolean | undefined;
@@ -145,12 +142,15 @@ export interface ListStatementsOptions {
 // listEntities 的过滤/分页选项。
 export interface ListEntitiesOptions {
   scopeId?: string | undefined;
+  contextKey?: string | undefined;
   limit?: number | undefined;
   offset?: number | undefined;
 }
 
 export interface CreateStatementInput {
   scopeId?: string | undefined;
+  contextKey?: string | undefined;
+  recordKind?: RecordKind | undefined;
   subjectEntityId: string;
   predicate: string;
   // 宾语二选一：实体（构成图边）或字面值（属性事实）。
@@ -166,6 +166,8 @@ export interface CreateStatementInput {
 
 export interface CreateEdgeInput {
   scopeId?: string | undefined;
+  contextKey?: string | undefined;
+  recordKind?: RecordKind | undefined;
   srcEntityId: string;
   dstEntityId: string;
   relation: string;
@@ -177,9 +179,10 @@ export interface CreateEdgeInput {
 
 export interface AddProvenanceInput {
   scopeId?: string | undefined;
+  contextKey?: string | undefined;
+  recordKind?: RecordKind | undefined;
   memoryType: MemoryKind;
   memoryId: string;
-  episodeId?: string | null | undefined;
   assetId?: string | null | undefined;
   chunkIndex?: number | null | undefined;
   span?: string | null | undefined;
@@ -197,15 +200,15 @@ export interface VectorMatch {
   score: number;
 }
 
-// L2 写侧仓储：实体幂等去重 + 陈述/关系/出处写入 + L1 情节写入。
+// L2 写侧仓储：实体幂等去重 + 陈述/关系/出处写入。
 export interface MemoryRepository {
-  createEpisode(input: CreateEpisodeInput): Promise<{ id: string }>;
-  // 按 (scope, normalized_name) 幂等：已存在则 bump mention_count + last_seen，否则新建。
+  // 按 (scope, context, normalized_name) 幂等：已存在则 bump mention_count + last_seen，否则新建。
   upsertEntityByNormalizedName(input: UpsertEntityInput): Promise<MemoryEntity>;
   // 按 vector id 查实体（embed 消歧后回填用）；带 scope 防跨 scope 误取。
   getEntityByVectorId(
     vectorId: string,
-    scopeId?: string | undefined
+    scopeId?: string | undefined,
+    contextKey?: string | undefined
   ): Promise<MemoryEntity | null>;
   // 更新实体的向量 id。
   setEntityVectorId(entityId: string, vectorId: string): Promise<void>;
@@ -215,7 +218,9 @@ export interface MemoryRepository {
   // 查某主语下所有仍有效（expired_at 空）的陈述，作为智能写调和的候选集（按 created_at 升序）。
   findActiveStatementsBySubject(
     subjectEntityId: string,
-    scopeId?: string | undefined
+    scopeId?: string | undefined,
+    contextKey?: string | undefined,
+    recordKind?: RecordKind | undefined
   ): Promise<MemoryStatement[]>;
   // 按 id 查单条陈述（含已失效），主要供调和落库后核对与测试用。
   getStatementById(statementId: string): Promise<MemoryStatement | null>;
@@ -229,17 +234,22 @@ export interface MemoryRepository {
   // 把 ANN 命中的向量 id 解析为实体 id（图检索的种子解析）；按 scope 隔离。
   findEntityIdsByVectorIds(
     vectorIds: string[],
-    scopeId?: string | undefined
+    scopeId?: string | undefined,
+    contextKey?: string | undefined
   ): Promise<EntityVectorRef[]>;
   // 取一批源实体的未失效出边，作为 BFS / 递归遍历的一跳。
   findActiveOutgoingEdges(
     srcEntityIds: string[],
-    scopeId?: string | undefined
+    scopeId?: string | undefined,
+    contextKey?: string | undefined,
+    recordKind?: RecordKind | undefined
   ): Promise<MemoryEdge[]>;
   // 取一批主语实体下所有未失效的陈述（图证据事实集）。
   findActiveStatementsBySubjects(
     subjectEntityIds: string[],
-    scopeId?: string | undefined
+    scopeId?: string | undefined,
+    contextKey?: string | undefined,
+    recordKind?: RecordKind | undefined
   ): Promise<MemoryStatement[]>;
   // 按记忆 id 批量取出处（钻取回 L1 资产）。
   findProvenanceByMemoryIds(
@@ -247,11 +257,19 @@ export interface MemoryRepository {
     memoryIds: string[]
   ): Promise<MemoryProvenanceRef[]>;
   // —— sleep-time 修复（T5）——
-  // 漂移边：仍活跃、但已无任一活跃 statement 与其 (scope,src,relation,dst) 对应的边。
-  findDriftedEdges(scopeId?: string | undefined): Promise<MemoryEdge[]>;
-  // 重复活跃陈述：同 (scope,subject,predicate,object) 的多条活跃陈述，保留最早、其余应归档。
+  // 漂移边：仍活跃、但已无任一活跃 statement 与其三维归属及端点对应的边。
+  // contextKey/recordKind 省略时扫描该 scope 下全部值，供定时维护覆盖所有项目。
+  findDriftedEdges(
+    scopeId?: string | undefined,
+    contextKey?: string | undefined,
+    recordKind?: RecordKind | undefined
+  ): Promise<MemoryEdge[]>;
+  // 重复活跃陈述：同三维归属和事实内容的多条活跃陈述，保留最早、其余应归档。
+  // contextKey/recordKind 省略时扫描该 scope 下全部值。
   findDuplicateActiveStatements(
-    scopeId?: string | undefined
+    scopeId?: string | undefined,
+    contextKey?: string | undefined,
+    recordKind?: RecordKind | undefined
   ): Promise<DuplicateStatementRef[]>;
   // —— 记忆层浏览读侧（Phase 5：供 GET /api/memory/* 渲染 UI）——
   // 列出实体（按显著性降序），供图谱与实体面板。
@@ -259,9 +277,17 @@ export interface MemoryRepository {
   // 按 id 取单个实体详情。
   getEntityById(entityId: string): Promise<MemoryGraphEntity | null>;
   // 列出活跃边（全图，按 scope），供图谱连线。
-  listActiveEdges(scopeId?: string | undefined): Promise<MemoryGraphEdge[]>;
+  listActiveEdges(
+    scopeId?: string | undefined,
+    contextKey?: string | undefined,
+    recordKind?: RecordKind | undefined
+  ): Promise<MemoryGraphEdge[]>;
   // 列出陈述（可含失效、可按主语过滤、按 created_at 降序），供事实/时间线。
   listStatements(options?: ListStatementsOptions): Promise<MemoryStatement[]>;
   // L2 计数快照（entities/statements/edges 的活跃计数）。
-  countGraph(scopeId?: string | undefined): Promise<MemoryGraphCounts>;
+  countGraph(
+    scopeId?: string | undefined,
+    contextKey?: string | undefined,
+    recordKind?: RecordKind | undefined
+  ): Promise<MemoryGraphCounts>;
 }

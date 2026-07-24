@@ -9,6 +9,10 @@ import type { BlobStore } from "@/core/blob/ports";
 import { createLogger } from "@/core/logging/logger";
 import { AGENT_SCOPE } from "@/core/memory/scope";
 import type { JobQueue } from "@/core/queue/ports";
+import {
+  type ContextKey,
+  MEMORY_RECORD_KIND,
+} from "@/core/records/classification";
 import type { VectorStore } from "@/core/vector/ports";
 import type { WebPageFetcher } from "@/core/web/ports";
 import type { WorkflowRepository } from "@/core/workflows/ports";
@@ -608,12 +612,15 @@ export const createIngestService = (
         content: string;
         title?: string | undefined;
         visibility?: AssetAiVisibility | undefined;
+        contextKey?: ContextKey | undefined;
       }
     ): Promise<AssetDetail> {
       return service.ingestTextAsset(bindings, {
         title: input.title,
         content: input.content,
         sourceKind: "mcp",
+        recordKind: MEMORY_RECORD_KIND,
+        ...(input.contextKey ? { contextKey: input.contextKey } : {}),
         // exactOptionalPropertyTypes：仅在显式 pin 时带 aiVisibility，不传 undefined。
         ...(input.visibility ? { aiVisibility: input.visibility } : {}),
       });
@@ -626,13 +633,16 @@ export const createIngestService = (
       input: {
         content: string;
         title?: string | undefined;
+        contextKey?: ContextKey | undefined;
       }
     ): Promise<AssetDetail> {
       return service.ingestTextAsset(bindings, {
         title: input.title,
         content: input.content,
         sourceKind: "mcp",
+        recordKind: MEMORY_RECORD_KIND,
         scopeId: AGENT_SCOPE,
+        ...(input.contextKey ? { contextKey: input.contextKey } : {}),
       });
     },
   };

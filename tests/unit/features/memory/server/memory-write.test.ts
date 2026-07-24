@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import type {
   AddProvenanceInput,
   CreateEdgeInput,
-  CreateEpisodeInput,
   CreateStatementInput,
   DuplicateStatementRef,
   EntityVectorRef,
@@ -42,13 +41,6 @@ class FakeMemoryRepository implements MemoryRepository {
   public readonly vectorUpdates = new Map<string, string>();
   private seq = 0;
 
-  public async createEpisode(
-    _input: CreateEpisodeInput
-  ): Promise<{ id: string }> {
-    this.seq += 1;
-    return { id: `ep${this.seq}` };
-  }
-
   public async getEntityByVectorId(
     _vectorId: string
   ): Promise<MemoryEntity | null> {
@@ -66,7 +58,8 @@ class FakeMemoryRepository implements MemoryRepository {
     input: UpsertEntityInput
   ): Promise<MemoryEntity> {
     const scopeId = input.scopeId ?? "default";
-    const key = `${scopeId}:${input.normalizedName}`;
+    const contextKey = input.contextKey ?? "global";
+    const key = `${scopeId}:${contextKey}:${input.normalizedName}`;
     const found = this.entities.get(key);
 
     if (found) {
@@ -78,6 +71,7 @@ class FakeMemoryRepository implements MemoryRepository {
     const entity: MemoryEntity = {
       id: `en${this.seq}`,
       scopeId,
+      contextKey,
       canonicalName: input.canonicalName,
       normalizedName: input.normalizedName,
       type: input.type ?? null,
@@ -97,6 +91,8 @@ class FakeMemoryRepository implements MemoryRepository {
     this.statementRecords.set(id, {
       id,
       scopeId: input.scopeId ?? "default",
+      contextKey: input.contextKey ?? "global",
+      recordKind: input.recordKind ?? "library",
       subjectEntityId: input.subjectEntityId,
       predicate: input.predicate,
       objectEntityId: input.objectEntityId ?? null,
@@ -234,7 +230,6 @@ class FakeMemoryRepository implements MemoryRepository {
       .map((entry) => ({
         memoryId: entry.memoryId,
         assetId: entry.assetId ?? null,
-        episodeId: entry.episodeId ?? null,
         chunkIndex: entry.chunkIndex ?? null,
       }));
   }
@@ -261,6 +256,8 @@ class FakeMemoryRepository implements MemoryRepository {
       .map((edge) => ({
         id: edge.id,
         scopeId: edge.scopeId ?? "default",
+        contextKey: edge.contextKey ?? "global",
+        recordKind: edge.recordKind ?? "library",
         srcEntityId: edge.srcEntityId,
         dstEntityId: edge.dstEntityId,
         relation: edge.relation,
@@ -651,10 +648,10 @@ describe("writeGraphToMemory reconciliation", () => {
     expect(active).toHaveLength(1);
     expect(expired).toHaveLength(1);
     expect(active[0]?.dstEntityId).toBe(
-      repo.entities.get("default:los angeles")?.id
+      repo.entities.get("default:global:los angeles")?.id
     );
     expect(expired[0]?.dstEntityId).toBe(
-      repo.entities.get("default:new york")?.id
+      repo.entities.get("default:global:new york")?.id
     );
   });
 

@@ -2,6 +2,8 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 import { assets } from "./assets";
 
+const recordKindValues = ["library", "memory"] as const;
+
 // 这里记录正文切块后的检索单元元数据，为后续向量检索和问答召回做准备。
 export const assetChunks = sqliteTable(
   "asset_chunks",
@@ -12,6 +14,11 @@ export const assetChunks = sqliteTable(
       .references(() => assets.id, {
         onDelete: "cascade",
       }),
+    recordKind: text("record_kind", { enum: recordKindValues })
+      .notNull()
+      .default("library"),
+    scopeId: text("scope_id").notNull().default("personal"),
+    contextKey: text("context_key").notNull().default("global"),
     chunkIndex: integer("chunk_index").notNull(),
     textPreview: text("text_preview").notNull(),
     contentText: text("content_text").notNull().default(""),
@@ -25,6 +32,11 @@ export const assetChunks = sqliteTable(
   },
   (table) => [
     index("asset_chunks_asset_id_idx").on(table.assetId),
+    index("asset_chunks_record_scope_context_idx").on(
+      table.recordKind,
+      table.scopeId,
+      table.contextKey
+    ),
     index("asset_chunks_asset_id_chunk_index_idx").on(
       table.assetId,
       table.chunkIndex

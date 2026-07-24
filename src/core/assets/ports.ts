@@ -1,4 +1,5 @@
 import type { MemoryScope } from "@/core/memory/scope";
+import type { ContextKey, RecordKind } from "@/core/records/classification";
 import type {
   AssetAiVisibility,
   AssetChunkMatch,
@@ -21,12 +22,15 @@ export interface CreateTextAssetInput {
   aiVisibility?: AssetAiVisibility | undefined;
   // 写入归属 scope：personal=用户显式记忆（默认）、agent=AI 自动沉淀（remember_agent）。
   scopeId?: MemoryScope | undefined;
+  recordKind?: RecordKind | undefined;
+  contextKey?: ContextKey | undefined;
 }
 
 export interface CreateUrlAssetInput {
   title?: string | undefined;
   url: string;
   sourceKind?: AssetSourceKind | undefined;
+  contextKey?: ContextKey | undefined;
 }
 
 export interface CreateFileAssetInput {
@@ -36,6 +40,7 @@ export interface CreateFileAssetInput {
   fileSize: number;
   mimeType: string;
   rawR2Key: string;
+  contextKey?: ContextKey | undefined;
 }
 
 export interface AssetSearchInput extends AssetSearchFilters {

@@ -1,5 +1,9 @@
 import type { MemoryRepository, MemoryStatement } from "@/core/memory/ports";
 import { DEFAULT_SCOPE } from "@/core/memory/scope";
+import {
+  GLOBAL_CONTEXT_KEY,
+  type RecordKind,
+} from "@/core/records/classification";
 import type { VectorStore } from "@/core/vector/ports";
 
 // 图检索只需要 MemoryRepository 的读侧子集，收窄依赖便于测试注入。
@@ -27,6 +31,8 @@ export interface GraphRecallInput {
   repository: GraphRecallRepository;
   graphVectorStore: VectorStore;
   scopeId?: string | undefined;
+  contextKey?: string | undefined;
+  recordKind?: RecordKind | undefined;
   options?: GraphRecallOptions | undefined;
 }
 
@@ -48,7 +54,14 @@ interface Reach {
 export const recallGraphStatements = async (
   input: GraphRecallInput
 ): Promise<GraphRecallHit[]> => {
-  const { queryVector, repository, graphVectorStore, scopeId } = input;
+  const {
+    queryVector,
+    repository,
+    graphVectorStore,
+    scopeId,
+    contextKey,
+    recordKind,
+  } = input;
   const seedTopK = input.options?.seedTopK ?? 8;
   const maxHops = input.options?.maxHops ?? 2;
   const hopDecay = input.options?.hopDecay ?? 0.6;
@@ -61,10 +74,14 @@ export const recallGraphStatements = async (
   // 1. ANN 种子：query 向量在 graph_entities 找最相似实体向量（按 scope 隔离，
   //    防 agent 种子稀释 personal 召回 / 反之）。
   const seedScope = scopeId ?? DEFAULT_SCOPE;
+  const seedContext = contextKey ?? GLOBAL_CONTEXT_KEY;
   const seedMatches = await graphVectorStore.search({
     values: queryVector,
     topK: seedTopK,
-    filter: { scopeId: { $eq: seedScope } },
+    filter: {
+      scopeId: { $eq: seedScope },
+      contextKey: { $eq: seedContext },
+    },
   });
 
   if (seedMatches.length === 0) {
@@ -76,7 +93,8 @@ export const recallGraphStatements = async (
   );
   const seedRefs = await repository.findEntityIdsByVectorIds(
     seedMatches.map((match) => match.id),
-    seedScope
+    seedScope,
+    seedContext
   );
 
   if (seedRefs.length === 0) {
@@ -101,7 +119,9 @@ export const recallGraphStatements = async (
   for (let hop = 1; hop <= maxHops && frontier.length > 0; hop += 1) {
     const outgoing = await repository.findActiveOutgoingEdges(
       frontier,
-      scopeId
+      seedScope,
+      seedContext,
+      recordKind
     );
     const nextFrontier = new Set<string>();
 
@@ -128,7 +148,9 @@ export const recallGraphStatements = async (
   const reachedEntityIds = [...reached.keys()];
   const statements = await repository.findActiveStatementsBySubjects(
     reachedEntityIds,
-    scopeId
+    seedScope,
+    seedContext,
+    recordKind
   );
 
   if (statements.length === 0) {

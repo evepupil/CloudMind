@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { contextKeySchema, recordKindSchema } from "@/core/records/schemas";
+
 import {
   createdAtFilterInputSchema,
   normalizeDateOnlyFilter,
@@ -28,6 +30,8 @@ const assetSourceKindSchema = z.enum([
 
 const assetSearchFiltersRawSchema = z.object({
   type: assetTypeSchema.optional(),
+  recordKind: recordKindSchema.optional(),
+  contextKey: contextKeySchema.optional(),
   domain: assetDomainSchema.optional(),
   sourceKind: assetSourceKindSchema.optional(),
   timezoneOffsetMinutes: timezoneOffsetMinutesSchema,

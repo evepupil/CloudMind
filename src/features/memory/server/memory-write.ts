@@ -1,12 +1,18 @@
 import type { MemoryRepository, MemoryStatement } from "@/core/memory/ports";
+import {
+  GLOBAL_CONTEXT_KEY,
+  LIBRARY_RECORD_KIND,
+  type RecordKind,
+} from "@/core/records/classification";
 
 import { type ExtractedGraph, normalizeEntityName } from "./graph-extraction";
 import type { ReconcileDecision, ReconcileJudge } from "./memory-reconcile";
 
 export interface MemoryWriteTarget {
   scopeId?: string | undefined;
+  contextKey?: string | undefined;
+  recordKind?: RecordKind | undefined;
   assetId: string;
-  episodeId?: string | null | undefined;
   chunkIndex?: number | null | undefined;
 }
 
@@ -44,6 +50,8 @@ export const writeGraphToMemory = async (
   const embedDeduplicate = options?.embedDeduplicate;
   const reconcile = options?.reconcile;
   const scopeId = target.scopeId;
+  const contextKey = target.contextKey ?? GLOBAL_CONTEXT_KEY;
+  const recordKind = target.recordKind ?? LIBRARY_RECORD_KIND;
   const entityIdByNormalized = new Map<string, string>();
   // 优先采用 entities 列表里声明的 type；statement 里出现的实体若未声明则 type 为空。
   const typeByNormalized = new Map<string, string | null>();
@@ -73,6 +81,7 @@ export const writeGraphToMemory = async (
     // 2. 仓储级精确归一化名匹配
     const entity = await memoryRepository.upsertEntityByNormalizedName({
       scopeId,
+      contextKey,
       canonicalName: rawName.trim(),
       normalizedName: normalized,
       type: typeByNormalized.get(normalized) ?? null,
@@ -117,6 +126,8 @@ export const writeGraphToMemory = async (
 
     await memoryRepository.invalidateActiveEdges({
       scopeId,
+      contextKey,
+      recordKind,
       srcEntityId: target.subjectEntityId,
       dstEntityId: target.objectEntityId,
       relation: target.predicate,
@@ -142,7 +153,9 @@ export const writeGraphToMemory = async (
     if (reconcile) {
       candidates = await memoryRepository.findActiveStatementsBySubject(
         subjectId,
-        scopeId
+        scopeId,
+        contextKey,
+        recordKind
       );
 
       if (candidates.length > 0) {
@@ -177,6 +190,8 @@ export const writeGraphToMemory = async (
 
     const created = await memoryRepository.createStatement({
       scopeId,
+      contextKey,
+      recordKind,
       subjectEntityId: subjectId,
       predicate: statement.predicate,
       objectEntityId,
@@ -189,9 +204,10 @@ export const writeGraphToMemory = async (
 
     await memoryRepository.addProvenance({
       scopeId,
+      contextKey,
+      recordKind,
       memoryType: "statement",
       memoryId: created.id,
-      episodeId: target.episodeId ?? null,
       assetId: target.assetId,
       chunkIndex: target.chunkIndex ?? null,
     });
@@ -200,6 +216,8 @@ export const writeGraphToMemory = async (
     if (objectEntityId) {
       const edge = await memoryRepository.createEdge({
         scopeId,
+        contextKey,
+        recordKind,
         srcEntityId: subjectId,
         dstEntityId: objectEntityId,
         relation: statement.predicate,
@@ -209,9 +227,10 @@ export const writeGraphToMemory = async (
 
       await memoryRepository.addProvenance({
         scopeId,
+        contextKey,
+        recordKind,
         memoryType: "edge",
         memoryId: edge.id,
-        episodeId: target.episodeId ?? null,
         assetId: target.assetId,
         chunkIndex: target.chunkIndex ?? null,
       });

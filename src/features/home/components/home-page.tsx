@@ -125,7 +125,7 @@ export const HomePage = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
         <Metric
           label="资产"
           value={String(totalAssets)}
-          note="L1 事实 / 情节"
+          note="L1 来源 / 快照"
         />
         <Metric
           label="处理中"

@@ -478,21 +478,13 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
       };
     }
 
-    // 写一条 ingest 情节，让 provenance 既能指回 asset/chunk，也能指回 L1 episode。
-    const episode = await memoryRepository.createEpisode({
-      kind: "ingest",
-      assetId: context.asset.id,
-      // scope 跟随写入 asset（与 chunk 向量 metadata 一致），不依赖仓储默认值，
-      // 防二期 agent scope 资产经同一流水线时其图谱被误写进 personal。
-      scopeId: context.asset.scopeId,
-    });
-
     const result = await writeGraphToMemory(
       memoryRepository,
       {
         assetId: context.asset.id,
-        episodeId: episode.id,
+        recordKind: context.asset.recordKind,
         scopeId: context.asset.scopeId,
+        contextKey: context.asset.contextKey,
       },
       graph,
       {
@@ -516,8 +508,11 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
                 const matches = await graphVectorStore.search({
                   values,
                   topK: 1,
-                  // scope 隔离：只在同 scope 内找近邻，防 agent/personal 同名实体合并。
-                  filter: { scopeId: { $eq: context.asset.scopeId } },
+                  // 实体只在同一记忆域和项目中消歧，避免同名里程碑跨项目合并。
+                  filter: {
+                    scopeId: { $eq: context.asset.scopeId },
+                    contextKey: { $eq: context.asset.contextKey },
+                  },
                 });
                 const bestMatch = matches[0];
 
@@ -529,7 +524,8 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
                 ) {
                   const existing = await memoryRepository.getEntityByVectorId(
                     bestMatch.id,
-                    context.asset.scopeId
+                    context.asset.scopeId,
+                    context.asset.contextKey
                   );
 
                   if (existing) {
@@ -541,6 +537,7 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
                         metadataJson: JSON.stringify({
                           canonicalName: name,
                           scopeId: context.asset.scopeId,
+                          contextKey: context.asset.contextKey,
                         }),
                       },
                     ]);
@@ -561,6 +558,7 @@ export const createExtractEntitiesStep = (): WorkflowStepDefinition => ({
                     metadataJson: JSON.stringify({
                       canonicalName: name,
                       scopeId: context.asset.scopeId,
+                      contextKey: context.asset.contextKey,
                     }),
                   },
                 ]);

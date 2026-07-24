@@ -13,6 +13,7 @@ export const entities = sqliteTable(
   {
     id: text("id").primaryKey(),
     scopeId: text("scope_id").notNull().default("default"),
+    contextKey: text("context_key").notNull().default("global"),
     canonicalName: text("canonical_name").notNull(),
     // 归一化名（小写/去标点/折叠空白）用于消歧匹配。
     normalizedName: text("normalized_name").notNull(),
@@ -30,11 +31,13 @@ export const entities = sqliteTable(
   },
   (table) => [
     index("entities_scope_id_idx").on(table.scopeId),
+    index("entities_context_key_idx").on(table.contextKey),
     index("entities_normalized_name_idx").on(table.normalizedName),
     index("entities_type_idx").on(table.type),
     index("entities_embedding_vector_id_idx").on(table.embeddingVectorId),
     index("entities_scope_normalized_idx").on(
       table.scopeId,
+      table.contextKey,
       table.normalizedName
     ),
     index("entities_salience_idx").on(table.salience),

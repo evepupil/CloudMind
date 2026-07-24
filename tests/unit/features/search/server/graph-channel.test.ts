@@ -23,6 +23,8 @@ const graphStatement = (
 ): MemoryStatement => ({
   id,
   scopeId: "default",
+  contextKey: "global",
+  recordKind: "library",
   subjectEntityId,
   predicate: "based in",
   objectEntityId: null,
@@ -53,7 +55,9 @@ const graphAsset = (
   domain: "engineering",
   aiVisibility,
   retrievalPriority: 0,
+  recordKind: "library" as const,
   scopeId: "personal",
+  contextKey: "global",
   sourceHost: null,
   collectionKey: "inbox:notes",
   capturedAt: "2026-03-19T00:00:00.000Z",
@@ -109,7 +113,6 @@ const graphMemoryRepository = (): MemoryRepository =>
             {
               memoryId: "s1",
               assetId: "asset-graph-1",
-              episodeId: null,
               chunkIndex: null,
             },
           ]

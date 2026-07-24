@@ -20,6 +20,7 @@ const assetDomainValues = [
   "general",
 ] as const;
 const assetAiVisibilityValues = ["allow", "summary_only", "deny"] as const;
+const recordKindValues = ["library", "memory"] as const;
 
 // 这里定义 D1 的资产主表，并补充目录层与 AI 访问策略字段。
 export const assets = sqliteTable(
@@ -39,8 +40,12 @@ export const assets = sqliteTable(
       .notNull()
       .default("allow"),
     retrievalPriority: integer("retrieval_priority").notNull().default(0),
-    // scope 隔离：personal=用户显式记忆（默认）、agent=agent 自动记忆（一期只用 personal）。
+    recordKind: text("record_kind", { enum: recordKindValues })
+      .notNull()
+      .default("library"),
+    // scope 隔离：personal=用户显式记忆（默认）、agent=Agent 主动沉淀的工作记忆。
     scopeId: text("scope_id").notNull().default("personal"),
+    contextKey: text("context_key").notNull().default("global"),
     sourceHost: text("source_host"),
     collectionKey: text("collection_key"),
     capturedAt: text("captured_at"),
@@ -68,6 +73,13 @@ export const assets = sqliteTable(
     index("assets_source_url_idx").on(table.sourceUrl),
     index("assets_deleted_at_idx").on(table.deletedAt),
     index("assets_scope_id_idx").on(table.scopeId),
+    index("assets_record_kind_idx").on(table.recordKind),
+    index("assets_context_key_idx").on(table.contextKey),
+    index("assets_record_scope_context_idx").on(
+      table.recordKind,
+      table.scopeId,
+      table.contextKey
+    ),
     index("assets_domain_status_deleted_at_idx").on(
       table.domain,
       table.status,

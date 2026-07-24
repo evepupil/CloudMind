@@ -16,26 +16,34 @@ const edge = (
   id: string,
   srcEntityId: string,
   dstEntityId: string,
-  relation: string
+  relation: string,
+  overrides: Partial<
+    Pick<MemoryEdge, "scopeId" | "contextKey" | "recordKind">
+  > = {}
 ): MemoryEdge => ({
   id,
   scopeId: "default",
+  contextKey: "global",
+  recordKind: "library",
   srcEntityId,
   dstEntityId,
   relation,
+  ...overrides,
 });
 
 // 预置「检测结果」的 stub，专门隔离 runMemoryRepair 的编排逻辑（去重端点 / 失效调用 / 计数）。
 class RepairStub implements RepairRepository {
   public readonly invalidatedEdges: InvalidateEdgesInput[] = [];
   public readonly invalidatedStatements: InvalidateStatementInput[] = [];
+  public readonly queriedScopes: Array<string | undefined> = [];
 
   public constructor(
     private readonly drifted: MemoryEdge[],
     private readonly duplicates: DuplicateStatementRef[]
   ) {}
 
-  public async findDriftedEdges(): Promise<MemoryEdge[]> {
+  public async findDriftedEdges(scopeId?: string): Promise<MemoryEdge[]> {
+    this.queriedScopes.push(scopeId);
     return this.drifted;
   }
 
@@ -76,18 +84,65 @@ describe("runMemoryRepair", () => {
     expect(repo.invalidatedEdges).toHaveLength(2);
     expect(repo.invalidatedEdges).toEqual([
       {
-        scopeId: undefined,
+        scopeId: "default",
+        contextKey: "global",
+        recordKind: "library",
         srcEntityId: "alice",
         dstEntityId: "ny",
         relation: "lives in",
       },
       {
-        scopeId: undefined,
+        scopeId: "default",
+        contextKey: "global",
+        recordKind: "library",
         srcEntityId: "bob",
         dstEntityId: "paris",
         relation: "lives in",
       },
     ]);
+  });
+
+  it("keeps identical endpoints isolated by scope, context, and record kind", async () => {
+    const repo = new RepairStub(
+      [
+        edge("e1", "milestone", "m1", "tracks", {
+          scopeId: "personal",
+          contextKey: "project:github:team/alpha",
+          recordKind: "memory",
+        }),
+        edge("e2", "milestone", "m1", "tracks", {
+          scopeId: "personal",
+          contextKey: "project:github:team/beta",
+          recordKind: "memory",
+        }),
+        edge("e3", "milestone", "m1", "tracks", {
+          scopeId: "personal",
+          contextKey: "project:github:team/alpha",
+          recordKind: "library",
+        }),
+      ],
+      []
+    );
+
+    await runMemoryRepair(repo, "personal");
+
+    expect(repo.invalidatedEdges).toHaveLength(3);
+    expect(repo.invalidatedEdges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contextKey: "project:github:team/alpha",
+          recordKind: "memory",
+        }),
+        expect.objectContaining({
+          contextKey: "project:github:team/beta",
+          recordKind: "memory",
+        }),
+        expect.objectContaining({
+          contextKey: "project:github:team/alpha",
+          recordKind: "library",
+        }),
+      ])
+    );
   });
 
   it("archives each duplicate statement superseded by its retain target", async () => {
@@ -123,11 +178,12 @@ describe("runMemoryRepair", () => {
 });
 
 describe("runSleepTimeMaintenance", () => {
-  it("wraps the repair report", async () => {
+  it("repairs personal and agent scopes and merges the report", async () => {
     const repo = new RepairStub([edge("e1", "a", "b", "r")], []);
 
     const report = await runSleepTimeMaintenance(repo);
 
-    expect(report.repair.driftedEdgesRepaired).toBe(1);
+    expect(report.repair.driftedEdgesRepaired).toBe(2);
+    expect(repo.queriedScopes).toEqual(["personal", "agent"]);
   });
 });

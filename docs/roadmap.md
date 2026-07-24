@@ -47,21 +47,23 @@ reranker 和 MMR 输出分组证据；问答复用同一证据链并允许模型
 
 L2 entities、statements、edges、provenance、communities 已落库。写路径包含实体抽取、
 scope 内消歧和 ADD/UPDATE/DELETE/NOOP 调和；读路径包含图增强召回，定时任务负责
-漂移边和重复数据修复。当前 provenance 同时指向 asset 和冗余 ingest episode；M3
-第一阶段会移除 episode 中间层，保留直指 asset/chunk 的证据链。
+漂移边和重复数据修复。provenance 已直指 asset/chunk，episode 中间层已移除；实体
+消歧、调和、图召回和定时修复均按 scope 与项目上下文隔离。
 
 完成依据：`c1cc22b`、`ab694d8`、`fc87c6f`、`5ae90ae` 及对应单元测试。
 
 ## M3 Agent 记忆面
 
 当前已提供 `remember`、`recall`、`remember_agent`、`recall_agent`，并完成
-personal/agent scope 的写入、检索和实体向量隔离。`remember_agent` 是客户端显式
-写入高密度工作记忆的工具；CloudMind 默认不保存外部 AI 的完整会话原文。
+personal/agent scope 的写入、检索和实体向量隔离。M3-A0 已移除 episode，并让
+`recordKind=library|memory`、`scopeId=personal|agent`、
+`contextKey=global|project:<key>` 贯穿资产、chunk、向量 metadata 和 L2 图谱。
+`remember_agent` 是客户端显式写入高密度工作记忆的工具；CloudMind 默认不保存
+外部 AI 的完整会话原文。
 
-剩余工作：移除 episode 模型；落地 `recordKind=library|memory`、
-`scopeId=personal|agent`、`contextKey=global|project:<key>` 三个独立维度；整理 MCP
-工具并提供专用更新/遗忘；补齐 Agent Web 管理和组合过滤验收。用户如需归档完整
-会话，显式保存为 library 资产。通用资产 CRUD 不计作记忆生命周期能力。
+剩余工作：M3-A1 整理 MCP 工具并提供三维数组过滤；M3-A2 提供专用更新/遗忘；
+M3-A3 补齐 Agent Web 管理和组合过滤验收。用户如需归档完整会话，显式保存为
+library 资产。通用资产 CRUD 不计作记忆生命周期能力。
 
 ## M4 Web 访问与管理
 
@@ -98,8 +100,8 @@ Library、Asset Detail、Capture、Ask、Search、记忆图谱、时间线、整
 
 ## 当前推进顺序
 
-1. M3：先移除 episode 并落地三维记录模型，再完成 MCP 整理、专用更新/遗忘、
-   Agent Web 管理和项目隔离验证。
+1. M3：三维记录模型已落地；继续完成 MCP 组合过滤、专用更新/遗忘、Agent Web
+   管理和项目隔离验收。
 2. M6 阶段 B：完成完整导出、导入、重建和恢复演练。
 3. M5：按 eval 样本推进相对时间、评价、聚合、强化和关联能力。
 4. M7 发布收尾：建立版本、迁移、部署、回滚和生产验收流程。

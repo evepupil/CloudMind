@@ -35,10 +35,10 @@ CloudMind 的目标是做一个**真正的、完备的 AI 记忆层**，能力�
 
 | 轴 | 已实现 | M3 仍需完成 |
 |---|---|---|
-| 写入模型 | `remember`、`remember_agent` 可进入统一处理和 L2 调和 | 三维字段贯穿写入；专用 `update_memory`、`forget` |
-| 记忆单元 | chunks、entities、statements、edges、provenance 已落库 | 区分 library/memory；移除冗余 episode；版本化更新 |
+| 写入模型 | `remember`、`remember_agent` 可进入统一处理和 L2 调和，三维字段已贯穿 | 专用 `update_memory`、`forget` |
+| 记忆单元 | chunks、entities、statements、edges、provenance 已落库，episode 已移除 | 版本化更新与恢复 |
 | 时间维度 | 日期范围、recency、显著性衰减和双时间事实 | 记忆版本历史、软删除/恢复；相对时间归 M5 |
-| 结构 | 实体抽取、关系边、调和和图召回已接通 | 增加 `contextKey`，按记忆域和项目共同隔离 |
+| 结构 | 实体抽取、关系边、调和和图召回已接通，并按记忆域和项目共同隔离 | 三维数组组合过滤与 Web 项目视图 |
 | 反馈 | 排序已读取 importance、age、accessCount | 接通专用强化与访问回写；`reinforce` 归 M5 |
 
 ### 已完成的检索地基

@@ -88,6 +88,8 @@ export const getConsolidationView = async (
     driftedEdges: drifted.map((edge) => ({
       id: edge.id,
       scopeId: edge.scopeId,
+      contextKey: edge.contextKey,
+      recordKind: edge.recordKind,
       srcEntityId: edge.srcEntityId,
       dstEntityId: edge.dstEntityId,
       relation: edge.relation,

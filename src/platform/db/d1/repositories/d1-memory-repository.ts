@@ -12,7 +12,6 @@ import {
 import type {
   AddProvenanceInput,
   CreateEdgeInput,
-  CreateEpisodeInput,
   CreateStatementInput,
   DuplicateStatementRef,
   EntityVectorRef,
@@ -32,11 +31,15 @@ import type {
   UpsertEntityInput,
 } from "@/core/memory/ports";
 import { DEFAULT_SCOPE } from "@/core/memory/scope";
+import {
+  LIBRARY_RECORD_KIND,
+  normalizeContextKey,
+  type RecordKind,
+} from "@/core/records/classification";
 import { createDb } from "@/platform/db/d1/client";
 import {
   edges,
   entities,
-  episodes,
   provenance,
   statements,
 } from "@/platform/db/d1/schema";
@@ -47,6 +50,8 @@ type StatementRow = typeof statements.$inferSelect;
 const mapStatement = (row: StatementRow): MemoryStatement => ({
   id: row.id,
   scopeId: row.scopeId,
+  contextKey: row.contextKey,
+  recordKind: row.recordKind,
   subjectEntityId: row.subjectEntityId,
   predicate: row.predicate,
   objectEntityId: row.objectEntityId,
@@ -71,32 +76,11 @@ export class D1MemoryRepository implements MemoryRepository {
     this.db = createDb(database);
   }
 
-  public async createEpisode(
-    input: CreateEpisodeInput
-  ): Promise<{ id: string }> {
-    const id = crypto.randomUUID();
-    const now = new Date().toISOString();
-
-    await this.db.insert(episodes).values({
-      id,
-      scopeId: input.scopeId ?? DEFAULT_SCOPE,
-      kind: input.kind,
-      assetId: input.assetId ?? null,
-      rawText: input.rawText ?? null,
-      rawR2Key: input.rawR2Key ?? null,
-      actor: input.actor ?? null,
-      occurredAt: input.occurredAt ?? null,
-      recordedAt: input.recordedAt ?? now,
-      createdAt: now,
-    });
-
-    return { id };
-  }
-
   public async upsertEntityByNormalizedName(
     input: UpsertEntityInput
   ): Promise<MemoryEntity> {
     const scopeId = input.scopeId ?? DEFAULT_SCOPE;
+    const contextKey = normalizeContextKey(input.contextKey);
     const now = input.seenAt ?? new Date().toISOString();
 
     const existing = await this.db
@@ -105,6 +89,7 @@ export class D1MemoryRepository implements MemoryRepository {
       .where(
         and(
           eq(entities.scopeId, scopeId),
+          eq(entities.contextKey, contextKey),
           eq(entities.normalizedName, input.normalizedName)
         )
       )
@@ -131,6 +116,7 @@ export class D1MemoryRepository implements MemoryRepository {
       return {
         id: found.id,
         scopeId,
+        contextKey,
         canonicalName: found.canonicalName,
         normalizedName: found.normalizedName,
         type: found.type,
@@ -143,6 +129,7 @@ export class D1MemoryRepository implements MemoryRepository {
     await this.db.insert(entities).values({
       id,
       scopeId,
+      contextKey,
       canonicalName: input.canonicalName,
       normalizedName: input.normalizedName,
       type: input.type ?? null,
@@ -159,6 +146,7 @@ export class D1MemoryRepository implements MemoryRepository {
     return {
       id,
       scopeId,
+      contextKey,
       canonicalName: input.canonicalName,
       normalizedName: input.normalizedName,
       type: input.type ?? null,
@@ -175,6 +163,8 @@ export class D1MemoryRepository implements MemoryRepository {
     await this.db.insert(statements).values({
       id,
       scopeId: input.scopeId ?? DEFAULT_SCOPE,
+      contextKey: normalizeContextKey(input.contextKey),
+      recordKind: input.recordKind ?? LIBRARY_RECORD_KIND,
       subjectEntityId: input.subjectEntityId,
       predicate: input.predicate,
       objectEntityId: input.objectEntityId ?? null,
@@ -203,6 +193,8 @@ export class D1MemoryRepository implements MemoryRepository {
     await this.db.insert(edges).values({
       id,
       scopeId: input.scopeId ?? DEFAULT_SCOPE,
+      contextKey: normalizeContextKey(input.contextKey),
+      recordKind: input.recordKind ?? LIBRARY_RECORD_KIND,
       srcEntityId: input.srcEntityId,
       dstEntityId: input.dstEntityId,
       relation: input.relation,
@@ -225,9 +217,10 @@ export class D1MemoryRepository implements MemoryRepository {
     await this.db.insert(provenance).values({
       id,
       scopeId: input.scopeId ?? DEFAULT_SCOPE,
+      contextKey: normalizeContextKey(input.contextKey),
+      recordKind: input.recordKind ?? LIBRARY_RECORD_KIND,
       memoryType: input.memoryType,
       memoryId: input.memoryId,
-      episodeId: input.episodeId ?? null,
       assetId: input.assetId ?? null,
       chunkIndex: input.chunkIndex ?? null,
       span: input.span ?? null,
@@ -237,16 +230,19 @@ export class D1MemoryRepository implements MemoryRepository {
 
   public async getEntityByVectorId(
     vectorId: string,
-    scopeId?: string
+    scopeId?: string,
+    contextKey?: string
   ): Promise<MemoryEntity | null> {
     const scope = scopeId ?? DEFAULT_SCOPE;
+    const context = normalizeContextKey(contextKey);
     const rows = await this.db
       .select()
       .from(entities)
       .where(
         and(
           eq(entities.embeddingVectorId, vectorId),
-          eq(entities.scopeId, scope)
+          eq(entities.scopeId, scope),
+          eq(entities.contextKey, context)
         )
       )
       .limit(1);
@@ -259,6 +255,7 @@ export class D1MemoryRepository implements MemoryRepository {
     return {
       id: found.id,
       scopeId: found.scopeId,
+      contextKey: found.contextKey,
       canonicalName: found.canonicalName,
       normalizedName: found.normalizedName,
       type: found.type,
@@ -280,9 +277,12 @@ export class D1MemoryRepository implements MemoryRepository {
 
   public async findActiveStatementsBySubject(
     subjectEntityId: string,
-    scopeId?: string | undefined
+    scopeId?: string | undefined,
+    contextKey?: string | undefined,
+    recordKind?: RecordKind | undefined
   ): Promise<MemoryStatement[]> {
     const scope = scopeId ?? DEFAULT_SCOPE;
+    const context = normalizeContextKey(contextKey);
 
     const rows = await this.db
       .select()
@@ -290,6 +290,8 @@ export class D1MemoryRepository implements MemoryRepository {
       .where(
         and(
           eq(statements.scopeId, scope),
+          eq(statements.contextKey, context),
+          recordKind ? eq(statements.recordKind, recordKind) : undefined,
           eq(statements.subjectEntityId, subjectEntityId),
           // expired_at 空 = 系统仍相信该事实（双时间录入区间未关闭）。
           isNull(statements.expiredAt)
@@ -339,6 +341,8 @@ export class D1MemoryRepository implements MemoryRepository {
       .where(
         and(
           eq(edges.scopeId, input.scopeId ?? DEFAULT_SCOPE),
+          eq(edges.contextKey, normalizeContextKey(input.contextKey)),
+          input.recordKind ? eq(edges.recordKind, input.recordKind) : undefined,
           eq(edges.srcEntityId, input.srcEntityId),
           eq(edges.dstEntityId, input.dstEntityId),
           eq(edges.relation, input.relation),
@@ -366,13 +370,15 @@ export class D1MemoryRepository implements MemoryRepository {
 
   public async findEntityIdsByVectorIds(
     vectorIds: string[],
-    scopeId?: string
+    scopeId?: string,
+    contextKey?: string
   ): Promise<EntityVectorRef[]> {
     if (vectorIds.length === 0) {
       return [];
     }
 
     const scope = scopeId ?? DEFAULT_SCOPE;
+    const context = normalizeContextKey(contextKey);
     const rows = await this.db
       .select({
         id: entities.id,
@@ -383,7 +389,8 @@ export class D1MemoryRepository implements MemoryRepository {
         and(
           inArray(entities.embeddingVectorId, vectorIds),
           isNotNull(entities.embeddingVectorId),
-          eq(entities.scopeId, scope)
+          eq(entities.scopeId, scope),
+          eq(entities.contextKey, context)
         )
       );
 
@@ -394,18 +401,23 @@ export class D1MemoryRepository implements MemoryRepository {
 
   public async findActiveOutgoingEdges(
     srcEntityIds: string[],
-    scopeId?: string | undefined
+    scopeId?: string | undefined,
+    contextKey?: string | undefined,
+    recordKind?: RecordKind | undefined
   ): Promise<MemoryEdge[]> {
     if (srcEntityIds.length === 0) {
       return [];
     }
 
     const scope = scopeId ?? DEFAULT_SCOPE;
+    const context = normalizeContextKey(contextKey);
 
     const rows = await this.db
       .select({
         id: edges.id,
         scopeId: edges.scopeId,
+        contextKey: edges.contextKey,
+        recordKind: edges.recordKind,
         srcEntityId: edges.srcEntityId,
         dstEntityId: edges.dstEntityId,
         relation: edges.relation,
@@ -414,6 +426,8 @@ export class D1MemoryRepository implements MemoryRepository {
       .where(
         and(
           eq(edges.scopeId, scope),
+          eq(edges.contextKey, context),
+          recordKind ? eq(edges.recordKind, recordKind) : undefined,
           inArray(edges.srcEntityId, srcEntityIds),
           isNull(edges.expiredAt)
         )
@@ -424,13 +438,16 @@ export class D1MemoryRepository implements MemoryRepository {
 
   public async findActiveStatementsBySubjects(
     subjectEntityIds: string[],
-    scopeId?: string | undefined
+    scopeId?: string | undefined,
+    contextKey?: string | undefined,
+    recordKind?: RecordKind | undefined
   ): Promise<MemoryStatement[]> {
     if (subjectEntityIds.length === 0) {
       return [];
     }
 
     const scope = scopeId ?? DEFAULT_SCOPE;
+    const context = normalizeContextKey(contextKey);
 
     const rows = await this.db
       .select()
@@ -438,6 +455,8 @@ export class D1MemoryRepository implements MemoryRepository {
       .where(
         and(
           eq(statements.scopeId, scope),
+          eq(statements.contextKey, context),
+          recordKind ? eq(statements.recordKind, recordKind) : undefined,
           inArray(statements.subjectEntityId, subjectEntityIds),
           isNull(statements.expiredAt)
         )
@@ -459,7 +478,6 @@ export class D1MemoryRepository implements MemoryRepository {
       .select({
         memoryId: provenance.memoryId,
         assetId: provenance.assetId,
-        episodeId: provenance.episodeId,
         chunkIndex: provenance.chunkIndex,
       })
       .from(provenance)
@@ -473,7 +491,11 @@ export class D1MemoryRepository implements MemoryRepository {
     return rows;
   }
 
-  public async findDriftedEdges(scopeId?: string): Promise<MemoryEdge[]> {
+  public async findDriftedEdges(
+    scopeId?: string,
+    contextKey?: string,
+    recordKind?: RecordKind
+  ): Promise<MemoryEdge[]> {
     const scope = scopeId ?? DEFAULT_SCOPE;
 
     // 活跃边但无任一活跃 statement 与其端点 (scope,src=subject,relation=predicate,dst=object) 对应。
@@ -482,6 +504,8 @@ export class D1MemoryRepository implements MemoryRepository {
       .select({
         id: edges.id,
         scopeId: edges.scopeId,
+        contextKey: edges.contextKey,
+        recordKind: edges.recordKind,
         srcEntityId: edges.srcEntityId,
         dstEntityId: edges.dstEntityId,
         relation: edges.relation,
@@ -490,8 +514,12 @@ export class D1MemoryRepository implements MemoryRepository {
       .where(
         and(
           eq(edges.scopeId, scope),
+          contextKey
+            ? eq(edges.contextKey, normalizeContextKey(contextKey))
+            : undefined,
+          recordKind ? eq(edges.recordKind, recordKind) : undefined,
           isNull(edges.expiredAt),
-          sql`not exists (select 1 from ${statements} where ${statements.scopeId} = ${edges.scopeId} and ${statements.subjectEntityId} = ${edges.srcEntityId} and ${statements.predicate} = ${edges.relation} and ${statements.objectEntityId} = ${edges.dstEntityId} and ${statements.expiredAt} is null)`
+          sql`not exists (select 1 from ${statements} where ${statements.scopeId} = ${edges.scopeId} and ${statements.contextKey} = ${edges.contextKey} and ${statements.recordKind} = ${edges.recordKind} and ${statements.subjectEntityId} = ${edges.srcEntityId} and ${statements.predicate} = ${edges.relation} and ${statements.objectEntityId} = ${edges.dstEntityId} and ${statements.expiredAt} is null)`
         )
       );
 
@@ -499,14 +527,18 @@ export class D1MemoryRepository implements MemoryRepository {
   }
 
   public async findDuplicateActiveStatements(
-    scopeId?: string
+    scopeId?: string,
+    contextKey?: string,
+    recordKind?: RecordKind
   ): Promise<DuplicateStatementRef[]> {
     const scope = scopeId ?? DEFAULT_SCOPE;
 
-    // 取本 scope 所有活跃陈述，在内存里按 (subject,predicate,object) 分组（数据量为个人级，安全）。
+    // 取本 scope 所有活跃陈述，在内存里按项目、记录类型和事实内容分组（数据量为个人级，安全）。
     const rows = await this.db
       .select({
         id: statements.id,
+        contextKey: statements.contextKey,
+        recordKind: statements.recordKind,
         subjectEntityId: statements.subjectEntityId,
         predicate: statements.predicate,
         objectEntityId: statements.objectEntityId,
@@ -514,7 +546,16 @@ export class D1MemoryRepository implements MemoryRepository {
         createdAt: statements.createdAt,
       })
       .from(statements)
-      .where(and(eq(statements.scopeId, scope), isNull(statements.expiredAt)));
+      .where(
+        and(
+          eq(statements.scopeId, scope),
+          contextKey
+            ? eq(statements.contextKey, normalizeContextKey(contextKey))
+            : undefined,
+          recordKind ? eq(statements.recordKind, recordKind) : undefined,
+          isNull(statements.expiredAt)
+        )
+      );
 
     return groupDuplicateStatements(rows);
   }
@@ -523,11 +564,13 @@ export class D1MemoryRepository implements MemoryRepository {
     options?: ListEntitiesOptions
   ): Promise<MemoryGraphEntity[]> {
     const scope = options?.scopeId ?? DEFAULT_SCOPE;
+    const context = normalizeContextKey(options?.contextKey);
 
     const rows = await this.db
       .select({
         id: entities.id,
         scopeId: entities.scopeId,
+        contextKey: entities.contextKey,
         canonicalName: entities.canonicalName,
         type: entities.type,
         salience: entities.salience,
@@ -536,7 +579,7 @@ export class D1MemoryRepository implements MemoryRepository {
         lastSeenAt: entities.lastSeenAt,
       })
       .from(entities)
-      .where(eq(entities.scopeId, scope))
+      .where(and(eq(entities.scopeId, scope), eq(entities.contextKey, context)))
       // 按显著性降序、提及数次之——最重要的实体排在前。
       .orderBy(desc(entities.salience), desc(entities.mentionCount))
       .limit(options?.limit ?? 200)
@@ -552,6 +595,7 @@ export class D1MemoryRepository implements MemoryRepository {
       .select({
         id: entities.id,
         scopeId: entities.scopeId,
+        contextKey: entities.contextKey,
         canonicalName: entities.canonicalName,
         type: entities.type,
         salience: entities.salience,
@@ -567,20 +611,32 @@ export class D1MemoryRepository implements MemoryRepository {
   }
 
   public async listActiveEdges(
-    scopeId?: string | undefined
+    scopeId?: string | undefined,
+    contextKey?: string | undefined,
+    recordKind?: RecordKind | undefined
   ): Promise<MemoryGraphEdge[]> {
     const scope = scopeId ?? DEFAULT_SCOPE;
+    const context = normalizeContextKey(contextKey);
 
     const rows = await this.db
       .select({
         id: edges.id,
         scopeId: edges.scopeId,
+        contextKey: edges.contextKey,
+        recordKind: edges.recordKind,
         srcEntityId: edges.srcEntityId,
         dstEntityId: edges.dstEntityId,
         relation: edges.relation,
       })
       .from(edges)
-      .where(and(eq(edges.scopeId, scope), isNull(edges.expiredAt)));
+      .where(
+        and(
+          eq(edges.scopeId, scope),
+          eq(edges.contextKey, context),
+          recordKind ? eq(edges.recordKind, recordKind) : undefined,
+          isNull(edges.expiredAt)
+        )
+      );
 
     return rows;
   }
@@ -589,7 +645,15 @@ export class D1MemoryRepository implements MemoryRepository {
     options?: ListStatementsOptions
   ): Promise<MemoryStatement[]> {
     const scope = options?.scopeId ?? DEFAULT_SCOPE;
-    const conditions = [eq(statements.scopeId, scope)];
+    const context = normalizeContextKey(options?.contextKey);
+    const conditions = [
+      eq(statements.scopeId, scope),
+      eq(statements.contextKey, context),
+    ];
+
+    if (options?.recordKind) {
+      conditions.push(eq(statements.recordKind, options.recordKind));
+    }
 
     if (options?.subjectEntityId) {
       conditions.push(eq(statements.subjectEntityId, options.subjectEntityId));
@@ -611,26 +675,43 @@ export class D1MemoryRepository implements MemoryRepository {
   }
 
   public async countGraph(
-    scopeId?: string | undefined
+    scopeId?: string | undefined,
+    contextKey?: string | undefined,
+    recordKind?: RecordKind | undefined
   ): Promise<MemoryGraphCounts> {
     const scope = scopeId ?? DEFAULT_SCOPE;
+    const context = normalizeContextKey(contextKey);
 
     // 三表活跃计数并行（statements/edges 仅计未失效）。
     const [entityRows, statementRows, edgeRows] = await Promise.all([
       this.db
         .select({ value: count() })
         .from(entities)
-        .where(eq(entities.scopeId, scope)),
+        .where(
+          and(eq(entities.scopeId, scope), eq(entities.contextKey, context))
+        ),
       this.db
         .select({ value: count() })
         .from(statements)
         .where(
-          and(eq(statements.scopeId, scope), isNull(statements.expiredAt))
+          and(
+            eq(statements.scopeId, scope),
+            eq(statements.contextKey, context),
+            recordKind ? eq(statements.recordKind, recordKind) : undefined,
+            isNull(statements.expiredAt)
+          )
         ),
       this.db
         .select({ value: count() })
         .from(edges)
-        .where(and(eq(edges.scopeId, scope), isNull(edges.expiredAt))),
+        .where(
+          and(
+            eq(edges.scopeId, scope),
+            eq(edges.contextKey, context),
+            recordKind ? eq(edges.recordKind, recordKind) : undefined,
+            isNull(edges.expiredAt)
+          )
+        ),
     ]);
 
     return {
@@ -646,6 +727,8 @@ export class D1MemoryRepository implements MemoryRepository {
 const groupDuplicateStatements = (
   rows: Array<{
     id: string;
+    contextKey: string;
+    recordKind: RecordKind;
     subjectEntityId: string;
     predicate: string;
     objectEntityId: string | null;
@@ -657,7 +740,9 @@ const groupDuplicateStatements = (
 
   for (const row of rows) {
     const key = JSON.stringify([
+      row.contextKey,
       row.subjectEntityId,
+      row.recordKind,
       row.predicate,
       row.objectEntityId ?? "",
       row.objectLiteral ?? "",

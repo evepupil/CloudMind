@@ -10,6 +10,20 @@ const projectRoot = process.cwd();
 const wranglerConfigPath = join(projectRoot, "wrangler.jsonc");
 const wranglerBackupPath = join(projectRoot, "wrangler.backup.jsonc");
 
+const ASSET_VECTOR_METADATA_INDEXES = [
+  "aiVisibility",
+  "domain",
+  "sourceKind",
+  "sourceHost",
+  "collectionKey",
+  "type",
+  "scopeId",
+  "recordKind",
+  "contextKey",
+  "createdAt",
+];
+const GRAPH_VECTOR_METADATA_INDEXES = ["scopeId", "contextKey"];
+
 const parseArgs = () => {
   const args = process.argv.slice(2);
   const result = {
@@ -101,6 +115,21 @@ const runCommand = (title, command, args) => {
   });
 };
 
+const createMetadataIndexes = (indexName, propertyNames) => {
+  for (const propertyName of propertyNames) {
+    runCommand(`创建 Vectorize metadata 索引 ${propertyName}`, NPX, [
+      "wrangler",
+      "vectorize",
+      "create-metadata-index",
+      indexName,
+      "--property-name",
+      propertyName,
+      "--type",
+      "string",
+    ]);
+  }
+};
+
 const ensureBootstrapConfig = (queueName, workerName) => {
   const config = readWranglerConfig(wranglerConfigPath);
 
@@ -168,6 +197,7 @@ const main = () => {
   const databaseName = `${workerPrefix}-db`;
   const bucketName = `${workerPrefix}-assets`;
   const vectorIndexName = `${workerPrefix}-vectors`;
+  const graphVectorIndexName = `${workerPrefix}-graph-entities`;
   const queueName = `${workerPrefix}-workflows`;
 
   writeFileSync(
@@ -218,6 +248,22 @@ const main = () => {
     "--binding",
     "ASSET_VECTORS",
   ]);
+  createMetadataIndexes(vectorIndexName, ASSET_VECTOR_METADATA_INDEXES);
+
+  runCommand("创建图谱 Vectorize 索引并回写绑定", NPX, [
+    "wrangler",
+    "vectorize",
+    "create",
+    graphVectorIndexName,
+    "--dimensions",
+    `${options.vectorDim}`,
+    "--metric",
+    "cosine",
+    "--update-config",
+    "--binding",
+    "GRAPH_VECTORS",
+  ]);
+  createMetadataIndexes(graphVectorIndexName, GRAPH_VECTOR_METADATA_INDEXES);
 
   runCommand("创建 Queue", NPX, ["wrangler", "queues", "create", queueName]);
   runCommand("创建 Queue DLQ", NPX, [
@@ -242,6 +288,7 @@ const main = () => {
   console.log(`- D1: ${databaseName}`);
   console.log(`- R2: ${bucketName}`);
   console.log(`- Vectorize: ${vectorIndexName}`);
+  console.log(`- Graph Vectorize: ${graphVectorIndexName}`);
   console.log(`- Queue: ${queueName}`);
 };
 

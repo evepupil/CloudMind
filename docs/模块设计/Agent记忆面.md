@@ -76,24 +76,27 @@ Agent Web        -> filterable list/detail -> update / forget / restore
 ## 当前实现
 
 - `remember`、`recall`、`remember_agent`、`recall_agent` 四个 MCP 工具。
-- personal/agent 独立写入、检索、实体向量和迁移工具。
+- `recordKind`、`scopeId`、`contextKey` 已贯穿 asset、chunk、D1 检索、Vectorize
+  metadata、实体消歧、statement、edge 和 provenance。
+- `remember` 与 `remember_agent` 已固定写 memory；普通采集默认写 library。
+- personal/agent 独立写入和检索；不同项目的同名实体、陈述和漂移修复互不影响。
+- provenance 已直接指向 asset/chunk；episodes schema、仓储端口和 workflow 写入已删除。
 - 日期窗口、相关性/最近优先排序和可见性门控。
 - 现有 `update_asset`、`delete_asset`、`restore_asset` 等通用管理工具。
 - Web 记忆区当前只读 personal scope，尚无 Agent scope 管理页面。
-- D1 当前仍有 episodes 表，图谱抽取会创建冗余 `ingest` episode；provenance 已同时
-  保存 assetId，因此可以迁移为直连 asset/chunk。
-- 当前资产尚无 `recordKind` 和 `contextKey`，个人记忆与普通 note 也尚未结构化区分。
+- MCP 对外参数当前仍是单值 scope 入口，尚未提供三维数组组合过滤和过滤回显。
 
 ## 验证方式
 
-MCP 路由、记忆写入、scope 过滤和 recall 排序已有单元测试。新增实现必须覆盖三维
-过滤真值表、不同项目同名概念隔离、迁移后 provenance 保留、版本更新、软删除恢复
+MCP 路由、记忆写入、scope 过滤和 recall 排序已有单元测试。M3-A0 另有真实 D1
+迁移测试，验证 provenance 保留后再删 episodes；Workers 集成测试验证不同项目的
+同名概念和定时修复隔离。后续仍需覆盖三维数组过滤真值表、版本更新、软删除恢复
 和工具默认过滤；上线前还需执行 `scripts/recall-acceptance.mjs`、
 `scripts/recall-schema-acceptance.mjs` 和真实 MCP 客户端验收。
 
 ## 实施计划
 
-### M3-A0：简化核心模型
+### M3-A0：简化核心模型（已完成）
 
 - 为资产、chunk、向量 metadata 和 L2 图谱贯穿 `recordKind` 与 `contextKey`；沿用
   现有 `scopeId`。
@@ -122,11 +125,13 @@ MCP 路由、记忆写入、scope 过滤和 recall 排序已有单元测试。�
 
 ## 待扩展项
 
-- 完成 M3-A0 至 M3-A3；`reinforce`、`link` 继续归 M5。
+- 完成 M3-A1 至 M3-A3；`reinforce`、`link` 继续归 M5。
 - 完整会话归档作为显式 library 能力评估，不进入 Agent 记忆默认路径。
 
 ## 改动历史
 
+- 2026-07-24：完成 M3-A0，移除 episode，落地三维字段、项目隔离、迁移保护、
+  sleep-time 跨项目修复和 Vectorize metadata 索引。
 - 2026-07-24：取消自动会话原文捕获和 episode 目标模型，锁定
   `recordKind × scopeId × contextKey` 三维设计与 M3-A0 至 A3 实施顺序。
 - 2026-07-23：聚焦自动情节捕获、专用更新/遗忘和 Agent Web，移出高级记忆动词。

@@ -6,7 +6,6 @@ export { authAccounts } from "./auth-accounts";
 export { communities } from "./communities";
 export { edges } from "./edges";
 export { entities } from "./entities";
-export { episodes } from "./episodes";
 export { ingestJobs } from "./ingest-jobs";
 export { mcpTokens } from "./mcp-tokens";
 export { provenance } from "./provenance";

@@ -8,6 +8,8 @@ import {
 
 import { entities } from "./entities";
 
+const recordKindValues = ["library", "memory"] as const;
+
 // 这里定义 L2 的事实/陈述（subject-predicate-object），带 Graphiti 式双时间四字段：
 //   valid_from / valid_until  事件时——该事实在世界中为真的区间（until 空=仍为真）
 //   created_at / expired_at   录入时——系统相信该事实的区间（expired 空=系统仍相信）
@@ -17,6 +19,10 @@ export const statements = sqliteTable(
   {
     id: text("id").primaryKey(),
     scopeId: text("scope_id").notNull().default("default"),
+    contextKey: text("context_key").notNull().default("global"),
+    recordKind: text("record_kind", { enum: recordKindValues })
+      .notNull()
+      .default("library"),
     subjectEntityId: text("subject_entity_id")
       .notNull()
       .references(() => entities.id, { onDelete: "cascade" }),
@@ -42,6 +48,8 @@ export const statements = sqliteTable(
   },
   (table) => [
     index("statements_scope_id_idx").on(table.scopeId),
+    index("statements_context_key_idx").on(table.contextKey),
+    index("statements_record_kind_idx").on(table.recordKind),
     index("statements_subject_entity_id_idx").on(table.subjectEntityId),
     index("statements_object_entity_id_idx").on(table.objectEntityId),
     index("statements_predicate_idx").on(table.predicate),
@@ -50,6 +58,8 @@ export const statements = sqliteTable(
     // 当前有效事实按主语检索的承重索引（expired_at 空=有效）。
     index("statements_scope_subject_expired_idx").on(
       table.scopeId,
+      table.contextKey,
+      table.recordKind,
       table.subjectEntityId,
       table.expiredAt
     ),

@@ -332,7 +332,9 @@ const buildChunkVectorMetadata = (
     type: asset.type,
     domain: asset.domain,
     aiVisibility: asset.aiVisibility,
+    recordKind: asset.recordKind,
     scopeId: asset.scopeId,
+    contextKey: asset.contextKey,
     // 资产创建时刻（恒非空 ISO）：写入向量 metadata，让时间范围过滤能在 ANN topK 之前预过滤
     // （M3 时间检索）。ISO 8601 字典序即时间序，故 Vectorize $gte/$lte 字符串比较成立。
     createdAt: asset.createdAt,

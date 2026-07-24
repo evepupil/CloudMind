@@ -15,6 +15,8 @@ import {
 const stmt = (id: string, nlText: string): MemoryStatement => ({
   id,
   scopeId: "default",
+  contextKey: "global",
+  recordKind: "library",
   subjectEntityId: "en1",
   predicate: "lives in",
   objectEntityId: null,
