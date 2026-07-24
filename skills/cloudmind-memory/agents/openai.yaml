@@ -1,0 +1,13 @@
+interface:
+  display_name: "CloudMind Memory"
+  short_description: "Recall and preserve durable CloudMind context"
+  default_prompt: "Use $cloudmind-memory to recall relevant context and preserve durable outcomes for this task."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "cloudmind"
+      description: "CloudMind MCP server configured for the user's own deployment"
+
+policy:
+  allow_implicit_invocation: true

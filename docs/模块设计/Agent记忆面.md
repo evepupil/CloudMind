@@ -2,7 +2,8 @@
 
 > 模块定位：通过 MCP 和 Web 完成个人与 Agent 记忆的写入、召回、更新、遗忘和管理。
 >
-> 对应代码：`src/features/{mcp,memory,search}/*`、`src/core/{assets,memory}/*`、`src/platform/db/d1/{schema,repositories}/*`
+> 对应代码：`src/features/{mcp,memory,search}/*`、`src/core/{assets,memory}/*`、
+> `src/platform/db/d1/{schema,repositories}/*`、`skills/cloudmind-memory/*`
 >
 > 所属 M 里程碑：[`M3 Agent 记忆面`](../roadmap.md#m3-agent-记忆面)
 >
@@ -73,9 +74,37 @@ Agent Web        -> filterable list/detail -> update / forget / restore
 `search_assets_for_context` 与 `ask_library_for_context` 在兼容期继续保留；实现三维
 过滤后，分别并入带显式 `profile` 的 `search_assets` 与 `ask_library`，减少工具数量。
 
+## 客户端记忆工作流
+
+仓库内的 `skills/cloudmind-memory` 是 MCP 记忆能力的客户端使用规则。服务端工具描述
+继续说明单个工具的参数和语义，Skill 负责跨工具判断：什么时候召回、写到哪个 scope、
+怎样选择项目上下文，以及什么时候应当跳过写入。`agents/openai.yaml` 声明 CloudMind
+MCP 依赖并允许 Codex 隐式调用；BYOC 部署地址由用户自己的 MCP 配置提供。
+
+Skill 使用以下规则：
+
+- 用户背景、偏好和个人历史走 `recall`；项目延续、既有决策和工作轨迹走
+  `recall_agent`。一次组织 1 至 5 个查询并批量召回。
+- 用户明确要求记住时走 `remember`，归 personal；Agent 主动保存长期有用的决策、
+  进度、结果、阻塞或下一步时走 `remember_agent`，归 agent。
+- 项目记忆从规范化 Git remote 生成 `contextKey`，例如
+  `project:github:evepupil/CloudMind`。没有稳定 remote 时，禁止把项目事实静默写成
+  global；项目召回显式传 `contextKeys`，禁止依赖 `recall_agent` 的 global 默认值。
+- 写入前按目标 scope 和精确 context 召回去重；已有事实发生变化时走
+  `update_memory`，并保留目标原有 scope。
+- 用户明确要求归档完整会话时走 personal library 资产；普通聊天、秘密、临时日志和
+  未确认推测不进入记忆。
+- `forget` 默认 soft，只有用户明确确认指定 ID 永久删除时才允许 hard；Agent 不做
+  自主清理。
+
+这层规则属于选择性客户端采用，不会让服务端自动捕获外部会话。新会话会根据 Skill
+描述隐式触发；调试时也可用 `$cloudmind-memory` 显式触发。
+
 ## 当前实现
 
 - `remember`、`recall`、`remember_agent`、`recall_agent` 四个 MCP 工具。
+- `skills/cloudmind-memory` 已提供召回、写入、去重更新、遗忘、恢复和完整会话归档的
+  客户端决策流程，并声明 CloudMind MCP 依赖与隐式触发策略。
 - `recordKind`、`scopeId`、`contextKey` 已贯穿 asset、chunk、D1 检索、Vectorize
   metadata、实体消歧、statement、edge 和 provenance。
 - `remember` 与 `remember_agent` 已固定写 memory；普通采集默认写 library。
@@ -123,6 +152,11 @@ M6 使用 `scripts/hard-delete-acceptance.mjs` 验证已软删除 memory 的整�
 D1、R2、chunk Vectorize、图 Vectorize 和独占 L2 中清理，完成审计只保留目标哈希、
 数量和时间；生产验收已经通过。
 
+客户端 Skill 使用 Skill Creator 的 `quick_validate.py` 检查目录、frontmatter 和命名；
+再以旧项目续接、个性化建议、用户要求记住、修正旧记忆、普通闲聊、秘密信息和完整
+会话归档七类行为用例检查工具选择。用户级安装后需要新建 Codex 任务，让 Codex 重新
+发现 Skill 和全局 `AGENTS.md`。
+
 ## 实施计划
 
 ### M3-A0：简化核心模型（已完成）
@@ -158,10 +192,14 @@ D1、R2、chunk Vectorize、图 Vectorize 和独占 L2 中清理，完成审计�
 
 - M6 的完整导出、导入、恢复和 hard delete 验收已完成；发布自动化归 M7。
 - `reinforce`、`link` 继续归 M5。
-- 完整会话归档作为显式 library 能力评估，不进入 Agent 记忆默认路径。
+- 完整会话归档沿用显式 personal library 资产，不进入 Agent 记忆默认路径。
+- 将单个 Skill 与 MCP 配置打包为可安装的 CloudMind Codex Plugin，或提供幂等的
+  `cloudmind setup-agent codex`，属于后续分发体验增强。
 
 ## 改动历史
 
+- 2026-07-24：新增 `cloudmind-memory` 客户端 Skill，落实主动召回、选择性沉淀、
+  项目 key、写前去重、生命周期安全边界和 MCP 依赖声明，并开始本机体验验证。
 - 2026-07-24：M6 生产 hard delete 和数据包 v2 恢复验收通过，确认版本链跨存储清理、
   审计最小化和项目过滤可恢复。
 - 2026-07-24：`forget` 增加保持向后兼容的 soft/hard 模式；hard 要求目标已软删除、
