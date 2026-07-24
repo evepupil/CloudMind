@@ -100,6 +100,21 @@ export interface GetAssetOptions {
   includeDeleted?: boolean | undefined;
 }
 
+export interface MemoryVersionQuery {
+  memoryRootId: string;
+  scopeId: MemoryScope;
+  contextKey: ContextKey;
+}
+
+export interface RecordContextSummary {
+  contextKey: ContextKey;
+  activeCount: number;
+  forgottenCount: number;
+  personalCount: number;
+  agentCount: number;
+  latestUpdatedAt: string;
+}
+
 // 这里定义资产读取侧接口，供列表与详情等读模型复用。
 export interface AssetQueryRepository {
   listAssets(query?: AssetListQuery): Promise<AssetListResult>;
@@ -107,6 +122,8 @@ export interface AssetQueryRepository {
     id: string,
     options?: GetAssetOptions | undefined
   ): Promise<AssetDetail>;
+  listMemoryVersions?(query: MemoryVersionQuery): Promise<AssetSummary[]>;
+  listRecordContexts?(query?: AssetListQuery): Promise<RecordContextSummary[]>;
 }
 
 // 这里单独抽出搜索端口，避免未来把语义检索继续堆进列表接口。

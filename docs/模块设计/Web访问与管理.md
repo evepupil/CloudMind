@@ -35,15 +35,18 @@ user action -> REST route -> domain service -> redirect / partial navigation
 5. M4 提供通用页面结构和交互组件；Agent 记忆的业务能力、页面数据和完成状态
    归 M3 管理。
 6. 通用资产、搜索、问答、首页和 Activity 页面显式限定 personal scope，避免 Agent
-   工作记忆在 M3-A3 管理入口交付前混入个人工作台。
+   工作记忆混入个人工作台；Agent 数据从独立管理入口访问。
 
 ## 当前实现
 
 - Overview、Library、Asset Detail、Capture、Search、Ask 和 Activity。
 - 记忆图谱、时间线、整合页，以及对应 `/api/memory/*` 数据接口。
+- `/memory/agent` Agent 记忆控制台与 `/memory/agent/:id` 详情：三维筛选、项目视图、
+  版本历史、来源、更新、遗忘和恢复。
 - 登录、改密、MCP token 管理和移动端导航。
 - 统一按钮、输入框、状态、空状态、面板和反馈组件。
 - 资产、搜索、问答、首页和 Activity 服务端查询统一传入 personal scope 过滤。
+- Agent 管理页面只调用 memory server service；组件不直接访问 D1、R2 或 Vectorize。
 
 ## 验证方式
 
@@ -53,12 +56,13 @@ user action -> REST route -> domain service -> redirect / partial navigation
 ## 待扩展项
 
 - 增加真实数据规模下的可用性和性能检查。
-- 随 M3 增加 Agent scope 的列表、详情、筛选、更新、遗忘和恢复入口。
 - 随 M5/M6 增加聚合和完整导出入口。
 - 补充失败任务批量处理与更细的运维筛选。
 
 ## 改动历史
 
+- 2026-07-24：增加 Agent 记忆导航、三维筛选、项目视图、详情、版本历史和专用生命
+  周期操作入口；保持通用个人工作台与 Agent 数据分区。
 - 2026-07-24：通用 Web 查询显式限制 personal scope，Agent 数据继续由 M3-A3
   专用管理入口承接。
 - 2026-07-23：明确 M4 已完成边界，Agent Web 管理随 M3 生命周期能力交付。

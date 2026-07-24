@@ -105,6 +105,230 @@ describe("Workers runtime quality gate", () => {
     expect(crossProjectStatements).toEqual([]);
   });
 
+  it("isolates matching M1/M2 records across D1, FTS and L2 provenance", async () => {
+    const assetRepository = new D1AssetRepository(env.DB);
+    const memoryRepository = new D1MemoryRepository(env.DB);
+    const suffix = crypto.randomUUID();
+    const contextA = `project:github:evepupil/IsolationA-${suffix}`;
+    const contextB = `project:github:evepupil/IsolationB-${suffix}`;
+    const assetA = await assetRepository.createTextAsset({
+      title: "Project A M1 M2",
+      content: "Project A roadmap contains M1 and M2 only.",
+      recordKind: "memory",
+      scopeId: "agent",
+      contextKey: contextA,
+    });
+    const assetB = await assetRepository.createTextAsset({
+      title: "Project B M1 M2",
+      content: "Project B roadmap contains M1 and M2 only.",
+      recordKind: "memory",
+      scopeId: "agent",
+      contextKey: contextB,
+    });
+
+    await assetRepository.replaceAssetChunks(assetA.id, [
+      {
+        chunkIndex: 0,
+        textPreview: "Project A roadmap contains M1 and M2 only.",
+        contentText: "Project A roadmap contains M1 and M2 only.",
+        vectorId: `vector-a-${suffix}`,
+      },
+    ]);
+    await assetRepository.replaceAssetChunks(assetB.id, [
+      {
+        chunkIndex: 0,
+        textPreview: "Project B roadmap contains M1 and M2 only.",
+        contentText: "Project B roadmap contains M1 and M2 only.",
+        vectorId: `vector-b-${suffix}`,
+      },
+    ]);
+    await assetRepository.completeAssetProcessing(assetA.id, {
+      summary: "Project A M1 M2 roadmap",
+      contentText: "Project A roadmap contains M1 and M2 only.",
+    });
+    await assetRepository.completeAssetProcessing(assetB.id, {
+      summary: "Project B M1 M2 roadmap",
+      contentText: "Project B roadmap contains M1 and M2 only.",
+    });
+
+    const [m1A, m2A, m1B, m2B] = await Promise.all([
+      memoryRepository.upsertEntityByNormalizedName({
+        canonicalName: "M1",
+        normalizedName: "m1",
+        scopeId: "agent",
+        contextKey: contextA,
+      }),
+      memoryRepository.upsertEntityByNormalizedName({
+        canonicalName: "M2",
+        normalizedName: "m2",
+        scopeId: "agent",
+        contextKey: contextA,
+      }),
+      memoryRepository.upsertEntityByNormalizedName({
+        canonicalName: "M1",
+        normalizedName: "m1",
+        scopeId: "agent",
+        contextKey: contextB,
+      }),
+      memoryRepository.upsertEntityByNormalizedName({
+        canonicalName: "M2",
+        normalizedName: "m2",
+        scopeId: "agent",
+        contextKey: contextB,
+      }),
+    ]);
+    const statementA = await memoryRepository.createStatement({
+      scopeId: "agent",
+      contextKey: contextA,
+      recordKind: "memory",
+      subjectEntityId: m1A.id,
+      predicate: "precedes",
+      objectEntityId: m2A.id,
+      nlText: "Project A M1 precedes M2",
+    });
+    const statementB = await memoryRepository.createStatement({
+      scopeId: "agent",
+      contextKey: contextB,
+      recordKind: "memory",
+      subjectEntityId: m1B.id,
+      predicate: "precedes",
+      objectEntityId: m2B.id,
+      nlText: "Project B M1 precedes M2",
+    });
+    await memoryRepository.addProvenance({
+      scopeId: "agent",
+      contextKey: contextA,
+      recordKind: "memory",
+      memoryType: "statement",
+      memoryId: statementA.id,
+      assetId: assetA.id,
+      chunkIndex: 0,
+    });
+    await memoryRepository.addProvenance({
+      scopeId: "agent",
+      contextKey: contextB,
+      recordKind: "memory",
+      memoryType: "statement",
+      memoryId: statementB.id,
+      assetId: assetB.id,
+      chunkIndex: 0,
+    });
+
+    const [d1A, d1B, ftsA, ftsB, graphA, graphB, provenanceRefs] =
+      await Promise.all([
+        assetRepository.listAssets({
+          recordKinds: ["memory"],
+          scopeIds: ["agent"],
+          contextKeys: [contextA],
+        }),
+        assetRepository.listAssets({
+          recordKinds: ["memory"],
+          scopeIds: ["agent"],
+          contextKeys: [contextB],
+        }),
+        assetRepository.searchChunksByText?.({
+          query: "roadmap",
+          limit: 10,
+          aiVisibility: ["allow"],
+          recordKinds: ["memory"],
+          scopeIds: ["agent"],
+          contextKeys: [contextA],
+        }),
+        assetRepository.searchChunksByText?.({
+          query: "roadmap",
+          limit: 10,
+          aiVisibility: ["allow"],
+          recordKinds: ["memory"],
+          scopeIds: ["agent"],
+          contextKeys: [contextB],
+        }),
+        memoryRepository.findActiveStatementsBySubject(
+          m1A.id,
+          "agent",
+          contextA,
+          "memory"
+        ),
+        memoryRepository.findActiveStatementsBySubject(
+          m1B.id,
+          "agent",
+          contextB,
+          "memory"
+        ),
+        memoryRepository.findProvenanceByMemoryIds("statement", [
+          statementA.id,
+          statementB.id,
+        ]),
+      ]);
+
+    expect(d1A.items.map((item) => item.id)).toEqual([assetA.id]);
+    expect(d1B.items.map((item) => item.id)).toEqual([assetB.id]);
+    expect(ftsA?.map((item) => item.asset.id)).toEqual([assetA.id]);
+    expect(ftsB?.map((item) => item.asset.id)).toEqual([assetB.id]);
+    expect(graphA).toEqual([
+      expect.objectContaining({ id: statementA.id, contextKey: contextA }),
+    ]);
+    expect(graphB).toEqual([
+      expect.objectContaining({ id: statementB.id, contextKey: contextB }),
+    ]);
+    expect(provenanceRefs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          memoryId: statementA.id,
+          assetId: assetA.id,
+        }),
+        expect.objectContaining({
+          memoryId: statementB.id,
+          assetId: assetB.id,
+        }),
+      ])
+    );
+  });
+
+  it("lists memory projects and complete version chains for Web management", async () => {
+    const repository = new D1AssetRepository(env.DB);
+    const suffix = crypto.randomUUID();
+    const contextKey = `project:github:evepupil/Versions-${suffix}`;
+    const root = await repository.createTextAsset({
+      title: "M3 version 1",
+      content: "M3 version 1",
+      recordKind: "memory",
+      scopeId: "agent",
+      contextKey,
+    });
+    const successor = await repository.createTextAsset({
+      title: "M3 version 2",
+      content: "M3 version 2",
+      recordKind: "memory",
+      scopeId: "agent",
+      contextKey,
+      memoryRootId: root.id,
+      memoryVersion: 2,
+      previousVersionId: root.id,
+    });
+
+    const [versions, contexts] = await Promise.all([
+      repository.listMemoryVersions({
+        memoryRootId: root.id,
+        scopeId: "agent",
+        contextKey,
+      }),
+      repository.listRecordContexts(),
+    ]);
+
+    expect(versions.map((version) => version.id)).toEqual([
+      successor.id,
+      root.id,
+    ]);
+    expect(contexts).toContainEqual(
+      expect.objectContaining({
+        contextKey,
+        activeCount: 2,
+        personalCount: 0,
+        agentCount: 2,
+      })
+    );
+  });
+
   it("repairs drifted edges across projects without crossing boundaries", async () => {
     const repository = new D1MemoryRepository(env.DB);
     const contextA = "project:github:evepupil/RepairA";

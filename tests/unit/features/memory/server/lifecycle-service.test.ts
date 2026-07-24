@@ -57,8 +57,11 @@ describe("memory lifecycle service", () => {
   const getAssetById = vi.fn<AssetRepository["getAssetById"]>();
   const softDeleteAsset = vi.fn<AssetRepository["softDeleteAsset"]>();
   const restoreAsset = vi.fn<AssetRepository["restoreAsset"]>();
+  const listMemoryVersions =
+    vi.fn<NonNullable<AssetRepository["listMemoryVersions"]>>();
   const repository = {
     getAssetById,
+    listMemoryVersions,
     softDeleteAsset,
     restoreAsset,
   } as unknown as AssetRepository;
@@ -83,6 +86,7 @@ describe("memory lifecycle service", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    listMemoryVersions.mockResolvedValue([]);
   });
 
   it("creates a pending immutable successor while the current version stays active", async () => {
@@ -130,6 +134,27 @@ describe("memory lifecycle service", () => {
     ).rejects.toMatchObject({
       code: "CONTEXT_MISMATCH",
     });
+    expect(ingestTextAsset).not.toHaveBeenCalled();
+  });
+
+  it("rejects a second update while a successor is still processing", async () => {
+    const current = createMemory();
+    const pending = createMemory({
+      id: "memory-v2",
+      status: "processing",
+      memoryVersion: 2,
+      previousVersionId: current.id,
+      contentText: "M3-A2 in progress",
+    });
+    getAssetById.mockResolvedValue(current);
+    listMemoryVersions.mockResolvedValue([pending, current]);
+
+    await expect(
+      service.updateMemory(undefined, {
+        ...target,
+        content: "Duplicate successor",
+      })
+    ).rejects.toMatchObject({ code: "UPDATE_PENDING" });
     expect(ingestTextAsset).not.toHaveBeenCalled();
   });
 

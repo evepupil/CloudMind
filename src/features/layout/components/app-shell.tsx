@@ -6,6 +6,7 @@ export type NavigationKey =
   | "library"
   | "capture"
   | "ask"
+  | "agent-memory"
   | "graph"
   | "timeline"
   | "consolidation"
@@ -35,6 +36,12 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "记忆层",
     items: [
+      {
+        key: "agent-memory",
+        label: "Agent 记忆",
+        href: "/memory/agent",
+        glyph: "◎",
+      },
       { key: "graph", label: "记忆图谱", href: "/memory/graph", glyph: "◆" },
       {
         key: "timeline",
@@ -166,7 +173,7 @@ export const AppShell = ({
               </div>
               <div class="flex justify-between">
                 <span>scope</span>
-                <span class="text-bone-soft">personal</span>
+                <span class="text-bone-soft">personal·agent</span>
               </div>
             </div>
           </div>

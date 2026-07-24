@@ -86,6 +86,43 @@ const getVectorIds = (item: AssetDetail): string[] => {
     .filter((value): value is string => Boolean(value));
 };
 
+const assertCurrentVersion = (item: AssetDetail): void => {
+  if (item.supersededAt) {
+    throw new MemoryLifecycleError(
+      "NOT_CURRENT",
+      `Memory "${item.id}" has already been superseded.`
+    );
+  }
+};
+
+const assertNoPendingSuccessor = async (
+  repository: AssetRepository,
+  item: AssetDetail
+): Promise<void> => {
+  if (!repository.listMemoryVersions) {
+    return;
+  }
+
+  const versions = await repository.listMemoryVersions({
+    memoryRootId: item.memoryRootId ?? item.id,
+    scopeId: item.scopeId === "agent" ? "agent" : "personal",
+    contextKey: item.contextKey,
+  });
+  const pendingSuccessor = versions.some(
+    (version) =>
+      version.previousVersionId === item.id &&
+      !version.deletedAt &&
+      !version.supersededAt
+  );
+
+  if (pendingSuccessor) {
+    throw new MemoryLifecycleError(
+      "UPDATE_PENDING",
+      `Memory "${item.id}" already has a successor being processed.`
+    );
+  }
+};
+
 export const createMemoryLifecycleService = (
   dependencies: MemoryLifecycleDependencies = defaultDependencies
 ) => {
@@ -97,13 +134,7 @@ export const createMemoryLifecycleService = (
       const repository = await dependencies.getAssetRepository(bindings);
       const previous = await repository.getAssetById(input.id);
       assertMemoryTarget(previous, input);
-
-      if (previous.supersededAt) {
-        throw new MemoryLifecycleError(
-          "NOT_CURRENT",
-          `Memory "${previous.id}" has already been superseded.`
-        );
-      }
+      assertCurrentVersion(previous);
 
       if (previous.status !== "ready") {
         throw new MemoryLifecycleError(
@@ -111,6 +142,8 @@ export const createMemoryLifecycleService = (
           `Memory "${previous.id}" must be ready before it can be updated.`
         );
       }
+
+      await assertNoPendingSuccessor(repository, previous);
 
       const previousVersion = previous.memoryVersion ?? 1;
       const current = await dependencies.ingestTextAsset(bindings, {
@@ -136,6 +169,8 @@ export const createMemoryLifecycleService = (
       const repository = await dependencies.getAssetRepository(bindings);
       const item = await repository.getAssetById(target.id);
       assertMemoryTarget(item, target);
+      assertCurrentVersion(item);
+      await assertNoPendingSuccessor(repository, item);
       await repository.softDeleteAsset(item.id);
 
       let vectorCleanupPending = false;
@@ -171,6 +206,7 @@ export const createMemoryLifecycleService = (
         includeDeleted: true,
       });
       assertMemoryTarget(deleted, target);
+      assertCurrentVersion(deleted);
 
       if (!deleted.deletedAt) {
         throw new MemoryLifecycleError(

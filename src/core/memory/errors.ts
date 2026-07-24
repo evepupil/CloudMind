@@ -3,6 +3,7 @@ export type MemoryLifecycleErrorCode =
   | "SCOPE_MISMATCH"
   | "CONTEXT_MISMATCH"
   | "NOT_CURRENT"
+  | "UPDATE_PENDING"
   | "NOT_READY"
   | "NOT_DELETED";
 

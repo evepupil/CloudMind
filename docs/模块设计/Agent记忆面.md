@@ -56,7 +56,7 @@ Agent Web        -> filterable list/detail -> update / forget / restore
 
 ## MCP 工具分组
 
-当前 17 个工具仍全部平铺注册，目标按职责收敛为四组：
+当前 20 个工具仍全部平铺注册，目标按职责收敛为四组：
 
 | 分组 | 工具与目标 |
 | --- | --- |
@@ -83,7 +83,10 @@ Agent Web        -> filterable list/detail -> update / forget / restore
 - provenance 已直接指向 asset/chunk；episodes schema、仓储端口和 workflow 写入已删除。
 - 日期窗口、相关性/最近优先排序和可见性门控。
 - 现有 `update_asset`、`delete_asset`、`restore_asset` 等通用管理工具。
-- Web 记忆区当前只读 personal scope，尚无 Agent scope 管理页面。
+- `/memory/agent` 已提供独立记忆控制台：默认查看 `memory + agent`，也可自由组合
+  recordKind、scopeId、contextKey，并切换当前、已遗忘和全部状态。
+- Agent Web 包含按 contextKey 聚合的项目视图、记忆详情、不可变版本历史、来源与
+  原始快照指针；知识资料从同一筛选页钻取通用资产详情。
 - list/search/ask/recall 已支持 `recordKinds`、`scopeIds`、`contextKeys` 数组过滤，
   同维度 OR、不同维度 AND；省略维度不限制。旧单值参数继续可用，新旧同维参数一起
   出现时明确拒绝。
@@ -96,18 +99,23 @@ Agent Web        -> filterable list/detail -> update / forget / restore
   记录并清理 chunk 向量；restore 从首次不可变 R2 快照重新处理并重建向量。
 - 列表、FTS、摘要、dense 命中补齐和图证据 hydration 均排除 superseded 版本；
   按 ID 仍可读取版本历史。
-- Web 现有资产、搜索、问答、首页和活动页继续显式限制 personal，Agent Web 留给 A3。
+- Web 更新、遗忘、恢复表单全部调用专用生命周期服务，并提交精确的
+  `scopeId + contextKey`；重复更新会在已有候选版本处理中时被拒绝。
+- 通用资产、搜索、问答、首页和活动页继续显式限制 personal，Agent 数据集中在
+  `/memory/agent` 管理。
 
 ## 验证方式
 
-MCP schema/路由、过滤规范化、D1 条件、Vectorize `$in`、Ask、图召回、工具默认值
-和生命周期服务均有单元测试。Workers 集成测试用两个都含 `M1` 的项目验证 D1 图
-查询的数组 OR 与跨维度 AND，并在真实 0017 migration 后验证新旧 memory 版本原子
-切换。生产回填已确认 24 条可检索资产向量和 91 条图向量归属完整；D1 另有 5 个
-指针属于同一条已软删且 `deny` 的资产，Vectorize 无对应记录符合预期。
+MCP schema/路由、过滤规范化、D1 条件、Vectorize `$in`、Ask、图召回、工具默认值、
+生命周期服务和 Web 管理读模型均有单元测试。Workers 集成测试用两个都含 `M1/M2`
+的项目验证 D1 列表、FTS chunk、L2 statement/provenance 全程隔离，并在真实 0017
+migration 后验证新旧 memory 版本原子切换；项目汇总和完整版本链也在真实 D1 上验证。
 
 部署后使用 `scripts/record-filter-acceptance.mjs` 做只读真实 MCP 验收；完整记忆质量
 仍可用 `scripts/recall-acceptance.mjs` 和 `scripts/recall-schema-acceptance.mjs` 检查。
+M3-A3 使用 `scripts/project-isolation-acceptance.mjs` 临时写入两个都含 `M1/M2` 的
+Agent 项目记忆，验证生产 D1 列表、FTS/Vectorize 混合检索和 L2 statement 证据后，
+在 finally 中调用 `forget` 清理活跃测试数据。
 
 ## 实施计划
 
@@ -132,7 +140,7 @@ MCP schema/路由、过滤规范化、D1 条件、Vectorize `$in`、Ask、图召
 - `forget` 先做可恢复软删除；恢复时重建缺失向量，硬删除规则由 M6 约束。
 - 通过 scope/context 校验阻止跨项目误更新和误删除。
 
-### M3-A3：Agent Web 与验收
+### M3-A3：Agent Web 与验收（实现完成，生产验收待部署）
 
 - 提供 recordKind、scopeId、contextKey 三维筛选和项目视图。
 - 支持记忆详情、来源、版本历史、更新、遗忘与恢复。
@@ -140,11 +148,15 @@ MCP schema/路由、过滤规范化、D1 条件、Vectorize `$in`、Ask、图召
 
 ## 待扩展项
 
-- 下一步推进 M3-A3 Agent Web 与端到端项目隔离验收；`reinforce`、`link` 继续归 M5。
+- 部署后运行 `project-isolation-acceptance.mjs`，确认真实 Vectorize 和 L2 图证据隔离，
+  通过后关闭 M3。
+- `reinforce`、`link` 继续归 M5。
 - 完整会话归档作为显式 library 能力评估，不进入 Agent 记忆默认路径。
 
 ## 改动历史
 
+- 2026-07-24：完成 M3-A3 本地实现，增加三维筛选、项目视图、详情、来源、完整版本
+  历史、更新/遗忘/恢复入口，以及双项目 D1/FTS/L2 Workers 验收和生产验收脚本。
 - 2026-07-24：完成 M3-A2，增加 memory 版本链、异步成功后原子激活、专用
   `update_memory`/`forget`/`restore_memory`、严格 scope/context 校验和恢复重索引。
 - 2026-07-24：完成 M3-A1，三维数组过滤贯穿 D1、Vectorize、图召回和 MCP；保留

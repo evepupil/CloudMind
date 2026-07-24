@@ -25,6 +25,8 @@ import type {
   CreateFileAssetInput,
   CreateTextAssetInput,
   CreateUrlAssetInput,
+  MemoryVersionQuery,
+  RecordContextSummary,
   SearchAssetSummaryInput,
   UpdateAssetIndexingInput,
   UpdateAssetMetadataInput,
@@ -107,6 +109,55 @@ export class D1AssetRepository implements AssetRepository {
         totalPages: total === 0 ? 0 : Math.ceil(total / pageSize),
       },
     };
+  }
+
+  public async listMemoryVersions(
+    query: MemoryVersionQuery
+  ): Promise<AssetSummary[]> {
+    const records = await this.db
+      .select()
+      .from(assets)
+      .where(
+        and(
+          eq(assets.recordKind, "memory"),
+          eq(assets.scopeId, query.scopeId),
+          eq(assets.contextKey, query.contextKey),
+          or(
+            eq(assets.memoryRootId, query.memoryRootId),
+            eq(assets.id, query.memoryRootId)
+          )
+        )
+      )
+      .orderBy(desc(assets.memoryVersion), desc(assets.createdAt));
+
+    return records.map(mapAssetSummary);
+  }
+
+  public async listRecordContexts(
+    query?: AssetListQuery
+  ): Promise<RecordContextSummary[]> {
+    const records = await this.db
+      .select({
+        contextKey: assets.contextKey,
+        activeCount: sql<number>`sum(case when ${assets.deletedAt} is null then 1 else 0 end)`,
+        forgottenCount: sql<number>`sum(case when ${assets.deletedAt} is not null then 1 else 0 end)`,
+        personalCount: sql<number>`sum(case when ${assets.deletedAt} is null and ${assets.scopeId} = 'personal' then 1 else 0 end)`,
+        agentCount: sql<number>`sum(case when ${assets.deletedAt} is null and ${assets.scopeId} = 'agent' then 1 else 0 end)`,
+        latestUpdatedAt: sql<string>`max(${assets.updatedAt})`,
+      })
+      .from(assets)
+      .where(buildAssetListWhereClause(query))
+      .groupBy(assets.contextKey)
+      .orderBy(desc(sql`max(${assets.updatedAt})`));
+
+    return records.map((record) => ({
+      contextKey: record.contextKey,
+      activeCount: Number(record.activeCount),
+      forgottenCount: Number(record.forgottenCount),
+      personalCount: Number(record.personalCount),
+      agentCount: Number(record.agentCount),
+      latestUpdatedAt: record.latestUpdatedAt,
+    }));
   }
 
   public async searchAssets(input: AssetSearchInput): Promise<AssetListResult> {
