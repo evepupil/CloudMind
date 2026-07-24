@@ -6,7 +6,7 @@
 >
 > 所属 M 里程碑：[`M3 Agent 记忆面`](../roadmap.md#m3-agent-记忆面)
 >
-> 当前状态：进行中
+> 当前状态：已完成
 >
 > 最近更新时间：2026-07-24
 
@@ -115,7 +115,8 @@ migration 后验证新旧 memory 版本原子切换；项目汇总和完整版�
 仍可用 `scripts/recall-acceptance.mjs` 和 `scripts/recall-schema-acceptance.mjs` 检查。
 M3-A3 使用 `scripts/project-isolation-acceptance.mjs` 临时写入两个都含 `M1/M2` 的
 Agent 项目记忆，验证生产 D1 列表、FTS/Vectorize 混合检索和 L2 statement 证据后，
-在 finally 中调用 `forget` 清理活跃测试数据。
+在 finally 中调用 `forget` 清理活跃测试数据。生产验收通过：2 条测试记录均已遗忘，
+活跃数为 0，对应 chunk 向量残留数为 0。
 
 ## 实施计划
 
@@ -140,7 +141,7 @@ Agent 项目记忆，验证生产 D1 列表、FTS/Vectorize 混合检索和 L2 s
 - `forget` 先做可恢复软删除；恢复时重建缺失向量，硬删除规则由 M6 约束。
 - 通过 scope/context 校验阻止跨项目误更新和误删除。
 
-### M3-A3：Agent Web 与验收（实现完成，生产验收待部署）
+### M3-A3：Agent Web 与验收（已完成）
 
 - 提供 recordKind、scopeId、contextKey 三维筛选和项目视图。
 - 支持记忆详情、来源、版本历史、更新、遗忘与恢复。
@@ -148,13 +149,14 @@ Agent 项目记忆，验证生产 D1 列表、FTS/Vectorize 混合检索和 L2 s
 
 ## 待扩展项
 
-- 部署后运行 `project-isolation-acceptance.mjs`，确认真实 Vectorize 和 L2 图证据隔离，
-  通过后关闭 M3。
+- M6 阶段 B 继续补完整导出、导入和恢复演练。
 - `reinforce`、`link` 继续归 M5。
 - 完整会话归档作为显式 library 能力评估，不进入 Agent 记忆默认路径。
 
 ## 改动历史
 
+- 2026-07-24：M3-A3 生产验收通过；两个同含 `M1/M2` 的项目在 D1、FTS、Vectorize
+  和 L2 statement 证据中保持隔离，验收数据全部遗忘且 chunk 向量清理为 0，M3 关闭。
 - 2026-07-24：完成 M3-A3 本地实现，增加三维筛选、项目视图、详情、来源、完整版本
   历史、更新/遗忘/恢复入口，以及双项目 D1/FTS/L2 Workers 验收和生产验收脚本。
 - 2026-07-24：完成 M3-A2，增加 memory 版本链、异步成功后原子激活、专用
