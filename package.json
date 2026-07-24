@@ -2,7 +2,7 @@
   "name": "cloudmind",
   "private": true,
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "packageManager": "pnpm@10.21.0",
   "engines": {
     "node": ">=24.18.0 <25"
@@ -16,6 +16,7 @@
     "worker:deploy": "npm run deploy",
     "deploy:bootstrap": "node scripts/one-click-deploy.mjs --bootstrap-only",
     "deploy:one-click": "node scripts/one-click-deploy.mjs",
+    "deploy:first": "pnpm build && node scripts/release/deploy.ts --skip-smoke",
     "data:export": "node scripts/ops/cloudmind-data.ts export",
     "data:validate": "node scripts/ops/cloudmind-data.ts validate",
     "data:restore": "node scripts/ops/cloudmind-data.ts restore",
@@ -26,15 +27,21 @@
     "acceptance:project-isolation": "node scripts/project-isolation-acceptance.mjs",
     "acceptance:hard-delete": "node scripts/hard-delete-acceptance.mjs",
     "e2e:smoke": "node scripts/e2e-smoke.mjs",
+    "release:check": "node scripts/release/check-version.ts",
+    "release:migrations:verify": "node scripts/release/check-migrations.ts",
+    "release:smoke": "node scripts/release/smoke.ts",
+    "release:deploy": "node scripts/release/deploy.ts",
+    "release:rollback": "node scripts/release/rollback.ts",
+    "release:rollback:rehearse": "node scripts/release/rollback.ts --rehearse",
     "bindings:generate": "wrangler types worker-configuration.d.ts --env-interface CloudflareBindings --include-runtime=false",
     "bindings:check": "wrangler types worker-configuration.d.ts --env-interface CloudflareBindings --include-runtime=false --check",
     "config:check": "node scripts/check-worker-config.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "gate": "pnpm config:check && pnpm typecheck && pnpm lint && pnpm test && pnpm eval && pnpm build && pnpm bindings:check && pnpm test:workers",
+    "gate": "pnpm config:check && pnpm release:check && pnpm typecheck && pnpm lint && pnpm test && pnpm eval && pnpm build && pnpm bindings:check && pnpm test:workers",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
-    "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy"
+    "deploy": "pnpm build && pnpm release:deploy"
   },
   "dependencies": {
     "@fontsource-variable/fraunces": "^5.2.9",

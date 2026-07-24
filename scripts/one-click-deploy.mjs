@@ -281,7 +281,7 @@ const main = () => {
     return;
   }
 
-  runCommand("执行标准部署流程", NPM, ["run", "deploy"]);
+  runCommand("执行首次部署流程", NPM, ["run", "deploy:first"]);
 
   console.log("\n✅ 一键部署完成。\n");
   console.log(`- Worker 名称: ${workerName}`);

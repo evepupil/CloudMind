@@ -105,12 +105,14 @@ memory 版本链可跨 D1/R2/Vectorize 完整清理；数据包 v2 在全新隔�
 
 开发前置门禁已落地：GitHub Actions 与本地统一执行 `pnpm gate`，覆盖 Cloudflare
 绑定类型漂移、密钥配置边界、Queue 原子认领/失败重投/DLQ，以及 Miniflare 中的
-真实 D1 migrations 和 Queue ack/retry。M7 继续保持进行中；发布收尾阶段仍需处理
-版本、CHANGELOG、远端迁移、部署、回滚和生产冒烟。
+真实 D1 migrations 和 Queue ack/retry。发布收尾实现已落地：v0.3.0、CHANGELOG、
+远端 migration 精确核验、生产冒烟、失败自动回滚、手动回滚和回滚演练均有统一脚本；
+Cloudflare Workers Builds 的生产 Trigger 已接入该流程。M7 继续保持进行中，等待本次
+真实自动部署和生产回滚演练形成最终完成依据。
 
 ## 当前推进顺序
 
-1. M7 发布收尾：建立版本、迁移、部署、回滚和生产验收流程。
+1. M7 发布验收：核验自动部署日志并完成生产回滚演练。
 
 ## 历史路线图
 
