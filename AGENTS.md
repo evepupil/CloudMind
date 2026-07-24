@@ -23,7 +23,7 @@ CloudMind 的目标从"自称记忆层的 RAG"正式升级为 **大而完备、�
 
 采用三层架构：
 
-- **L1 事实/情节层**（瘦身后的 asset + episodes + chunks）：不可变、可导出的"真相之源"。
+- **L1 来源层**（瘦身后的 assets + chunks + R2 原始快照）：不可变、可导出的"真相之源"。
 - **L2 语义记忆层**：**完整知识图谱**（entities + 带 bi-temporal 有效期的 statements + 关系 edges + 指回 L1 的 provenance + community 摘要）。
 - **L3 记忆面**：MCP 记忆动词（remember/recall/update/forget/reinforce/link）+ 混合·图检索 + sleep-time 整合/遗忘。
 
@@ -31,7 +31,10 @@ CloudMind 的目标从"自称记忆层的 RAG"正式升级为 **大而完备、�
 
 1. **L2 = 完整知识图谱**——本决策**取代**下文「先做可用采集，再做复杂知识图谱」与「当前明确不做：自动实体对齐/复杂知识合并」两条旧立场。
 2. **L1 迁移 = 新库重来**（不写历史数据迁移脚本；私有部署、数据量小，直接以新 schema 重建）。
-3. **MVP 仅实现 default scope**（`scope_id` 维度贯穿三层但只用默认值，多 scope 留接口不实现）。
+3. **记录使用三个正交维度**：`record_kind=library|memory`、
+   `scope_id=personal|agent`、`context_key=global|project:<stable-key>`，贯穿三层过滤。
+4. **移除 episode 核心模型**：不提供 `capture_episode`，不自动保存完整外部会话；
+   provenance 直接指向 asset/chunk，更新历史由 memory 版本表达。
 
 > 完整设计见 **[`docs/memory-layer-architecture.md`](docs/memory-layer-architecture.md)**（三层架构、L1 字段迁移、L2 DDL、写/读路径、sleep-time、Cloudflare 映射、P1–P4 路线图、ADR）。
 
@@ -207,7 +210,7 @@ MVP 包含：
 
 ### 流程 3：AI 对话存档（MCP）
 
-1. AI 客户端调用 MCP 工具提交内容
+1. 用户显式要求归档完整对话时，AI 客户端调用 MCP 工具提交内容
 2. Worker 将内容按 `text/chat` 资产写入
 3. 经过统一处理流水线入库
 4. 后续可被语义搜索与问答检索
@@ -443,7 +446,7 @@ MVP 队列任务可拆成以下步骤：
 - **P1 地基**：检索可信（结构/token 切块、RRF 融合、bge-reranker 重排、D1 FTS5/BM25+trigram 中文、Vectorize 原生过滤、bge-m3 query prefix、最小 eval harness）+ 3 个检索 bug
 - **P2 分层**：L1 瘦身 + 建 L2 知识图谱表（entities/statements/edges/provenance/communities）+ 激活 extract_entities
 - **P3 心脏**：智能写（ADD/UPDATE/DELETE/NOOP 调和 + bi-temporal）+ 图检索融入 + 显著性/衰减 + sleep-time 整合/遗忘
-- **P4 面**：记忆动词 MCP + 快写路径 + 情节捕获(chat) + scope（仅 default）
+- **P4 面**：三维记录模型 + 项目隔离 + 记忆动词 MCP + Agent Web 管理
 
 > 历史 v0.3 设想（更好分类 / 多 provider / pgvector 迁移准备）并入后续版本评估。
 

@@ -18,8 +18,8 @@ CloudMind 要交付一个可自行部署、数据由个人掌控的 AI 记忆层
 | --- | --- | --- | --- | --- | --- |
 | [M0](#m0-采集与异步处理) | 打通 URL、文本、PDF 的采集与异步处理闭环 | 已完成 | 无 | [采集与异步处理](模块设计/采集与异步处理.md) | 三类内容可创建资产、进入工作流、生成派生产物，并支持失败重试 |
 | [M1](#m1-检索与问答) | 建立可度量、可降级的混合检索与来源感知问答 | 已完成 | M0 | [检索与记忆处理](模块设计/检索与记忆处理.md) | FTS5、Vectorize、图召回、融合、重排、MMR 和离线 eval 全部可运行 |
-| [M2](#m2-知识图谱与记忆整合) | 建立 L1 情节层与 L2 双时间知识图谱 | 已完成 | M0、M1 | [知识图谱与记忆整合](模块设计/知识图谱与记忆整合.md) | entities、statements、edges、provenance 可从采集流程写入，并可参与检索和定时修复 |
-| [M3](#m3-agent-记忆面) | 完成 Agent 记忆捕获、更新、遗忘和 Web 管理闭环 | 进行中 | M1、M2、M6 阶段 A | [Agent 记忆面](模块设计/Agent记忆面.md) | 自动情节捕获、`update_memory`、`forget` 和 Agent Web 管理可用，并通过 scope 隔离验证 |
+| [M2](#m2-知识图谱与记忆整合) | 建立可追溯、可调和的 L2 双时间知识图谱 | 已完成 | M0、M1 | [知识图谱与记忆整合](模块设计/知识图谱与记忆整合.md) | entities、statements、edges、provenance 可从采集流程写入，能指回 L1 来源，并可参与检索和定时修复 |
+| [M3](#m3-agent-记忆面) | 建立按记录类型、记忆域和项目上下文自由组合的记忆生命周期 | 进行中 | M1、M2、M6 阶段 A | [Agent 记忆面](模块设计/Agent记忆面.md) | `recordKind × scopeId × contextKey` 贯穿写入和检索，专用更新/遗忘与 Agent Web 可用，并通过组合过滤和项目隔离验证 |
 | [M4](#m4-web-访问与管理) | 完成 Observatory Web 工作台与主要管理路径 | 已完成 | M0、M1、M2 | [Web 访问与管理](模块设计/Web访问与管理.md) | 首页、资产、采集、搜索、问答、记忆区和 Activity 均接入真实数据 |
 | [M5](#m5-高级记忆模态) | 支持时间、联想、评价、聚合与关系强化类记忆操作 | 进行中 | M1、M2、M3 | [高级记忆模态](模块设计/高级记忆模态.md) | 补齐相对事件锚定、评价/超级值排序、跨记忆聚合、`reinforce` 和 `link`，并纳入 eval |
 | [M6](#m6-数据主权与生命周期) | 兑现不可变原始快照、完整导出和可重建的数据主权 | 进行中 | 阶段 A：M0；阶段 B：M3 | [数据主权与生命周期](模块设计/数据主权与生命周期.md) | 文本、MCP 与 Agent 输入先有不可变快照；随后整库数据和 R2 文件可校验导出、导入与重建，遗忘后的跨存储状态一致 |
@@ -45,9 +45,10 @@ reranker 和 MMR 输出分组证据；问答复用同一证据链并允许模型
 
 ## M2 知识图谱与记忆整合
 
-L1 episodes 与 L2 entities、statements、edges、provenance、communities 已落库。
-写路径包含实体抽取、scope 内消歧和 ADD/UPDATE/DELETE/NOOP 调和；读路径包含
-图增强召回，定时任务负责漂移边和重复数据修复。
+L2 entities、statements、edges、provenance、communities 已落库。写路径包含实体抽取、
+scope 内消歧和 ADD/UPDATE/DELETE/NOOP 调和；读路径包含图增强召回，定时任务负责
+漂移边和重复数据修复。当前 provenance 同时指向 asset 和冗余 ingest episode；M3
+第一阶段会移除 episode 中间层，保留直指 asset/chunk 的证据链。
 
 完成依据：`c1cc22b`、`ab694d8`、`fc87c6f`、`5ae90ae` 及对应单元测试。
 
@@ -55,11 +56,12 @@ L1 episodes 与 L2 entities、statements、edges、provenance、communities 已�
 
 当前已提供 `remember`、`recall`、`remember_agent`、`recall_agent`，并完成
 personal/agent scope 的写入、检索和实体向量隔离。`remember_agent` 是客户端显式
-写入高密度工作记忆的工具，还没有自动观察或捕获外部 AI 对话。
+写入高密度工作记忆的工具；CloudMind 默认不保存外部 AI 的完整会话原文。
 
-剩余工作：由客户端集成提交对话并自动形成 episode，提供专用 `update_memory`、
-`forget`，补齐 Agent scope 的 Web 查看、筛选、编辑、遗忘和恢复入口，并完成
-端到端 scope 隔离验证。通用资产 CRUD 不计作记忆生命周期能力。
+剩余工作：移除 episode 模型；落地 `recordKind=library|memory`、
+`scopeId=personal|agent`、`contextKey=global|project:<key>` 三个独立维度；整理 MCP
+工具并提供专用更新/遗忘；补齐 Agent Web 管理和组合过滤验收。用户如需归档完整
+会话，显式保存为 library 资产。通用资产 CRUD 不计作记忆生命周期能力。
 
 ## M4 Web 访问与管理
 
@@ -82,7 +84,7 @@ Library、Asset Detail、Capture、Ask、Search、记忆图谱、时间线、整
 ## M6 数据主权与生命周期
 
 本里程碑分两个阶段。阶段 A 已完成：文本、MCP 和 Agent 输入会先保存不可变 R2
-原始快照，再进入清洗、摘要、图谱和情节处理；重试可恢复“R2 已写、D1 尚未绑定”
+原始快照，再进入清洗、摘要、图谱和索引处理；重试可恢复“R2 已写、D1 尚未绑定”
 的中断状态，已绑定快照禁止覆盖。阶段 B 在 M3 后完成版本化、分页或流式的整库
 导出，覆盖 D1 元数据、R2 原文与派生文件、校验清单、导入、向量重建和恢复演练。
 `forget` 的产品入口属于 M3，跨 D1/R2/Vectorize 的清理与恢复规则由本里程碑约束。
@@ -96,7 +98,8 @@ Library、Asset Detail、Capture、Ask、Search、记忆图谱、时间线、整
 
 ## 当前推进顺序
 
-1. M3：完成自动情节捕获、专用更新/遗忘、Agent Web 管理和 scope 验证。
+1. M3：先移除 episode 并落地三维记录模型，再完成 MCP 整理、专用更新/遗忘、
+   Agent Web 管理和项目隔离验证。
 2. M6 阶段 B：完成完整导出、导入、重建和恢复演练。
 3. M5：按 eval 样本推进相对时间、评价、聚合、强化和关联能力。
 4. M7 发布收尾：建立版本、迁移、部署、回滚和生产验收流程。

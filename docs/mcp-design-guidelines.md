@@ -152,6 +152,31 @@ CloudMind 不应在服务端替调用方 AI 猜测这些策略。
 - 何时停止
 - 何时重试
 
+### 模式四：记忆工具按职责分组
+
+当前工具仍平铺注册，目标能力按四组组织：
+
+- 个人记忆：`remember`、`recall`、`update_memory`、`forget`
+- Agent 记忆：`remember_agent`、`recall_agent`
+- 知识库：`save_asset`、`list_assets`、`search_assets`、`get_asset`、
+  `ask_library` 和资产管理工具
+- 运维：`list_asset_workflows`、`get_workflow_run`，后续通过独立配置暴露
+
+记忆和检索统一使用三个正交维度：
+
+```text
+recordKind  = library | memory
+scopeId     = personal | agent
+contextKey  = global | project:<stable-key>
+```
+
+过滤规则固定为维度内 OR、维度间 AND；省略维度表示不限制。工具可以提供保守默认值，
+同时必须在结果中返回实际应用的过滤条件。`remember` 固定写 `memory + personal`，
+`remember_agent` 固定写 `memory + agent`，`save_asset` 固定写 `library`。
+
+CloudMind 不提供 `capture_episode`，也不自动保存完整外部会话。Agent 只写入选中的
+高密度 memory；用户显式归档完整会话时使用 `save_asset`。
+
 ---
 
 ## `allowFallback` 的推荐语义
@@ -239,5 +264,6 @@ CloudMind 的 MCP 设计应遵循以下总原则：
 - 平台强制执行安全边界与数据边界
 - 默认保守，放宽必须显式
 - 多轮尝试应尽量由调用方发起，而不是由服务端偷偷完成
+- 记录类型、记忆域和上下文过滤必须显式、可组合、可回显
 
 这套准则适用于当前的 context-aware 检索，也应作为后续 MCP 功能扩展的默认设计方向。

@@ -1,6 +1,6 @@
 # CloudMind 记忆层架构设计（私有化自托管 · 对标 mem0 / Zep / Letta / Cognee）
 
-> 状态：设计稿 v1 · 2026-06-05 · 待评审
+> 状态：现行设计 v2 · 2026-07-24
 > 定位变更：本文档将 CloudMind 从"自称记忆层的 RAG"正式升级为**大而完备、个人私有化部署的 AI 记忆层**。
 > 注意：本设计**有意反转** `AGENTS.md` 的两条既有立场（见文末决策记录 ADR-001）。
 
@@ -28,24 +28,26 @@ CloudMind 的目标是做一个**真正的、完备的 AI 记忆层**，能力�
 
 ---
 
-## 二、与现状的差距（为什么现在是 RAG，不是记忆层）
+## 二、当前实现与目标差距
 
-记忆层 vs 文档搜索索引差在 5 个轴上，CloudMind 当前每条都站在"搜索索引"一边：
+截至 2026-07-24，检索地基和 L2 图谱已经可运行。当前差距集中在 M3 记忆面，
+不再沿用 2026-06-05 设计初稿里的“只有文档搜索”判断。
 
-| 轴 | 记忆层应有 | 现状 |
+| 轴 | 已实现 | M3 仍需完成 |
 |---|---|---|
-| 写入模型 | 由经验写入并整合 | 只能显式整篇导入（note/url/pdf）；chat 对库只读 |
-| 记忆单元 | 可更新/合并/失效的事实·实体·情节 | 1000 字符 chunk + 扁平 assertion（出处字段恒为 null） |
-| 时间维度 | recency / decay / last-accessed 强化 | 仅 3 档硬编码 recency bonus；无 lastAccessed/衰减/遗忘 |
-| 结构 | 实体 + 关系 + 矛盾/取代边（多跳） | 无任何边表；`extract_entities` 步骤与 `entities` artifactType 在 enum 里是死的 |
-| 反馈 | 使用强化显著性、检索回流 | 索引纯 ingest 时算死；`retrievalPriority` 一次算定不更新 |
+| 写入模型 | `remember`、`remember_agent` 可进入统一处理和 L2 调和 | 三维字段贯穿写入；专用 `update_memory`、`forget` |
+| 记忆单元 | chunks、entities、statements、edges、provenance 已落库 | 区分 library/memory；移除冗余 episode；版本化更新 |
+| 时间维度 | 日期范围、recency、显著性衰减和双时间事实 | 记忆版本历史、软删除/恢复；相对时间归 M5 |
+| 结构 | 实体抽取、关系边、调和和图召回已接通 | 增加 `contextKey`，按记忆域和项目共同隔离 |
+| 反馈 | 排序已读取 importance、age、accessCount | 接通专用强化与访问回写；`reinforce` 归 M5 |
 
-### 检索本身的硬伤（与"用没用 RAG"无关，是地基 bug）
+### 已完成的检索地基
 
-- 🔴 **切块前 `/\s+/` 压平**（`content-processing.ts` `normalizeContent`）→ 段落/标题结构全毁 → 切块器的 `\n` 边界变死代码，chunk 在句子中间乱断。
-- 🔴 **"混合检索"是不同量纲分数硬排序**（`search/server/service.ts:304`）→ chunk 原始 cosine（~0.4-0.65）vs assertion 带 0.38 底分/0.93 天花板 → 蹭关键词的 assertion 压过真正语义相关的 chunk。无 RRF / 归一化 / reranker。
-- 🔴 **中文 lexical 层是死的**：recall tokenizer 按 `[^a-z0-9_]+` 切，丢掉所有 CJK → 中文查询退化成单路 dense 向量。
-- 🐛 `delete_asset` 只软删，**不清 Vectorize 向量**（ghost）；reprocess 出 0 chunk 会删光该 asset 全部向量；chunk embedding 一次性 batch + 严格长度相等检查，一抖全败。
+- 结构化切块保留段落边界，检索使用 dense、FTS5/BM25 和图召回三路输入。
+- 跨通道结果经过 RRF、Workers AI reranker 和 MMR，不再直接比较不同量纲的原始分数。
+- FTS5 trigram 支持中文词面召回，Vectorize 使用原生 metadata 过滤。
+- 25 条离线查询形成持续门禁；当前里程碑状态和指标以
+  [`docs/roadmap.md`](roadmap.md) 为准。
 
 ### 平台事实（团队曾低估，已核实）
 
@@ -64,7 +66,7 @@ CloudMind 的目标是做一个**真正的、完备的 AI 记忆层**，能力�
 | 项目 | 核心机制 | 借鉴 |
 |---|---|---|
 | **mem0** | LLM 抽事实 → 检索相似 → 判 **ADD/UPDATE/DELETE/NOOP**；mem0g 内建实体链接 | 智能写路径（调和而非堆积）+ 内建实体链接 |
-| **Zep/Graphiti** | 三子图 **Episode/Entity/Community**；边带 **bi-temporal**（事件时+录入时），冲突**置失效不删** | 三层骨架 + 双时间有效期 + episodic→entity provenance |
+| **Zep/Graphiti** | 三子图 **Episode/Entity/Community**；边带 **bi-temporal**（事件时+录入时），冲突**置失效不删** | 双时间有效期与可追溯来源；CloudMind 不采用 Episode 子图 |
 | **Letta/MemGPT** | OS 式 **Core/Recall/Archival** 分层；工具**自编辑**；**sleep-time** 空闲整理 | L3 工作记忆 + 自编辑动词 + sleep-time 整合 |
 | **Cognee** | **ECL**(Extract→Cognify→Load)；万物皆 **DataPoint**；图↔向量恒绑定 | 统一管线 + 节点恒带 embedding |
 
@@ -81,10 +83,10 @@ CloudMind 的目标是做一个**真正的、完备的 AI 记忆层**，能力�
 ├─ L2 语义记忆层(新增·可变·带时间与显著性·完整知识图谱) ─────┤
 │ entities(节点) · statements/facts(bi-temporal) · edges(关系)│
 │ provenance(→L1) · communities/insights(整合摘要)           │
-├─ L1 事实/情节层(瘦身·不可变·可导出·真相之源) ─────────────┤
-│ episodes(每次捕获事件) · assets(精简) · chunks(检索用) · R2 │
+├─ L1 来源层(瘦身·不可变·可导出·真相之源) ─────────────────┤
+│ assets(library|memory) · chunks(检索/取证) · R2 原始快照    │
 └────────────────────────────────────────────────────────────┘
-  对位：L1=Zep Episode · L2=Zep Entity+Community / mem0g · L3=Letta tiers
+  对位：L1=可移植原始来源 · L2=Zep Entity+Community / mem0g · L3=Letta tiers
 ```
 
 契约（最关键的一根线）：
@@ -98,7 +100,7 @@ CloudMind 的目标是做一个**真正的、完备的 AI 记忆层**，能力�
 
 ---
 
-## 五、L1 事实/情节层（瘦身 + 字段迁移）
+## 五、L1 来源层（瘦身 + 三维记录模型）
 
 **问题**：现在 L1（asset）太重，塞了大量 L2 的派生字段。**语义/派生一律上移**，L1 回归"被捕获的客观事实"。
 
@@ -112,19 +114,21 @@ CloudMind 的目标是做一个**真正的、完备的 AI 记忆层**，能力�
 瘦身后：
 ```
 assets (L1)
-  id, type(text|url|pdf|chat|agent_memory), title_raw,
+  id, type(text|url|pdf|chat), record_kind(library|memory), title_raw,
   source_kind, source_url, source_host, captured_at,
-  raw_r2_key, content_r2_key, content_hash, scope_id, deleted_at
+  raw_r2_key, content_r2_key, content_hash,
+  scope_id(personal|agent), context_key(global|project:<stable-key>), deleted_at
   ── 移除: domain/documentClass/sensitivity/retrievalPriority/descriptorJson/facets/assertions
-
-episodes (L1, 新) — Zep 式非损情节流，统一三种写入为同一条时间线
-  id, scope_id, kind(ingest|chat_turn|agent_assert|correction),
-  asset_id?, raw_text|raw_r2_key, occurred_at, recorded_at, actor
 
 chunks (L1, 保留) — 仍是检索/取证最小片段；embedding 元数据增强见 P1
 ```
 
-> 任何时候导出 L1 = 你的全部原始记忆，干净可移植。L2 烧了重建也不伤 L1。
+核心三维互相独立：`record_kind` 说明资料或记忆，`scope_id` 说明用户明确保存或
+Agent 主动保存，`context_key` 说明全局或项目上下文。三个维度贯穿 D1、FTS、
+Vectorize metadata 和 L2 隔离条件。
+
+完整会话不自动进入 L1。Agent 只保存选中的高密度 memory；用户显式归档会话时，
+它作为 library 资产保存。任何时候导出 L1 都能得到全部显式资料和记忆，L2 可重建。
 
 ---
 
@@ -133,30 +137,30 @@ chunks (L1, 保留) — 仍是检索/取证最小片段；embedding 元数据增
 **已决策做完整知识图谱**：entities + edges + 多跳遍历，节点恒带向量。
 
 ```
-entities            id, scope_id, canonical_name, normalized_name, type,
+entities            id, scope_id, context_key, canonical_name, normalized_name, type,
                     embedding_vector_id, salience, mention_count,
                     first_seen_at, last_seen_at, aliases_json
 
-statements(facts)   id, scope_id, subject_entity_id, predicate,
+statements(facts)   id, scope_id, context_key, subject_entity_id, predicate,
                     object_entity_id | object_literal, nl_text, embedding_vector_id,
                     confidence, importance,
                     valid_from, valid_until,      -- 事件时：世界为真区间
                     created_at, expired_at,        -- 录入时：系统相信区间
                     superseded_by_id, last_accessed_at, access_count
 
-edges               id, scope_id, src_entity_id, dst_entity_id, relation,
+edges               id, scope_id, context_key, src_entity_id, dst_entity_id, relation,
                     valid_from, valid_until, created_at, expired_at, weight, confidence
 
-provenance          memory_id(stmt|entity|edge), episode_id, asset_id, chunk_index, span
+provenance          memory_id(stmt|entity|edge), asset_id, chunk_index, span
 
-communities         id, scope_id, member_entity_ids_json, summary,
+communities         id, scope_id, context_key, member_entity_ids_json, summary,
                     summary_vector_id, refreshed_at
 ```
 
 对标点：
 - `statements/edges` 的**双时间四字段** = Graphiti（冲突→置 `expired_at` 失效，不删）
 - `subject-predicate-object` = mem0g 有向标注图
-- `provenance` = Zep episodic 边（**每条记忆都能溯回 L1 证据**）
+- `provenance` 直接指向 asset/chunk（**每条记忆都能溯回 L1 证据**）
 - `communities` = Zep 社区 / mem0 摘要
 - 每个节点 `embedding_vector_id` = Cognee 图↔向量恒绑定
 
@@ -168,7 +172,7 @@ communities         id, scope_id, member_entity_ids_json, summary,
 
 doc 导入与 agent remember 走同一条管线，仅入口不同：
 ```
-1 Extract   写 L1 episode + asset(瘦) + chunks            （非损、立刻有源）
+1 Extract   写 L1 asset(瘦) + immutable snapshot + chunks （非损、立刻有源）
 2 Cognify   Workers AI 抽 entities + statements(SPO)       （激活死着的 extract_entities 步骤）
 3 Resolve   每个实体/事实 embed → Vectorize ANN 找相似      （复用 0.86/0.72 阈值）
 4 Reconcile LLM 判 ADD/UPDATE/DELETE/NOOP                  （mem0；矛盾→置 expired_at 失效）
@@ -206,18 +210,23 @@ Cloudflare **Cron Trigger + Queue/Workflows** 跑后台"睡眠期"维护：
 
 ## 十、L3 记忆面：自编辑动词（Letta 工具化 + 现成 MCP 管道）
 
-现有 15 个 MCP 工具是"文档 CRUD"，**保留**；在其上加记忆动词（复用 `withToolLogging` / token 鉴权 / context profiles 全套现成管道）：
+当前 17 个 MCP 工具平铺注册，覆盖知识库、记忆和运维能力。目标保留兼容入口，
+补齐专用记忆动词，并按职责整理默认过滤语义（复用 `withToolLogging`、token 鉴权和
+context profiles 管道）：
 
 | 动词 | 语义 | 复用 |
 |---|---|---|
-| `remember(text, type, scope, ttl?)` | **快写**：episode→抽取→调和，跳过重 enrichment | 新快写路径 ∥ 现有重管线 |
+| `remember(text, context?)` | 写 `memory + personal`，再抽取、调和 | 复用文本管线 |
+| `remember_agent(text, context?)` | 写 `memory + agent`，再抽取、调和 | 复用文本管线 |
 | `recall(query, scope, as_of?)` | 读 L2 引 L1，支持**时间回溯**(as_of 查双时间) | 扩 `search_assets_for_context` |
-| `update_memory(id, patch)` | 改事实内容/有效期 | 扩 `update_asset` |
-| `forget(id\|query, hard?)` | 真删 + **清 Vectorize 向量** | 修 `delete_asset` ghost bug |
+| `update_memory(id, patch)` | 新建版本并让旧版本失效 | 专用生命周期服务 |
+| `forget(id\|query, hard?)` | 默认软删；硬删同时清向量 | 专用生命周期服务 |
 | `reinforce(id)` | 强化显著性 | 新写回 |
 | `link(a, rel, b)` | 显式建边 | 新图操作 |
 
-`scope_id` 贯穿三层 → 个人单用户即 "default scope"，未来"多设备/多 agent 同步"只是多个 scope，架构无需改。
+`record_kind × scope_id × context_key` 贯穿三层。查询支持维度内 OR、维度间 AND，
+省略某个维度表示不限制；`recall_agent` 默认按当前项目 context 查询 memory，同时
+允许 personal 与 agent 两个 scope。
 
 ---
 
@@ -225,7 +234,7 @@ Cloudflare **Cron Trigger + Queue/Workflows** 跑后台"睡眠期"维护：
 
 | 能力 | 标杆通常用 | CloudMind 私有方案 |
 |---|---|---|
-| 原始/情节存储 | S3 / Postgres | **R2 + D1** |
+| 原始资料/记忆存储 | S3 / Postgres | **R2 + D1** |
 | 知识图谱 | Neo4j / FalkorDB | **D1 邻接表 + 递归 CTE** |
 | 向量 | Pinecone / Qdrant | **Vectorize**（原生过滤） |
 | 词面检索 | Elasticsearch | **D1 FTS5 + trigram** |
@@ -247,7 +256,7 @@ Cloudflare **Cron Trigger + Queue/Workflows** 跑后台"睡眠期"维护：
 | **P1 地基** | 检索可信 | 结构/token 切块、RRF 融合、bge-reranker 重排、FTS5 中文、Vectorize 原生过滤、bge-m3 prefix、3 个 bug、最小 eval harness | 真正好用的私有 RAG/搜索 |
 | **P2 分层** | 事实/记忆分离 | L1 瘦身迁移、建 L2 表(entities/statements/edges/provenance/communities)、激活 `extract_entities` | 数据干净，骨架就位 |
 | **P3 心脏** | 真记忆 | 智能写(调和+双时间)、图检索融入读路径、显著性/衰减、sleep-time 整合/遗忘 | 名副其实的记忆层 |
-| **P4 面** | agent-native | 记忆动词 MCP、快写路径、情节捕获(chat)、scope 分区 | 私有记忆基础设施 |
+| **P4 面** | agent-native | 三维记录模型、项目隔离、记忆动词 MCP、Agent Web | 私有记忆基础设施 |
 
 依赖：每阶段独立可发布；**P1 的 re-embed 必须先于 P2 的迁移**，避免重嵌两遍。
 
@@ -285,17 +294,27 @@ Cloudflare **Cron Trigger + Queue/Workflows** 跑后台"睡眠期"维护：
 - **决策**：不写历史数据迁移脚本；私有部署、数据量小，直接以瘦身后的新 schema 重建库。
 - **影响**：P2 落地更干脆，无需兼容旧 asset 行；现有部署需重新 ingest（原始资产仍可从 R2 重放）。
 
-### ADR-004：MVP 仅实现 default scope（2026-06-05，已定）
-- **决策**：`scope_id` 维度贯穿 L1/L2/L3 的 schema，但 MVP 只用默认值，多 scope（多 agent/多设备）留接口不实现。
-- **理由**：个人私有单用户优先，避免过早背多租户复杂度。
+### ADR-004：记录采用三个正交维度（2026-07-24，已定）
+- **决策**：`record_kind(library|memory)`、`scope_id(personal|agent)`、
+  `context_key(global|project:<stable-key>)` 贯穿写入、检索、向量和图谱。
+- **理由**：记录形态、记忆来源域和项目上下文各自只表达一件事，调用方可以自由
+  组合过滤，并阻止不同项目的同名里程碑和实体互相污染。
+
+### ADR-005：移除 episode 与自动会话原文捕获（2026-07-24，已定）
+- **决策**：目标 schema 删除 episodes 和 provenance.episode_id；L2 出处直接指向
+  asset/chunk。CloudMind 默认不保存完整外部会话，也不提供 capture_episode。
+- **理由**：asset + immutable R2 snapshot 已承载原始来源；agent_assert 与 memory
+  重复，correction 由版本更新表达，chat_turn 会扩大噪声、成本和隐私面。
+- **迁移**：先重建 provenance 并保留 asset_id/chunk_index，再删除 episode 外键与
+  表，避免级联删除现有出处。
 
 ---
 
 ## 十四、待定问题（Open Questions）
 
 1. ~~**L1 迁移方式**~~ → **已定（ADR-003）**：新库重来，不写迁移脚本。
-2. **下一步详设展开**：先出 **P1 检索管线的 task 清单 + 改动文件**，还是 **L1/L2 完整建表 DDL + 迁移脚本**？
-3. ~~**scope 粒度**~~ → **已定（ADR-004）**：MVP 仅 default scope，多 scope 留接口。
+2. ~~**下一步详设展开**~~ → **已定**：当前进入 M3，实施顺序见 Agent 记忆模块。
+3. ~~**记录过滤维度**~~ → **已定（ADR-004）**：record kind、scope、context 三维。
 4. ~~**AGENTS.md 是否更新**~~ → **已完成**：AGENTS.md（及镜像 CLAUDE.md）已记录方向升级并标注 superseded 旧立场。
 
 ---
