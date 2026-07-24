@@ -14,7 +14,10 @@ export const resolveDatabaseRestoreAction = (
 ): DatabaseRestoreAction => {
   const existingEntries = Object.entries(input.existingTableCounts);
 
-  if (existingEntries.length === 0) {
+  if (
+    existingEntries.length === 0 ||
+    existingEntries.every(([, count]) => count === 0)
+  ) {
     return "import";
   }
 

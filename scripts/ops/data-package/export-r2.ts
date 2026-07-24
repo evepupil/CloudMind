@@ -7,6 +7,7 @@ import {
   type CloudMindDataPackageManifest,
   getR2PackagePath,
 } from "../../../src/features/sovereignty/model/data-package.ts";
+import { mapWithConcurrency } from "./concurrency.ts";
 import { resolvePackageFile } from "./file-integrity.ts";
 import type { ExportDataPackageInput } from "./types.ts";
 import { queryD1, runWrangler } from "./wrangler.ts";
@@ -57,27 +58,33 @@ export const exportR2Objects = async (
       buildR2ReferenceSql(cursor)
     ).map((row) => r2ReferenceSchema.parse(row));
 
-    for (const object of page) {
+    const exportedPage = await mapWithConcurrency(page, 4, async (object) => {
       const keyHash = createHash("sha256").update(object.key).digest("hex");
       const packagePath = getR2PackagePath(keyHash);
       const targetPath = resolvePackageFile(input.outputPath, packagePath);
 
       await mkdir(dirname(targetPath), { recursive: true });
-      runWrangler(input.projectRoot, [
-        "r2",
-        "object",
-        "get",
-        `${input.resources.bucket}/${object.key}`,
-        `--${input.mode}`,
-        "--file",
-        targetPath,
-      ]);
-      objects.push({
+      runWrangler(
+        input.projectRoot,
+        [
+          "r2",
+          "object",
+          "get",
+          `${input.resources.bucket}/${object.key}`,
+          `--${input.mode}`,
+          "--file",
+          targetPath,
+        ],
+        { retries: 2 }
+      );
+
+      return {
         key: object.key,
         path: packagePath,
         ...(object.content_type ? { contentType: object.content_type } : {}),
-      });
-    }
+      };
+    });
+    objects.push(...exportedPage);
 
     if (page.length < PAGE_SIZE) {
       return objects;

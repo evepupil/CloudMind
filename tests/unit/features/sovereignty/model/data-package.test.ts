@@ -3,11 +3,20 @@ import { describe, expect, it } from "vitest";
 import {
   CLOUDMIND_DATA_PACKAGE_FORMAT,
   CLOUDMIND_DATA_PACKAGE_VERSION,
+  CLOUDMIND_DATA_TABLES,
   parseDataPackageManifest,
 } from "@/features/sovereignty/model/data-package";
 import { resolveDatabaseRestoreAction } from "@/features/sovereignty/model/restore-policy";
 
 const SHA256 = "a".repeat(64);
+const databaseTables = CLOUDMIND_DATA_TABLES.map((name) => ({
+  name,
+  path: `database/tables/${name}.ndjson`,
+  count: name === "assets" ? 2 : name === "asset_chunks" ? 3 : 0,
+}));
+const tableCounts = Object.fromEntries(
+  databaseTables.map((table) => [table.name, table.count])
+);
 
 const createManifest = () =>
   parseDataPackageManifest({
@@ -15,8 +24,8 @@ const createManifest = () =>
     version: CLOUDMIND_DATA_PACKAGE_VERSION,
     createdAt: "2026-07-24T08:00:00.000Z",
     database: {
-      path: "database/database.sql",
-      tableCounts: { assets: 2, asset_chunks: 3 },
+      tables: databaseTables,
+      tableCounts,
     },
     r2: {
       objects: [
@@ -44,12 +53,12 @@ const createManifest = () =>
       },
     ],
     files: [
-      {
-        path: "database/database.sql",
+      ...databaseTables.map((table) => ({
+        path: table.path,
         size: 10,
         sha256: SHA256,
-        role: "database",
-      },
+        role: "database" as const,
+      })),
       {
         path: "r2/aa/asset",
         size: 20,
@@ -75,7 +84,7 @@ describe("CloudMind data package manifest", () => {
   it("accepts a complete versioned manifest", () => {
     const manifest = createManifest();
 
-    expect(manifest.version).toBe(1);
+    expect(manifest.version).toBe(2);
     expect(manifest.r2.objects).toHaveLength(1);
   });
 
@@ -85,7 +94,12 @@ describe("CloudMind data package manifest", () => {
     expect(() =>
       parseDataPackageManifest({
         ...manifest,
-        database: { ...manifest.database, path: "../database.sql" },
+        database: {
+          ...manifest.database,
+          tables: manifest.database.tables.map((table, index) =>
+            index === 0 ? { ...table, path: "../database.ndjson" } : table
+          ),
+        },
       })
     ).toThrow("Package paths cannot traverse upward");
   });
@@ -122,17 +136,18 @@ describe("database restore policy", () => {
 
   it("allows an exact retry only with resume enabled", () => {
     const manifest = createManifest();
+    const existingTableCounts = manifest.database.tableCounts;
 
     expect(
       resolveDatabaseRestoreAction({
-        existingTableCounts: { assets: 2, asset_chunks: 3 },
+        existingTableCounts,
         manifest,
         resume: true,
       })
     ).toBe("skip");
     expect(() =>
       resolveDatabaseRestoreAction({
-        existingTableCounts: { assets: 2, asset_chunks: 3 },
+        existingTableCounts,
         manifest,
         resume: false,
       })
@@ -142,7 +157,10 @@ describe("database restore policy", () => {
   it("rejects a retry against different data", () => {
     expect(() =>
       resolveDatabaseRestoreAction({
-        existingTableCounts: { assets: 1, asset_chunks: 3 },
+        existingTableCounts: {
+          ...createManifest().database.tableCounts,
+          assets: 1,
+        },
         manifest: createManifest(),
         resume: true,
       })

@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { readAndValidateDataPackage } from "../../../scripts/ops/data-package/validate";
+import { CLOUDMIND_DATA_TABLES } from "../../../src/features/sovereignty/model/data-package";
 
 const temporaryDirectories: string[] = [];
 const hash = (value: string): string =>
@@ -13,8 +14,14 @@ const hash = (value: string): string =>
 const createPackage = async (): Promise<string> => {
   const root = await mkdtemp(join(tmpdir(), "cloudmind-package-"));
   temporaryDirectories.push(root);
-  const contents = {
-    "database/database.sql": "CREATE TABLE example (id TEXT);\n",
+  const tableContents = Object.fromEntries(
+    CLOUDMIND_DATA_TABLES.map((table) => [
+      `database/tables/${table}.ndjson`,
+      "",
+    ])
+  );
+  const contents: Record<string, string> = {
+    ...tableContents,
     "vectorize/asset-chunks.ndjson": "",
     "vectorize/graph-entities.ndjson": "",
   };
@@ -29,11 +36,17 @@ const createPackage = async (): Promise<string> => {
     join(root, "manifest.json"),
     JSON.stringify({
       format: "cloudmind-data-package",
-      version: 1,
+      version: 2,
       createdAt: "2026-07-24T08:00:00.000Z",
       database: {
-        path: "database/database.sql",
-        tableCounts: { assets: 0 },
+        tables: CLOUDMIND_DATA_TABLES.map((name) => ({
+          name,
+          path: `database/tables/${name}.ndjson`,
+          count: 0,
+        })),
+        tableCounts: Object.fromEntries(
+          CLOUDMIND_DATA_TABLES.map((name) => [name, 0])
+        ),
       },
       r2: { objects: [] },
       vectorize: [
@@ -78,16 +91,20 @@ describe("CloudMind data package validation", () => {
     const root = await createPackage();
 
     await expect(readAndValidateDataPackage(root)).resolves.toMatchObject({
-      version: 1,
+      version: 2,
       files: expect.arrayContaining([
-        expect.objectContaining({ path: "database/database.sql" }),
+        expect.objectContaining({ path: "database/tables/assets.ndjson" }),
       ]),
     });
   });
 
   it("detects a modified package file", async () => {
     const root = await createPackage();
-    await writeFile(join(root, "database", "database.sql"), "changed", "utf8");
+    await writeFile(
+      join(root, "database", "tables", "assets.ndjson"),
+      "changed",
+      "utf8"
+    );
 
     await expect(readAndValidateDataPackage(root)).rejects.toThrow(
       "Checksum validation failed"

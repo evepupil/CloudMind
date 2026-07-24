@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AssetRepository } from "@/core/assets/ports";
+import type { BlobStore } from "@/core/blob/ports";
+import type { MemoryPurgeRepository } from "@/core/sovereignty/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { AssetDetail } from "@/features/assets/model/types";
 import { createMemoryLifecycleService } from "@/features/memory/server/lifecycle-service";
@@ -70,11 +72,29 @@ describe("memory lifecycle service", () => {
     search: vi.fn(),
     deleteByIds: vi.fn(),
   };
+  const graphVectorStore: VectorStore = {
+    upsert: vi.fn(),
+    search: vi.fn(),
+    deleteByIds: vi.fn(),
+  };
+  const blobStore: BlobStore = {
+    put: vi.fn(),
+    get: vi.fn(),
+    delete: vi.fn(),
+  };
+  const purgeRepository: MemoryPurgeRepository = {
+    prepareMemoryPurge: vi.fn(),
+    completeMemoryPurge: vi.fn(),
+    failMemoryPurge: vi.fn(),
+  };
   const ingestTextAsset = vi.fn();
   const reprocessAsset = vi.fn();
   const service = createMemoryLifecycleService({
     getAssetRepository: vi.fn(async () => repository),
     getVectorStore: vi.fn(async () => vectorStore),
+    getGraphVectorStore: vi.fn(async () => graphVectorStore),
+    getBlobStore: vi.fn(async () => blobStore),
+    getMemoryPurgeRepository: vi.fn(async () => purgeRepository),
     ingestTextAsset,
     reprocessAsset,
   });
@@ -205,5 +225,103 @@ describe("memory lifecycle service", () => {
     );
     expect(softDeleteAsset).toHaveBeenCalledWith("memory-v1");
     expect(vectorStore.deleteByIds).toHaveBeenCalledWith(["vector-v1"]);
+  });
+
+  it("hard deletes an already-forgotten version chain across every store", async () => {
+    const deleted = createMemory({
+      deletedAt: "2026-07-24T01:00:00.000Z",
+    });
+    const plan = {
+      auditId: "audit-1",
+      assetIds: ["memory-v1", "memory-v0"],
+      blobKeys: ["raw-v1", "raw-v0"],
+      assetVectorIds: ["chunk-vector"],
+      graphVectorIds: ["entity-vector"],
+      statementIds: ["statement-1"],
+      edgeIds: ["edge-1"],
+      entityIds: ["entity-1"],
+    };
+    getAssetById.mockResolvedValue(deleted);
+    vi.mocked(purgeRepository.prepareMemoryPurge).mockResolvedValue(plan);
+
+    const result = await service.hardDeleteMemory(undefined, {
+      ...target,
+      confirmId: target.id,
+    });
+
+    expect(blobStore.delete).toHaveBeenCalledWith(plan.blobKeys);
+    expect(vectorStore.deleteByIds).toHaveBeenCalledWith(plan.assetVectorIds);
+    expect(graphVectorStore.deleteByIds).toHaveBeenCalledWith(
+      plan.graphVectorIds
+    );
+    expect(purgeRepository.completeMemoryPurge).toHaveBeenCalledWith(plan);
+    expect(purgeRepository.failMemoryPurge).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      auditId: "audit-1",
+      deletedAssetCount: 2,
+      deletedBlobCount: 2,
+      deletedAssetVectorCount: 1,
+      deletedGraphVectorCount: 1,
+      deletedL2RecordCount: 3,
+    });
+  });
+
+  it("keeps D1 pending and records the failed external cleanup stage", async () => {
+    const deleted = createMemory({
+      deletedAt: "2026-07-24T01:00:00.000Z",
+    });
+    const plan = {
+      auditId: "audit-1",
+      assetIds: ["memory-v1"],
+      blobKeys: ["raw-v1"],
+      assetVectorIds: ["chunk-vector"],
+      graphVectorIds: [],
+      statementIds: [],
+      edgeIds: [],
+      entityIds: [],
+    };
+    getAssetById.mockResolvedValue(deleted);
+    vi.mocked(purgeRepository.prepareMemoryPurge).mockResolvedValue(plan);
+    vi.mocked(blobStore.delete).mockRejectedValueOnce(
+      new Error("R2 unavailable")
+    );
+
+    await expect(
+      service.hardDeleteMemory(undefined, {
+        ...target,
+        confirmId: target.id,
+      })
+    ).rejects.toThrow("R2 unavailable");
+
+    expect(purgeRepository.failMemoryPurge).toHaveBeenCalledWith(
+      "audit-1",
+      "BLOB_DELETE_FAILED"
+    );
+    expect(vectorStore.deleteByIds).not.toHaveBeenCalled();
+    expect(purgeRepository.completeMemoryPurge).not.toHaveBeenCalled();
+  });
+
+  it("rejects hard delete when the confirmation id does not match", async () => {
+    await expect(
+      service.hardDeleteMemory(undefined, {
+        ...target,
+        confirmId: "different-memory",
+      })
+    ).rejects.toMatchObject({ code: "PURGE_CONFIRMATION_MISMATCH" });
+    expect(getAssetById).not.toHaveBeenCalled();
+  });
+
+  it("does not restore a memory after hard delete has started", async () => {
+    getAssetById.mockResolvedValue(
+      createMemory({
+        deletedAt: "2026-07-24T01:00:00.000Z",
+        purgePendingAt: "2026-07-24T01:05:00.000Z",
+      })
+    );
+
+    await expect(
+      service.restoreMemory(undefined, target)
+    ).rejects.toMatchObject({ code: "PURGE_PENDING" });
+    expect(restoreAsset).not.toHaveBeenCalled();
   });
 });

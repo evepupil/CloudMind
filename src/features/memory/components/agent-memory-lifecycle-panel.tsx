@@ -30,7 +30,8 @@ export const AgentMemoryLifecyclePanel = ({
   const isCurrent = !item.deletedAt && !item.supersededAt;
   const canUpdate = isCurrent && item.status === "ready" && !hasSuccessor;
   const canForget = canUpdate;
-  const canRestore = Boolean(item.deletedAt) && !item.supersededAt;
+  const canRestore =
+    Boolean(item.deletedAt) && !item.supersededAt && !item.purgePendingAt;
 
   return (
     <Panel class="p-5" variant="panel">
@@ -77,7 +78,9 @@ export const AgentMemoryLifecyclePanel = ({
       ) : (
         <p class="text-[13px] leading-relaxed text-bone-soft">
           {item.deletedAt
-            ? "这条记忆已遗忘，可先恢复。"
+            ? item.purgePendingAt
+              ? "这条记忆正在等待永久删除重试。"
+              : "这条记忆已遗忘，可先恢复。"
             : item.supersededAt
               ? "历史版本保持只读，请在当前版本上继续更新。"
               : hasSuccessor

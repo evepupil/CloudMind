@@ -52,6 +52,7 @@ vi.mock("@/features/memory/server/lifecycle-service", () => {
   return {
     updateMemory: vi.fn(),
     forgetMemory: vi.fn(),
+    hardDeleteMemory: vi.fn(),
     restoreMemory: vi.fn(),
   };
 });
@@ -1050,6 +1051,14 @@ describe("mcp routes", () => {
       item: { ...current, deletedAt: "2026-07-24T00:00:00.000Z" },
       vectorCleanupPending: false,
     });
+    vi.mocked(memoryLifecycleService.hardDeleteMemory).mockResolvedValue({
+      auditId: "audit-1",
+      deletedAssetCount: 2,
+      deletedBlobCount: 2,
+      deletedAssetVectorCount: 1,
+      deletedGraphVectorCount: 1,
+      deletedL2RecordCount: 3,
+    });
     vi.mocked(memoryLifecycleService.restoreMemory).mockResolvedValue({
       ...current,
       deletedAt: null,
@@ -1079,6 +1088,14 @@ describe("mcp routes", () => {
       name: "restore_memory",
       arguments: target,
     });
+    const hardDeleteCall = await client.callTool({
+      name: "forget",
+      arguments: {
+        ...target,
+        mode: "hard",
+        confirmId: target.id,
+      },
+    });
     const invalidCall = await client.callTool({
       name: "forget",
       arguments: { id: "memory-v1", scopeId: "agent" },
@@ -1092,8 +1109,20 @@ describe("mcp routes", () => {
     expect(getStructuredContent(forgetCall)).toEqual({
       ok: true,
       id: "memory-v1",
+      mode: "soft",
       item: expect.objectContaining({ id: "memory-v2" }),
       vectorCleanupPending: false,
+    });
+    expect(getStructuredContent(hardDeleteCall)).toEqual({
+      ok: true,
+      id: "memory-v1",
+      mode: "hard",
+      auditId: "audit-1",
+      deletedAssetCount: 2,
+      deletedBlobCount: 2,
+      deletedAssetVectorCount: 1,
+      deletedGraphVectorCount: 1,
+      deletedL2RecordCount: 3,
     });
     expect(getStructuredContent(restoreCall)).toEqual({
       item: expect.objectContaining({ id: "memory-v2" }),
@@ -1109,6 +1138,10 @@ describe("mcp routes", () => {
       env,
       target
     );
+    expect(memoryLifecycleService.hardDeleteMemory).toHaveBeenCalledWith(env, {
+      ...target,
+      confirmId: target.id,
+    });
     expect(memoryLifecycleService.restoreMemory).toHaveBeenCalledWith(
       env,
       target

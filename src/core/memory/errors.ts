@@ -5,7 +5,9 @@ export type MemoryLifecycleErrorCode =
   | "NOT_CURRENT"
   | "UPDATE_PENDING"
   | "NOT_READY"
-  | "NOT_DELETED";
+  | "NOT_DELETED"
+  | "PURGE_CONFIRMATION_MISMATCH"
+  | "PURGE_PENDING";
 
 export class MemoryLifecycleError extends Error {
   public readonly code: MemoryLifecycleErrorCode;

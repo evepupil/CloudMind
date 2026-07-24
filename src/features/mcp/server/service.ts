@@ -53,6 +53,7 @@ import {
 } from "@/features/mcp/server/context-profiles";
 import {
   forgetMemory,
+  hardDeleteMemory,
   restoreMemory,
   updateMemory,
 } from "@/features/memory/server/lifecycle-service";
@@ -126,7 +127,21 @@ const updateMemoryInputSchema = z.object({
   title: z.string().trim().min(1).max(300).optional(),
 });
 
-const forgetMemoryInputSchema = z.object(memoryTargetSchemaShape);
+const forgetMemoryInputSchema = z
+  .object({
+    ...memoryTargetSchemaShape,
+    mode: z.enum(["soft", "hard"]).optional(),
+    confirmId: z.string().trim().min(1).optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.mode === "hard" && value.confirmId !== value.id) {
+      context.addIssue({
+        code: "custom",
+        path: ["confirmId"],
+        message: "Hard delete requires confirmId to exactly match id.",
+      });
+    }
+  });
 const restoreMemoryInputSchema = z.object(memoryTargetSchemaShape);
 
 // 注意：MCP inputSchema 必须保持纯 object（可带 .superRefine），绝不能 .transform()——
@@ -886,18 +901,28 @@ export const createMcpServer = (
     {
       title: "Forget Memory",
       description:
-        "Soft delete one memory and remove its chunk vectors. The operation " +
-        "requires the exact scopeId and contextKey and can be reversed with " +
-        "restore_memory.",
+        "Forget one memory with exact scopeId and contextKey. mode=soft is " +
+        "the default and can be reversed with restore_memory. mode=hard " +
+        "permanently deletes the already-forgotten version chain across D1, " +
+        "R2, and Vectorize and requires confirmId to exactly match id.",
       inputSchema: forgetMemoryInputSchema,
     },
     withToolLogging("forget", async (input) => {
       try {
-        const result = await forgetMemory(bindings, input);
+        const result =
+          input.mode === "hard"
+            ? await hardDeleteMemory(bindings, {
+                id: input.id,
+                scopeId: input.scopeId,
+                contextKey: input.contextKey,
+                confirmId: input.confirmId ?? "",
+              })
+            : await forgetMemory(bindings, input);
 
         return createToolResult({
           ok: true,
           id: input.id,
+          mode: input.mode ?? "soft",
           ...result,
         });
       } catch (error) {

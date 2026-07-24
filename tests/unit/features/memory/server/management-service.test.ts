@@ -105,6 +105,7 @@ describe("memory management service", () => {
     } as unknown as AssetRepository;
     const blobStore: BlobStore = {
       put: vi.fn(),
+      delete: vi.fn(),
       get: vi.fn(async () => ({
         key: item.contentR2Key ?? "",
         body: new TextEncoder().encode("R2 immutable content")

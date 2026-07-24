@@ -127,6 +127,13 @@
       "when": 1784869207999,
       "tag": "0017_equal_bill_hollister",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1784880136990,
+      "tag": "0018_outstanding_the_fallen",
+      "breakpoints": true
     }
   ]
 }

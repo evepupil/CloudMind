@@ -19,7 +19,7 @@ export const restoreDataPackage = async (
 
   const manifest = await readAndValidateDataPackage(input.packagePath);
   assertVectorMetadataIndexes(input, manifest);
-  restoreDatabase(input, manifest);
+  await restoreDatabase(input, manifest);
   restoreR2Objects(input, manifest);
   restoreVectorIndexes(input, manifest);
 

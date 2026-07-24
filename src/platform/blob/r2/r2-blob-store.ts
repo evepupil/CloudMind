@@ -38,4 +38,12 @@ export class R2BlobStore implements BlobStore {
       contentType: object.httpMetadata?.contentType,
     };
   }
+
+  public async delete(keys: string[]): Promise<void> {
+    if (keys.length === 0) {
+      return;
+    }
+
+    await this.bucket.delete(keys);
+  }
 }

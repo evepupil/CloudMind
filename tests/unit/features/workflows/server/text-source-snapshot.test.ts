@@ -22,7 +22,7 @@ const createBlobObject = (key: string, content: string): BlobObject => ({
 const createBlobStore = (
   get: BlobStore["get"],
   put: BlobStore["put"] = vi.fn()
-): BlobStore => ({ get, put });
+): BlobStore => ({ get, put, delete: vi.fn() });
 
 describe("loadOrCreateTextSourceSnapshot", () => {
   it("stores the exact original text before attaching the snapshot", async () => {

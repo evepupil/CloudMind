@@ -95,8 +95,9 @@ Agent Web        -> filterable list/detail -> update / forget / restore
 - `update_memory` 创建带根版本、版本号和上一版本指针的新 memory 候选；候选通过
   Queue 完成处理后，D1 原子地将旧版本标记为 superseded 并激活新版本。候选失败时
   旧版本继续有效。
-- `forget` 和 `restore_memory` 要求精确 `scopeId + contextKey`。forget 软删除 D1
-  记录并清理 chunk 向量；restore 从首次不可变 R2 快照重新处理并重建向量。
+- `forget` 和 `restore_memory` 要求精确 `scopeId + contextKey`。forget 默认 soft，软删除
+  D1 记录并清理 chunk 向量；restore 从首次不可变 R2 快照重新处理并重建向量。
+  已软删除的当前记忆可用 `mode=hard + confirmId=id` 清理整条版本链，hard 不可恢复。
 - 列表、FTS、摘要、dense 命中补齐和图证据 hydration 均排除 superseded 版本；
   按 ID 仍可读取版本历史。
 - Web 更新、遗忘、恢复表单全部调用专用生命周期服务，并提交精确的
@@ -139,6 +140,8 @@ Agent 项目记忆，验证生产 D1 列表、FTS/Vectorize 混合检索和 L2 s
 
 - `update_memory` 创建新版本，旧版本保留并标记 superseded。
 - `forget` 先做可恢复软删除；恢复时重建缺失向量，硬删除规则由 M6 约束。
+- M6 已给同一 `forget` 增加显式 hard 模式；Web 继续只提供可恢复遗忘，永久删除由
+  MCP 精确确认触发并进入审计。
 - 通过 scope/context 校验阻止跨项目误更新和误删除。
 
 ### M3-A3：Agent Web 与验收（已完成）
@@ -155,6 +158,8 @@ Agent 项目记忆，验证生产 D1 列表、FTS/Vectorize 混合检索和 L2 s
 
 ## 改动历史
 
+- 2026-07-24：`forget` 增加保持向后兼容的 soft/hard 模式；hard 要求目标已软删除、
+  `confirmId` 完全一致，并清理完整 memory 版本链。
 - 2026-07-24：M3-A3 生产验收通过；两个同含 `M1/M2` 的项目在 D1、FTS、Vectorize
   和 L2 statement 证据中保持隔离，验收数据全部遗忘且 chunk 向量清理为 0，M3 关闭。
 - 2026-07-24：完成 M3-A3 本地实现，增加三维筛选、项目视图、详情、来源、完整版本

@@ -6,7 +6,15 @@ import type { WranglerMode } from "./options.ts";
 
 const MAX_COMMAND_OUTPUT = 256 * 1024 * 1024;
 
-export const runWrangler = (projectRoot: string, args: string[]): string => {
+interface RunWranglerOptions {
+  retries?: number | undefined;
+}
+
+export const runWrangler = (
+  projectRoot: string,
+  args: string[],
+  options?: RunWranglerOptions
+): string => {
   const wranglerPath = resolve(
     projectRoot,
     "node_modules",
@@ -14,28 +22,36 @@ export const runWrangler = (projectRoot: string, args: string[]): string => {
     "bin",
     "wrangler.js"
   );
-  const result = spawnSync(process.execPath, [wranglerPath, ...args], {
-    cwd: projectRoot,
-    encoding: "utf8",
-    maxBuffer: MAX_COMMAND_OUTPUT,
-    env: {
-      ...process.env,
-      CI: "1",
-    },
-  });
+  const attempts = (options?.retries ?? 0) + 1;
 
-  if (result.error) {
-    throw result.error;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const result = spawnSync(process.execPath, [wranglerPath, ...args], {
+      cwd: projectRoot,
+      encoding: "utf8",
+      maxBuffer: MAX_COMMAND_OUTPUT,
+      env: {
+        ...process.env,
+        CI: "1",
+      },
+    });
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    if (result.status === 0) {
+      return result.stdout;
+    }
+
+    if (attempt === attempts) {
+      const operation = args.slice(0, 2).join(" ");
+      throw new Error(
+        `Wrangler ${operation} failed with exit code ${result.status}.`
+      );
+    }
   }
 
-  if (result.status !== 0) {
-    const operation = args.slice(0, 2).join(" ");
-    throw new Error(
-      `Wrangler ${operation} failed with exit code ${result.status}.`
-    );
-  }
-
-  return result.stdout;
+  throw new Error("Wrangler retry loop ended unexpectedly.");
 };
 
 const findJsonStart = (text: string, offset: number): number => {
@@ -108,15 +124,11 @@ export const queryD1 = (
   mode: WranglerMode,
   sql: string
 ): Array<Record<string, unknown>> => {
-  const output = runWrangler(projectRoot, [
-    "d1",
-    "execute",
-    database,
-    `--${mode}`,
-    "--command",
-    sql,
-    "--json",
-  ]);
+  const output = runWrangler(
+    projectRoot,
+    ["d1", "execute", database, `--${mode}`, "--command", sql, "--json"],
+    { retries: 2 }
+  );
   const envelopes = d1EnvelopeSchema.parse(parseWranglerJson(output));
 
   return envelopes.flatMap((envelope) => envelope.results);

@@ -102,6 +102,7 @@ export interface AssetSummary {
   supersededById?: string | null | undefined;
   supersededAt?: string | null | undefined;
   deletedAt?: string | null | undefined;
+  purgePendingAt?: string | null | undefined;
   sourceHost?: string | null | undefined;
   collectionKey: string | null;
   capturedAt: string | null;

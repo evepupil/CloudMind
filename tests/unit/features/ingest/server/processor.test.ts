@@ -427,6 +427,12 @@ class InMemoryBlobStore implements BlobStore {
   public async get(key: string): Promise<BlobObject | null> {
     return this.objects.get(key) ?? null;
   }
+
+  public async delete(keys: string[]): Promise<void> {
+    for (const key of keys) {
+      this.objects.delete(key);
+    }
+  }
 }
 
 class InMemoryVectorStore implements VectorStore {

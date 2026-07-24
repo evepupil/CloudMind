@@ -200,6 +200,7 @@ describe("asset service", () => {
   const blobStoreMock: BlobStore = {
     put: vi.fn(),
     get: vi.fn(),
+    delete: vi.fn(),
   };
   const vectorStoreMock: VectorStore = {
     upsert: vi.fn(),

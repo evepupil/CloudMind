@@ -1,53 +1,81 @@
-import { mkdir } from "node:fs/promises";
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { z } from "zod";
 
-import { CLOUDMIND_DATA_TABLES } from "../../../src/features/sovereignty/model/data-package.ts";
+import {
+  CLOUDMIND_DATA_TABLES,
+  type CloudMindDataPackageManifest,
+} from "../../../src/features/sovereignty/model/data-package.ts";
+import { mapWithConcurrency } from "./concurrency.ts";
 import { resolvePackageFile } from "./file-integrity.ts";
 import type { ExportDataPackageInput } from "./types.ts";
-import { queryD1, runWrangler } from "./wrangler.ts";
+import { queryD1 } from "./wrangler.ts";
 
-export const DATABASE_PACKAGE_PATH = "database/database.sql";
+const PAGE_SIZE = 25;
+const rowSchema = z
+  .object({ __cloudmind_rowid: z.number().int() })
+  .passthrough();
 
-const tableCountSchema = z.object({
-  table_name: z.string(),
-  row_count: z.number().int().nonnegative(),
-});
+interface ExportedDatabase {
+  tables: CloudMindDataPackageManifest["database"]["tables"];
+  tableCounts: Record<string, number>;
+}
 
-export const readTableCounts = (
-  input: Pick<ExportDataPackageInput, "projectRoot" | "mode" | "resources">
-): Record<string, number> => {
-  const sql = CLOUDMIND_DATA_TABLES.map(
-    (table) =>
-      `SELECT '${table}' AS table_name, COUNT(*) AS row_count FROM "${table}"`
-  ).join(" UNION ALL ");
-  const rows = queryD1(
-    input.projectRoot,
-    input.resources.database,
-    input.mode,
-    sql
-  ).map((row) => tableCountSchema.parse(row));
+const getTablePackagePath = (table: string): string =>
+  `database/tables/${table}.ndjson`;
 
-  return Object.fromEntries(rows.map((row) => [row.table_name, row.row_count]));
+const exportTable = async (
+  input: ExportDataPackageInput,
+  table: (typeof CLOUDMIND_DATA_TABLES)[number]
+): Promise<CloudMindDataPackageManifest["database"]["tables"][number]> => {
+  const packagePath = getTablePackagePath(table);
+  const outputPath = resolvePackageFile(input.outputPath, packagePath);
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, "", "utf8");
+  let cursor: number | null = null;
+  let count = 0;
+
+  while (true) {
+    const cursorCondition: string =
+      cursor === null ? "" : `WHERE rowid > ${cursor}`;
+    const rows: z.infer<typeof rowSchema>[] = queryD1(
+      input.projectRoot,
+      input.resources.database,
+      input.mode,
+      `SELECT rowid AS __cloudmind_rowid, * FROM "${table}" ${cursorCondition} ORDER BY rowid LIMIT ${PAGE_SIZE}`
+    ).map((row) => rowSchema.parse(row));
+
+    if (rows.length > 0) {
+      await appendFile(
+        outputPath,
+        `${rows
+          .map(({ __cloudmind_rowid: _rowId, ...row }) => JSON.stringify(row))
+          .join("\n")}\n`,
+        "utf8"
+      );
+      count += rows.length;
+      cursor = rows.at(-1)?.__cloudmind_rowid ?? null;
+    }
+
+    if (rows.length < PAGE_SIZE) {
+      return { name: table, path: packagePath, count };
+    }
+  }
 };
 
 export const exportDatabase = async (
   input: ExportDataPackageInput
-): Promise<string> => {
-  const outputPath = resolvePackageFile(
-    input.outputPath,
-    DATABASE_PACKAGE_PATH
+): Promise<ExportedDatabase> => {
+  const tables = await mapWithConcurrency(
+    CLOUDMIND_DATA_TABLES,
+    4,
+    async (table) => exportTable(input, table)
   );
-  await mkdir(dirname(outputPath), { recursive: true });
-  runWrangler(input.projectRoot, [
-    "d1",
-    "export",
-    input.resources.database,
-    `--${input.mode}`,
-    "--output",
-    outputPath,
-    "--skip-confirmation",
-  ]);
 
-  return DATABASE_PACKAGE_PATH;
+  return {
+    tables,
+    tableCounts: Object.fromEntries(
+      tables.map((table) => [table.name, table.count])
+    ),
+  };
 };

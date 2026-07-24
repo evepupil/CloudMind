@@ -5,15 +5,17 @@ import {
   type CloudMindDataPackageManifest,
 } from "../../../src/features/sovereignty/model/data-package.ts";
 import { resolveDatabaseRestoreAction } from "../../../src/features/sovereignty/model/restore-policy.ts";
-import { resolvePackageFile } from "./file-integrity.ts";
+import { restoreDatabaseRows } from "./restore-database-data.ts";
+import { applyDatabaseMigrations } from "./restore-database-migrations.ts";
 import type { RestoreDataPackageInput } from "./types.ts";
-import { queryD1, runWrangler } from "./wrangler.ts";
+import { queryD1 } from "./wrangler.ts";
 
 const tableNameSchema = z.object({ name: z.string() });
 const tableCountSchema = z.object({
   table_name: z.string(),
   row_count: z.number().int().nonnegative(),
 });
+const TABLE_COUNT_QUERY_BATCH_SIZE = 5;
 
 const readExistingTableCounts = (
   input: RestoreDataPackageInput
@@ -32,18 +34,29 @@ const readExistingTableCounts = (
     return {};
   }
 
-  const countSql = existingTables
-    .map(
-      (table) =>
-        `SELECT '${table}' AS table_name, COUNT(*) AS row_count FROM "${table}"`
-    )
-    .join(" UNION ALL ");
-  const rows = queryD1(
-    input.projectRoot,
-    input.resources.database,
-    input.mode,
-    countSql
-  ).map((row) => tableCountSchema.parse(row));
+  const rows: Array<z.infer<typeof tableCountSchema>> = [];
+
+  for (
+    let offset = 0;
+    offset < existingTables.length;
+    offset += TABLE_COUNT_QUERY_BATCH_SIZE
+  ) {
+    const countSql = existingTables
+      .slice(offset, offset + TABLE_COUNT_QUERY_BATCH_SIZE)
+      .map(
+        (table) =>
+          `SELECT '${table}' AS table_name, COUNT(*) AS row_count FROM "${table}"`
+      )
+      .join(" UNION ALL ");
+    rows.push(
+      ...queryD1(
+        input.projectRoot,
+        input.resources.database,
+        input.mode,
+        countSql
+      ).map((row) => tableCountSchema.parse(row))
+    );
+  }
 
   return Object.fromEntries(rows.map((row) => [row.table_name, row.row_count]));
 };
@@ -63,26 +76,20 @@ const assertTableCountsMatch = (
   }
 };
 
-export const restoreDatabase = (
+export const restoreDatabase = async (
   input: RestoreDataPackageInput,
   manifest: CloudMindDataPackageManifest
-): void => {
-  const action = resolveDatabaseRestoreAction({
-    existingTableCounts: readExistingTableCounts(input),
+): Promise<void> => {
+  const initialCounts = readExistingTableCounts(input);
+  const initialAction = resolveDatabaseRestoreAction({
+    existingTableCounts: initialCounts,
     manifest,
     resume: input.resume,
   });
 
-  if (action === "import") {
-    runWrangler(input.projectRoot, [
-      "d1",
-      "execute",
-      input.resources.database,
-      `--${input.mode}`,
-      "--file",
-      resolvePackageFile(input.packagePath, manifest.database.path),
-      "--yes",
-    ]);
+  if (initialAction === "import") {
+    await applyDatabaseMigrations(input);
+    await restoreDatabaseRows(input, manifest);
   }
 
   assertTableCountsMatch(

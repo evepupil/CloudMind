@@ -1,16 +1,16 @@
 import { z } from "zod";
 
 export const CLOUDMIND_DATA_PACKAGE_FORMAT = "cloudmind-data-package";
-export const CLOUDMIND_DATA_PACKAGE_VERSION = 1;
+export const CLOUDMIND_DATA_PACKAGE_VERSION = 2;
 
 export const CLOUDMIND_DATA_TABLES = [
   "asset_artifacts",
   "asset_chunks",
-  "asset_chunks_fts",
   "asset_sources",
   "assets",
   "auth_accounts",
   "communities",
+  "deletion_audits",
   "edges",
   "entities",
   "ingest_jobs",
@@ -48,6 +48,12 @@ const r2ObjectSchema = z.object({
   contentType: z.string().min(1).optional(),
 });
 
+const databaseTableSchema = z.object({
+  name: z.enum(CLOUDMIND_DATA_TABLES),
+  path: packagePathSchema,
+  count: z.number().int().nonnegative(),
+});
+
 const vectorIndexSchema = z.object({
   kind: z.enum(["asset_chunks", "graph_entities"]),
   sourceIndex: z.string().min(1),
@@ -61,7 +67,7 @@ export const cloudMindDataPackageManifestSchema = z.object({
   version: z.literal(CLOUDMIND_DATA_PACKAGE_VERSION),
   createdAt: z.iso.datetime(),
   database: z.object({
-    path: packagePathSchema,
+    tables: z.array(databaseTableSchema).length(CLOUDMIND_DATA_TABLES.length),
     tableCounts: z.record(z.string(), z.number().int().nonnegative()),
   }),
   r2: z.object({
@@ -110,9 +116,27 @@ export const parseDataPackageManifest = (
     throw new Error(`Duplicate R2 object key: ${duplicateObjectKey}.`);
   }
 
+  const duplicateTable = findDuplicate(
+    manifest.database.tables.map((table) => table.name)
+  );
+
+  if (duplicateTable) {
+    throw new Error(`Duplicate database table: ${duplicateTable}.`);
+  }
+
+  const exportedTables = new Set(
+    manifest.database.tables.map((table) => table.name)
+  );
+
+  for (const table of CLOUDMIND_DATA_TABLES) {
+    if (!exportedTables.has(table)) {
+      throw new Error(`Database table is missing from the package: ${table}.`);
+    }
+  }
+
   const filePaths = new Set(manifest.files.map((file) => file.path));
   const referencedPaths = [
-    manifest.database.path,
+    ...manifest.database.tables.map((table) => table.path),
     ...manifest.r2.objects.map((object) => object.path),
     ...manifest.vectorize.map((index) => index.path),
   ];

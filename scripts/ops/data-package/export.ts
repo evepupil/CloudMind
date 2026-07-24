@@ -7,11 +7,7 @@ import {
   type CloudMindDataPackageManifest,
   parseDataPackageManifest,
 } from "../../../src/features/sovereignty/model/data-package.ts";
-import {
-  DATABASE_PACKAGE_PATH,
-  exportDatabase,
-  readTableCounts,
-} from "./export-database.ts";
+import { exportDatabase } from "./export-database.ts";
 import { exportR2Objects } from "./export-r2.ts";
 import {
   ASSET_METADATA_INDEXES,
@@ -36,13 +32,17 @@ const assertOutputDoesNotExist = async (outputPath: string): Promise<void> => {
 
 const buildFileEntries = async (
   outputPath: string,
+  databaseTables: CloudMindDataPackageManifest["database"]["tables"],
   r2Objects: CloudMindDataPackageManifest["r2"]["objects"]
 ): Promise<CloudMindDataPackageManifest["files"]> => {
   const paths: Array<{
     path: string;
     role: "database" | "r2_object" | "vector_index";
   }> = [
-    { path: DATABASE_PACKAGE_PATH, role: "database" },
+    ...databaseTables.map((table) => ({
+      path: table.path,
+      role: "database" as const,
+    })),
     ...r2Objects.map((object) => ({
       path: object.path,
       role: "r2_object" as const,
@@ -64,8 +64,7 @@ export const exportDataPackage = async (
 ): Promise<CloudMindDataPackageManifest> => {
   await assertOutputDoesNotExist(input.outputPath);
   await mkdir(input.outputPath, { recursive: true, mode: 0o700 });
-  await exportDatabase(input);
-  const tableCounts = readTableCounts(input);
+  const database = await exportDatabase(input);
   const r2Objects = await exportR2Objects(input);
   const assetVectorCount = await exportVectorIndex(
     input.projectRoot,
@@ -81,7 +80,7 @@ export const exportDataPackage = async (
     format: CLOUDMIND_DATA_PACKAGE_FORMAT,
     version: CLOUDMIND_DATA_PACKAGE_VERSION,
     createdAt: new Date().toISOString(),
-    database: { path: DATABASE_PACKAGE_PATH, tableCounts },
+    database,
     r2: { objects: r2Objects },
     vectorize: [
       {
@@ -99,7 +98,7 @@ export const exportDataPackage = async (
         requiredMetadataIndexes: GRAPH_METADATA_INDEXES,
       },
     ],
-    files: await buildFileEntries(input.outputPath, r2Objects),
+    files: await buildFileEntries(input.outputPath, database.tables, r2Objects),
   });
 
   await writeFile(

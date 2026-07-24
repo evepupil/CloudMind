@@ -274,6 +274,7 @@ describe("ingest service", () => {
   const blobStoreMock: BlobStore = {
     put: vi.fn(async () => undefined),
     get: vi.fn(async () => null),
+    delete: vi.fn(async () => undefined),
   };
   const vectorStoreMock: VectorStore = {
     upsert: vi.fn(async () => undefined),

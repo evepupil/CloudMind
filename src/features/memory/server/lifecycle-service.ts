@@ -1,4 +1,5 @@
 import type { AssetRepository } from "@/core/assets/ports";
+import type { BlobStore } from "@/core/blob/ports";
 import { createLogger } from "@/core/logging/logger";
 import { MemoryLifecycleError } from "@/core/memory/errors";
 import type { MemoryScope } from "@/core/memory/scope";
@@ -6,6 +7,10 @@ import {
   type ContextKey,
   MEMORY_RECORD_KIND,
 } from "@/core/records/classification";
+import type {
+  MemoryPurgeFailureCode,
+  MemoryPurgeRepository,
+} from "@/core/sovereignty/ports";
 import type { VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
 import type { AssetDetail } from "@/features/assets/model/types";
@@ -13,7 +18,10 @@ import {
   ingestTextAsset,
   reprocessAsset,
 } from "@/features/ingest/server/service";
+import { getBlobStoreFromBindings } from "@/platform/blob/r2/get-blob-store";
 import { getAssetRepositoryFromBindings } from "@/platform/db/d1/repositories/get-asset-repository";
+import { getMemoryPurgeRepositoryFromBindings } from "@/platform/db/d1/repositories/get-memory-purge-repository";
+import { getGraphVectorStoreFromBindings } from "@/platform/vector/vectorize/get-graph-vector-store";
 import { getVectorStoreFromBindings } from "@/platform/vector/vectorize/get-vector-store";
 
 export interface MemoryTarget {
@@ -37,6 +45,19 @@ export interface ForgetMemoryResult {
   vectorCleanupPending: boolean;
 }
 
+export interface HardDeleteMemoryInput extends MemoryTarget {
+  confirmId: string;
+}
+
+export interface HardDeleteMemoryResult {
+  auditId: string;
+  deletedAssetCount: number;
+  deletedBlobCount: number;
+  deletedAssetVectorCount: number;
+  deletedGraphVectorCount: number;
+  deletedL2RecordCount: number;
+}
+
 interface MemoryLifecycleDependencies {
   getAssetRepository: (
     bindings: AppBindings | undefined
@@ -44,6 +65,15 @@ interface MemoryLifecycleDependencies {
   getVectorStore: (
     bindings: AppBindings | undefined
   ) => VectorStore | Promise<VectorStore>;
+  getGraphVectorStore: (
+    bindings: AppBindings | undefined
+  ) => VectorStore | Promise<VectorStore>;
+  getBlobStore: (
+    bindings: AppBindings | undefined
+  ) => BlobStore | Promise<BlobStore>;
+  getMemoryPurgeRepository: (
+    bindings: AppBindings | undefined
+  ) => MemoryPurgeRepository | Promise<MemoryPurgeRepository>;
   ingestTextAsset: typeof ingestTextAsset;
   reprocessAsset: typeof reprocessAsset;
 }
@@ -51,11 +81,33 @@ interface MemoryLifecycleDependencies {
 const defaultDependencies: MemoryLifecycleDependencies = {
   getAssetRepository: getAssetRepositoryFromBindings,
   getVectorStore: getVectorStoreFromBindings,
+  getGraphVectorStore: getGraphVectorStoreFromBindings,
+  getBlobStore: getBlobStoreFromBindings,
+  getMemoryPurgeRepository: getMemoryPurgeRepositoryFromBindings,
   ingestTextAsset,
   reprocessAsset,
 };
 
 const logger = createLogger("memory_lifecycle");
+
+const markPurgeFailed = async (
+  repository: MemoryPurgeRepository,
+  auditId: string,
+  errorCode: MemoryPurgeFailureCode,
+  error: unknown
+): Promise<never> => {
+  try {
+    await repository.failMemoryPurge(auditId, errorCode);
+  } catch (auditError) {
+    logger.error(
+      "hard_delete_audit_failed",
+      { auditId, errorCode },
+      { error: auditError }
+    );
+  }
+
+  throw error;
+};
 
 const assertMemoryTarget = (item: AssetDetail, target: MemoryTarget): void => {
   if (item.recordKind !== MEMORY_RECORD_KIND) {
@@ -208,6 +260,13 @@ export const createMemoryLifecycleService = (
       assertMemoryTarget(deleted, target);
       assertCurrentVersion(deleted);
 
+      if (deleted.purgePendingAt) {
+        throw new MemoryLifecycleError(
+          "PURGE_PENDING",
+          `Memory "${deleted.id}" has a hard delete pending.`
+        );
+      }
+
       if (!deleted.deletedAt) {
         throw new MemoryLifecycleError(
           "NOT_DELETED",
@@ -249,10 +308,100 @@ export const createMemoryLifecycleService = (
         throw error;
       }
     },
+
+    async hardDeleteMemory(
+      bindings: AppBindings | undefined,
+      input: HardDeleteMemoryInput
+    ): Promise<HardDeleteMemoryResult> {
+      if (input.confirmId !== input.id) {
+        throw new MemoryLifecycleError(
+          "PURGE_CONFIRMATION_MISMATCH",
+          "Hard delete confirmation does not match the memory id."
+        );
+      }
+
+      const assetRepository = await dependencies.getAssetRepository(bindings);
+      const item = await assetRepository.getAssetById(input.id, {
+        includeDeleted: true,
+      });
+      assertMemoryTarget(item, input);
+      assertCurrentVersion(item);
+
+      if (!item.deletedAt) {
+        throw new MemoryLifecycleError(
+          "NOT_DELETED",
+          `Memory "${item.id}" must be forgotten before hard delete.`
+        );
+      }
+
+      const purgeRepository =
+        await dependencies.getMemoryPurgeRepository(bindings);
+      const plan = await purgeRepository.prepareMemoryPurge(input);
+      const blobStore = await dependencies.getBlobStore(bindings);
+
+      try {
+        await blobStore.delete(plan.blobKeys);
+      } catch (error) {
+        return markPurgeFailed(
+          purgeRepository,
+          plan.auditId,
+          "BLOB_DELETE_FAILED",
+          error
+        );
+      }
+
+      try {
+        const vectorStore = await dependencies.getVectorStore(bindings);
+        await vectorStore.deleteByIds(plan.assetVectorIds);
+      } catch (error) {
+        return markPurgeFailed(
+          purgeRepository,
+          plan.auditId,
+          "ASSET_VECTOR_DELETE_FAILED",
+          error
+        );
+      }
+
+      try {
+        const graphVectorStore =
+          await dependencies.getGraphVectorStore(bindings);
+        await graphVectorStore.deleteByIds(plan.graphVectorIds);
+      } catch (error) {
+        return markPurgeFailed(
+          purgeRepository,
+          plan.auditId,
+          "GRAPH_VECTOR_DELETE_FAILED",
+          error
+        );
+      }
+
+      try {
+        await purgeRepository.completeMemoryPurge(plan);
+      } catch (error) {
+        return markPurgeFailed(
+          purgeRepository,
+          plan.auditId,
+          "DATABASE_DELETE_FAILED",
+          error
+        );
+      }
+
+      return {
+        auditId: plan.auditId,
+        deletedAssetCount: plan.assetIds.length,
+        deletedBlobCount: plan.blobKeys.length,
+        deletedAssetVectorCount: plan.assetVectorIds.length,
+        deletedGraphVectorCount: plan.graphVectorIds.length,
+        deletedL2RecordCount:
+          plan.statementIds.length +
+          plan.edgeIds.length +
+          plan.entityIds.length,
+      };
+    },
   };
 };
 
 const memoryLifecycleService = createMemoryLifecycleService();
 
-export const { updateMemory, forgetMemory, restoreMemory } =
+export const { updateMemory, forgetMemory, restoreMemory, hardDeleteMemory } =
   memoryLifecycleService;

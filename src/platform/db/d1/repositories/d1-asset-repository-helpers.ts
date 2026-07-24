@@ -48,6 +48,7 @@ export const mapAssetSummary = (
     supersededById: record.supersededById,
     supersededAt: record.supersededAt,
     deletedAt: record.deletedAt,
+    purgePendingAt: record.purgePendingAt,
     sourceHost: record.sourceHost,
     collectionKey: record.collectionKey,
     capturedAt: record.capturedAt,

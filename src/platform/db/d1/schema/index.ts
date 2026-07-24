@@ -4,6 +4,7 @@ export { assetSources } from "./asset-sources";
 export { assets } from "./assets";
 export { authAccounts } from "./auth-accounts";
 export { communities } from "./communities";
+export { deletionAudits } from "./deletion-audits";
 export { edges } from "./edges";
 export { entities } from "./entities";
 export { ingestJobs } from "./ingest-jobs";

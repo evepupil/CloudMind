@@ -2,6 +2,7 @@ import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { z } from "zod";
 
+import { mapWithConcurrency } from "./concurrency.ts";
 import { parseWranglerJson, runWrangler } from "./wrangler.ts";
 
 export const ASSET_VECTOR_PACKAGE_PATH = "vectorize/asset-chunks.ndjson";
@@ -20,20 +21,25 @@ export const ASSET_METADATA_INDEXES = [
 ];
 export const GRAPH_METADATA_INDEXES = ["scopeId", "contextKey"];
 
-const VECTOR_GET_BATCH_SIZE = 100;
+const VECTOR_GET_BATCH_SIZE = 20;
 const vectorListSchema = z.object({
   vectors: z.array(z.object({ id: z.string().min(1) })),
   isTruncated: z.boolean(),
   nextCursor: z.string().optional(),
 });
-const vectorSchema = z.object({
-  id: z.string().min(1),
-  values: z.array(z.number()),
-  metadata: z
-    .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
-    .optional(),
-  namespace: z.string().optional(),
-});
+const vectorSchema = z
+  .object({
+    id: z.string().min(1),
+    values: z.array(z.number()),
+    metadata: z
+      .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+      .optional(),
+    namespace: z.string().nullable().optional(),
+  })
+  .transform(({ namespace, ...vector }) => ({
+    ...vector,
+    ...(namespace ? { namespace } : {}),
+  }));
 
 const parseVectors = (output: string): z.infer<typeof vectorSchema>[] => {
   const raw = parseWranglerJson(output);
@@ -43,6 +49,9 @@ const parseVectors = (output: string): z.infer<typeof vectorSchema>[] => {
 
   return candidates.map((candidate) => vectorSchema.parse(candidate));
 };
+
+export const buildVectorIdArgs = (ids: string[]): string[] =>
+  ids.flatMap((id) => ["--ids", id]);
 
 export const exportVectorIndex = async (
   projectRoot: string,
@@ -69,25 +78,26 @@ export const exportVectorIndex = async (
     }
 
     const page: z.infer<typeof vectorListSchema> = vectorListSchema.parse(
-      parseWranglerJson(runWrangler(projectRoot, listArgs))
+      parseWranglerJson(runWrangler(projectRoot, listArgs, { retries: 2 }))
     );
 
-    for (
-      let start = 0;
-      start < page.vectors.length;
-      start += VECTOR_GET_BATCH_SIZE
-    ) {
-      const ids = page.vectors
-        .slice(start, start + VECTOR_GET_BATCH_SIZE)
-        .map((vector) => vector.id);
+    const batches = Array.from(
+      { length: Math.ceil(page.vectors.length / VECTOR_GET_BATCH_SIZE) },
+      (_, index) =>
+        page.vectors
+          .slice(
+            index * VECTOR_GET_BATCH_SIZE,
+            (index + 1) * VECTOR_GET_BATCH_SIZE
+          )
+          .map((vector) => vector.id)
+    );
+    const vectorBatches = await mapWithConcurrency(batches, 3, async (ids) => {
       const vectors = parseVectors(
-        runWrangler(projectRoot, [
-          "vectorize",
-          "get-vectors",
-          indexName,
-          "--ids",
-          ...ids,
-        ])
+        runWrangler(
+          projectRoot,
+          ["vectorize", "get-vectors", indexName, ...buildVectorIdArgs(ids)],
+          { retries: 2 }
+        )
       );
 
       if (vectors.length !== ids.length) {
@@ -96,6 +106,11 @@ export const exportVectorIndex = async (
         );
       }
 
+      return vectors;
+    });
+    const vectors = vectorBatches.flat();
+
+    if (vectors.length > 0) {
       await appendFile(
         outputPath,
         `${vectors.map((vector) => JSON.stringify(vector)).join("\n")}\n`,

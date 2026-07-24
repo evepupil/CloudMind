@@ -16,4 +16,5 @@ export interface BlobObject {
 export interface BlobStore {
   put(input: PutBlobInput): Promise<void>;
   get(key: string): Promise<BlobObject | null>;
+  delete(keys: string[]): Promise<void>;
 }
