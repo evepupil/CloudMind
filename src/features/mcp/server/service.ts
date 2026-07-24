@@ -3,7 +3,22 @@ import { z } from "zod";
 
 import { AssetNotFoundError } from "@/core/assets/errors";
 import { createLogger } from "@/core/logging/logger";
-import { AGENT_SCOPE } from "@/core/memory/scope";
+import { AGENT_SCOPE, PERSONAL_SCOPE } from "@/core/memory/scope";
+import {
+  GLOBAL_CONTEXT_KEY,
+  LIBRARY_RECORD_KIND,
+  MEMORY_RECORD_KIND,
+} from "@/core/records/classification";
+import {
+  normalizeRecordFilters,
+  withRecordFilterDefaults,
+} from "@/core/records/filters";
+import {
+  contextKeySchema,
+  memoryScopeSchema,
+  recordFilterSchemaShape,
+  validateRecordFilterConflicts,
+} from "@/core/records/schemas";
 import { WorkflowRunNotFoundError } from "@/core/workflows/errors";
 import type { AppBindings } from "@/env";
 import {
@@ -56,6 +71,8 @@ const saveAssetInputSchema = z
     title: z.string().trim().min(1).max(300).optional(),
     content: z.string().trim().min(1).optional(),
     url: z.string().url().optional(),
+    scopeId: memoryScopeSchema.optional(),
+    contextKey: contextKeySchema.optional(),
   })
   .superRefine((value, context) => {
     if (value.type === "text" && !value.content) {
@@ -80,6 +97,7 @@ const rememberInputSchema = z.object({
   title: z.string().trim().min(1).max(300).optional(),
   // 显式 pin AI 可见性（绝对覆盖自动分类）：allow / summary_only / deny。
   visibility: z.enum(["allow", "summary_only", "deny"]).optional(),
+  contextKey: contextKeySchema.optional(),
 });
 
 // agent 记忆写入：只需 content（可选 title）；不暴露 visibility——agent 记忆默认
@@ -87,6 +105,7 @@ const rememberInputSchema = z.object({
 const rememberAgentInputSchema = z.object({
   content: z.string().trim().min(1).max(20000),
   title: z.string().trim().min(1).max(300).optional(),
+  contextKey: contextKeySchema.optional(),
 });
 
 // 注意：MCP inputSchema 必须保持纯 object（可带 .superRefine），绝不能 .transform()——
@@ -94,6 +113,7 @@ const rememberAgentInputSchema = z.object({
 // 时间窗的 normalize 改到 handler 里调 normalizeCreatedAtFilters。
 const recallInputSchema = z
   .object({
+    ...recordFilterSchemaShape,
     queries: z
       .array(z.string().trim().min(1).max(200))
       .min(1)
@@ -138,6 +158,7 @@ const recallInputSchema = z
     ),
   })
   .superRefine((value, context) => {
+    validateRecordFilterConflicts(value, context);
     validateCreatedAtFilter(
       value.createdAtFrom,
       "createdAtFrom",
@@ -152,16 +173,24 @@ const recallInputSchema = z
     );
   });
 
-const searchAssetsInputSchema = assetSearchPayloadRawSchema.superRefine(
-  validateCreatedAtFilters
-);
+const validateSearchInput = (
+  value: Parameters<typeof validateRecordFilterConflicts>[0] &
+    Parameters<typeof validateCreatedAtFilters>[0],
+  context: z.RefinementCtx
+): void => {
+  validateRecordFilterConflicts(value, context);
+  validateCreatedAtFilters(value, context);
+};
+
+const searchAssetsInputSchema =
+  assetSearchPayloadRawSchema.superRefine(validateSearchInput);
 
 const searchAssetsForContextInputSchema = assetSearchPayloadRawSchema
   .extend({
     profile: z.enum(contextProfileValues).optional(),
     allowFallback: z.boolean().optional(),
   })
-  .superRefine(validateCreatedAtFilters);
+  .superRefine(validateSearchInput);
 
 const getAssetInputSchema = z.object({
   id: z.string().trim().min(1),
@@ -169,6 +198,7 @@ const getAssetInputSchema = z.object({
 
 const listAssetsInputSchema = z
   .object({
+    ...recordFilterSchemaShape,
     deleted: z.enum(["exclude", "only", "include"]).optional(),
     status: z.enum(["pending", "processing", "ready", "failed"]).optional(),
     type: z.enum(["url", "pdf", "note", "image", "chat"]).optional(),
@@ -206,6 +236,7 @@ const listAssetsInputSchema = z
     pageSize: z.number().int().positive().max(50).optional(),
   })
   .superRefine((value, context) => {
+    validateRecordFilterConflicts(value, context);
     validateCreatedAtFilter(
       value.createdAtFrom,
       "createdAtFrom",
@@ -259,15 +290,22 @@ const getWorkflowRunInputSchema = z.object({
   runId: z.string().trim().min(1),
 });
 
-const askLibraryInputSchema = z.object({
+const askLibraryInputRawSchema = z.object({
+  ...recordFilterSchemaShape,
   question: z.string().trim().min(1),
   topK: z.number().int().positive().max(10).optional(),
 });
 
-const askLibraryForContextInputSchema = askLibraryInputSchema.extend({
-  profile: z.enum(contextProfileValues).optional(),
-  allowFallback: z.boolean().optional(),
-});
+const askLibraryInputSchema = askLibraryInputRawSchema.superRefine(
+  validateRecordFilterConflicts
+);
+
+const askLibraryForContextInputSchema = askLibraryInputRawSchema
+  .extend({
+    profile: z.enum(contextProfileValues).optional(),
+    allowFallback: z.boolean().optional(),
+  })
+  .superRefine(validateRecordFilterConflicts);
 
 const normalizeOptionalString = (
   value: string | undefined
@@ -453,6 +491,12 @@ const groupedEvidenceGuidance =
   "Primary retrieval view: groupedEvidence ranks asset groups and explains " +
   "why each asset matched. Use items and evidence.items only for drill-down.";
 
+const recordFilterGuidance =
+  "Use recordKinds, scopeIds, and contextKeys for composable ownership " +
+  "filters: values within one array use OR; dimensions combine with AND; " +
+  "an omitted dimension is unrestricted. Legacy singular fields remain " +
+  "accepted, but do not send a singular and plural form together.";
+
 const askLibraryDeprioritizedGuidance =
   "This is a convenience summary tool. Prefer search_assets* plus get_asset " +
   "when you need final answer control, citation control, or multi-step tool " +
@@ -490,6 +534,9 @@ export const createMcpServer = (
             title: normalizeOptionalString(input.title),
             content,
             sourceKind: "mcp",
+            recordKind: LIBRARY_RECORD_KIND,
+            scopeId: input.scopeId ?? PERSONAL_SCOPE,
+            contextKey: input.contextKey ?? GLOBAL_CONTEXT_KEY,
           });
 
           return createToolResult({ item });
@@ -505,6 +552,8 @@ export const createMcpServer = (
           title: normalizeOptionalString(input.title),
           url,
           sourceKind: "mcp",
+          scopeId: input.scopeId ?? PERSONAL_SCOPE,
+          contextKey: input.contextKey ?? GLOBAL_CONTEXT_KEY,
         });
 
         return createToolResult({ item });
@@ -537,6 +586,7 @@ export const createMcpServer = (
           content: input.content,
           title: normalizeOptionalString(input.title),
           ...(input.visibility ? { visibility: input.visibility } : {}),
+          contextKey: input.contextKey ?? GLOBAL_CONTEXT_KEY,
         });
 
         return createToolResult({ item });
@@ -567,6 +617,7 @@ export const createMcpServer = (
         const item = await rememberAgentMemory(bindings, {
           content: input.content,
           title: normalizeOptionalString(input.title),
+          contextKey: input.contextKey ?? GLOBAL_CONTEXT_KEY,
         });
 
         return createToolResult({ item });
@@ -581,18 +632,20 @@ export const createMcpServer = (
     {
       title: "List Assets",
       description:
-        "List assets in the CloudMind library with optional filters and pagination, including domain, source kind, AI visibility, created-at range, source host, topic, tag, and collection.",
+        "List assets in CloudMind with optional filters and pagination, " +
+        "including domain, source kind, AI visibility, created-at range, " +
+        `source host, topic, tag, and collection. ${recordFilterGuidance}`,
       inputSchema: listAssetsInputSchema,
     },
     withToolLogging("list_assets", async (input) => {
       try {
         // schema 已去 transform，时间窗在此处规范化为 ISO（避免 MCP 空 properties bug）。
-        const result = await listAssets(
-          bindings,
-          normalizeCreatedAtFilters(input)
-        );
+        const appliedRecordFilters = normalizeRecordFilters(input);
+        const result = await listAssets(bindings, {
+          ...normalizeCreatedAtFilters(input),
+        });
 
-        return createToolResult(result);
+        return createToolResult({ ...result, appliedRecordFilters });
       } catch (error) {
         return createToolErrorResult(getErrorMessage(error));
       }
@@ -607,6 +660,7 @@ export const createMcpServer = (
         "Search the library with semantic retrieval and return evidence-rich " +
         "results for retrieval-first workflows. " +
         "Supports optional hard filters such as type, domain, source kind, source host, topic, tag, collection, and created-at range. " +
+        `${recordFilterGuidance} ` +
         `${groupedEvidenceGuidance} ` +
         `${retrievalFirstGuidance} ` +
         cloudMindInvocationGuidance,
@@ -634,6 +688,7 @@ export const createMcpServer = (
         "Search the library with context-aware retrieval weighting for AI " +
         "clients in retrieval-first workflows. " +
         "Supports optional hard filters such as type, domain, source kind, source host, topic, tag, collection, and created-at range. " +
+        `${recordFilterGuidance} ` +
         `${groupedEvidenceGuidance} ` +
         `${retrievalFirstGuidance} ` +
         `${cloudMindInvocationGuidance} ` +
@@ -690,6 +745,7 @@ export const createMcpServer = (
         "'最近/last week/去年' into a concrete range yourself from today's " +
         "date. Set order='recency' to get the most recently saved memories " +
         "first instead of the most relevant. " +
+        `${recordFilterGuidance} ` +
         cloudMindInvocationGuidance,
       inputSchema: recallInputSchema,
     },
@@ -697,6 +753,10 @@ export const createMcpServer = (
       try {
         // schema 已去 transform，时间窗在此处规范化为 ISO（避免 MCP 空 properties bug）。
         const { createdAtFrom, createdAtTo } = normalizeCreatedAtFilters(input);
+        const appliedRecordFilters = withRecordFilterDefaults(input, {
+          recordKinds: [MEMORY_RECORD_KIND],
+          scopeIds: [PERSONAL_SCOPE],
+        });
         const result = await recallMemories(bindings, {
           queries: input.queries,
           domain: input.domain,
@@ -704,6 +764,7 @@ export const createMcpServer = (
           order: input.order,
           createdAtFrom,
           createdAtTo,
+          ...appliedRecordFilters,
         });
 
         return createToolResult(result);
@@ -718,20 +779,25 @@ export const createMcpServer = (
     {
       title: "Recall (agent memory)",
       description:
-        "Recall AGENT-side memories — the AI's own previously recorded " +
-        "decisions, progress notes, and working trails — from the separate " +
-        "agent scope. This is the ONLY way to read agent memories; they never " +
-        "appear in the regular `recall`. Call it explicitly when you need to " +
+        "Recall project memories relevant to the AI's current work, including " +
+        "user-approved personal memories and the AI's own decisions, progress " +
+        "notes, and working trails. Call it explicitly when you need to " +
         "review what was done before on a project, why a past decision was " +
         "made, or to retrace a debugging trail. Expand your need into 1-5 " +
         "focused sub-queries and pass them in the `queries` array (always an " +
-        'array, e.g. ["auth refactor decision", "migration steps"]). Does NOT ' +
-        "read the user's personal memories — use `recall` for those.",
+        'array, e.g. ["auth refactor decision", "migration steps"]). Pass the ' +
+        "current project contextKey; omitted context defaults to global for " +
+        `compatibility. ${recordFilterGuidance}`,
       inputSchema: recallInputSchema,
     },
     withToolLogging("recall_agent", async (input) => {
       try {
         const { createdAtFrom, createdAtTo } = normalizeCreatedAtFilters(input);
+        const appliedRecordFilters = withRecordFilterDefaults(input, {
+          recordKinds: [MEMORY_RECORD_KIND],
+          scopeIds: [PERSONAL_SCOPE, AGENT_SCOPE],
+          contextKeys: [GLOBAL_CONTEXT_KEY],
+        });
         const result = await recallMemories(bindings, {
           queries: input.queries,
           domain: input.domain,
@@ -739,7 +805,7 @@ export const createMcpServer = (
           order: input.order,
           createdAtFrom,
           createdAtTo,
-          scopeId: AGENT_SCOPE,
+          ...appliedRecordFilters,
         });
 
         return createToolResult(result);
@@ -931,6 +997,7 @@ export const createMcpServer = (
       description:
         "Generate a quick grounded summary from the CloudMind library. " +
         `${askLibraryDeprioritizedGuidance} ` +
+        `${recordFilterGuidance} ` +
         `${retrievalFirstGuidance} ` +
         cloudMindInvocationGuidance,
       inputSchema: askLibraryInputSchema,
@@ -938,8 +1005,9 @@ export const createMcpServer = (
     withToolLogging("ask_library", async (input) => {
       try {
         const result = await askLibrary(bindings, input);
+        const appliedRecordFilters = normalizeRecordFilters(input);
 
-        return createToolResult(result);
+        return createToolResult({ ...result, appliedRecordFilters });
       } catch (error) {
         return createToolErrorResult(getErrorMessage(error));
       }
@@ -954,6 +1022,7 @@ export const createMcpServer = (
         "Generate a quick grounded summary using context-aware retrieval " +
         "weighting for AI clients. " +
         `${askLibraryDeprioritizedGuidance} ` +
+        `${recordFilterGuidance} ` +
         `${retrievalFirstGuidance} ` +
         `${cloudMindInvocationGuidance} ` +
         `${contextFallbackGuidance} Available profiles: ${contextProfileDescriptions}`,
@@ -965,9 +1034,11 @@ export const createMcpServer = (
           allowFallback: input.allowFallback,
         });
         const result = await askLibraryForContext(bindings, input, policy);
+        const appliedRecordFilters = normalizeRecordFilters(input);
 
         return createToolResult({
           ...result,
+          appliedRecordFilters,
           appliedPolicy: getContextProfileSummary(policy),
         });
       } catch (error) {

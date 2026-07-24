@@ -1,6 +1,16 @@
-import { and, eq, gte, isNotNull, isNull, like, lte, or } from "drizzle-orm";
+import {
+  and,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  like,
+  lte,
+  or,
+} from "drizzle-orm";
 
-import { PERSONAL_SCOPE } from "@/core/memory/scope";
+import { normalizeRecordFilters } from "@/core/records/filters";
 import type {
   AssetChunkMatch,
   AssetChunkSummary,
@@ -83,14 +93,13 @@ export const mapChunkMatch = (record: {
 // L1 瘦身后不再有承载表，这里暂不生效（保留入参以维持 API 兼容）。
 // collection 走 assets.collection_key 这一客观 L1 列，仍然生效。
 export const buildAssetListWhereClause = (query?: AssetListQuery) => {
-  // 默认只列 personal（人记忆）；调用方显式传 query.scopeId 时按其过滤。
-  const conditions = [eq(assets.scopeId, query?.scopeId ?? PERSONAL_SCOPE)];
-
-  if (query?.deleted === "only") {
-    conditions.push(isNotNull(assets.deletedAt));
-  } else if (query?.deleted !== "include") {
-    conditions.push(isNull(assets.deletedAt));
-  }
+  const conditions =
+    query?.deleted === "only"
+      ? [isNotNull(assets.deletedAt)]
+      : query?.deleted === "include"
+        ? []
+        : [isNull(assets.deletedAt)];
+  const recordFilters = normalizeRecordFilters(query);
 
   if (query?.status) {
     conditions.push(eq(assets.status, query.status));
@@ -100,12 +109,16 @@ export const buildAssetListWhereClause = (query?: AssetListQuery) => {
     conditions.push(eq(assets.type, query.type));
   }
 
-  if (query?.recordKind) {
-    conditions.push(eq(assets.recordKind, query.recordKind));
+  if (recordFilters.recordKinds) {
+    conditions.push(inArray(assets.recordKind, recordFilters.recordKinds));
   }
 
-  if (query?.contextKey) {
-    conditions.push(eq(assets.contextKey, query.contextKey));
+  if (recordFilters.scopeIds) {
+    conditions.push(inArray(assets.scopeId, recordFilters.scopeIds));
+  }
+
+  if (recordFilters.contextKeys) {
+    conditions.push(inArray(assets.contextKey, recordFilters.contextKeys));
   }
 
   if (query?.domain) {
@@ -154,23 +167,23 @@ export const buildAssetListWhereClause = (query?: AssetListQuery) => {
 export const buildAssetSearchFilterConditions = (
   filters?: AssetSearchFilters
 ) => {
-  // lexical 通道默认只查 personal（人记忆），与 dense/L2 一致；显式传入时按其过滤。
-  const conditions = [
-    isNull(assets.deletedAt),
-    eq(assets.status, "ready"),
-    eq(assets.scopeId, filters?.scopeId ?? PERSONAL_SCOPE),
-  ];
+  const conditions = [isNull(assets.deletedAt), eq(assets.status, "ready")];
+  const recordFilters = normalizeRecordFilters(filters);
 
   if (filters?.type) {
     conditions.push(eq(assets.type, filters.type));
   }
 
-  if (filters?.recordKind) {
-    conditions.push(eq(assets.recordKind, filters.recordKind));
+  if (recordFilters.recordKinds) {
+    conditions.push(inArray(assets.recordKind, recordFilters.recordKinds));
   }
 
-  if (filters?.contextKey) {
-    conditions.push(eq(assets.contextKey, filters.contextKey));
+  if (recordFilters.scopeIds) {
+    conditions.push(inArray(assets.scopeId, recordFilters.scopeIds));
+  }
+
+  if (recordFilters.contextKeys) {
+    conditions.push(inArray(assets.contextKey, recordFilters.contextKeys));
   }
 
   if (filters?.domain) {

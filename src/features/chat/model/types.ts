@@ -1,4 +1,8 @@
 import type {
+  AppliedRecordFilters,
+  RecordFilterInput,
+} from "@/core/records/filters";
+import type {
   EvidenceLayer,
   EvidencePacket,
   GroupedEvidenceGroup,
@@ -24,7 +28,7 @@ export interface AskLibraryIndexingSummary {
   topics: string[];
 }
 
-export interface AskLibraryInput {
+export interface AskLibraryInput extends RecordFilterInput {
   question: string;
   topK?: number | undefined;
 }
@@ -34,6 +38,7 @@ export interface AskLibraryResult {
   sources: ChatSource[];
   evidence: EvidencePacket;
   groupedEvidence: GroupedEvidenceGroup[];
+  appliedRecordFilters?: AppliedRecordFilters | undefined;
   indexingSummary?: AskLibraryIndexingSummary | undefined;
   resultScope?: ContextResultScope | undefined;
 }

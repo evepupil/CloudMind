@@ -7,7 +7,9 @@
 export const PERSONAL_SCOPE = "personal";
 export const AGENT_SCOPE = "agent";
 
-export type MemoryScope = typeof PERSONAL_SCOPE | typeof AGENT_SCOPE;
+export const MEMORY_SCOPES = [PERSONAL_SCOPE, AGENT_SCOPE] as const;
+
+export type MemoryScope = (typeof MEMORY_SCOPES)[number];
 
 // 写入/检索未显式指定 scope 时的默认值（= 人记忆）。
 export const DEFAULT_SCOPE: MemoryScope = PERSONAL_SCOPE;

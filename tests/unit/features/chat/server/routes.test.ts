@@ -312,6 +312,7 @@ describe("chat routes", () => {
     });
     expect(chatService.askLibrary).toHaveBeenCalledWith(env, {
       question: "What does CloudMind emphasize?",
+      scopeIds: ["personal"],
       topK: 3,
     });
   });

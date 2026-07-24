@@ -66,9 +66,9 @@ Agent Web        -> filterable list/detail -> update / forget / restore
 | 运维 | `list_asset_workflows`、`get_workflow_run`，后续通过独立配置暴露 |
 
 `remember` 固定写 `memory + personal`；`remember_agent` 固定写
-`memory + agent`；`save_asset` 固定写 `library`。`recall_agent` 默认按当前
-`contextKey` 查询 memory，同时允许 personal 与 agent 两个 scope，因此能同时看到
-用户明确要求保存的项目记忆和 Agent 自己的项目记忆。
+`memory + agent`；`save_asset` 固定写 `library`。三个写入工具都接收 `contextKey`，
+省略时兼容旧客户端写入 global。`recall_agent` 默认查询 memory，并同时允许 personal
+与 agent 两个 scope；调用方应传当前项目 `contextKey`，省略时只查 global。
 
 `search_assets_for_context` 与 `ask_library_for_context` 在兼容期继续保留；实现三维
 过滤后，分别并入带显式 `profile` 的 `search_assets` 与 `ask_library`，减少工具数量。
@@ -84,15 +84,22 @@ Agent Web        -> filterable list/detail -> update / forget / restore
 - 日期窗口、相关性/最近优先排序和可见性门控。
 - 现有 `update_asset`、`delete_asset`、`restore_asset` 等通用管理工具。
 - Web 记忆区当前只读 personal scope，尚无 Agent scope 管理页面。
-- MCP 对外参数当前仍是单值 scope 入口，尚未提供三维数组组合过滤和过滤回显。
+- list/search/ask/recall 已支持 `recordKinds`、`scopeIds`、`contextKeys` 数组过滤，
+  同维度 OR、不同维度 AND；省略维度不限制。旧单值参数继续可用，新旧同维参数一起
+  出现时明确拒绝。
+- `recall` 默认应用 `memory + personal`；`recall_agent` 默认应用
+  `memory + personal|agent + global`。所有读工具返回 `appliedRecordFilters`。
+- Web 现有资产、搜索、问答、首页和活动页继续显式限制 personal，Agent Web 留给 A3。
 
 ## 验证方式
 
-MCP 路由、记忆写入、scope 过滤和 recall 排序已有单元测试。M3-A0 另有真实 D1
-迁移测试，验证 provenance 保留后再删 episodes；Workers 集成测试验证不同项目的
-同名概念和定时修复隔离。后续仍需覆盖三维数组过滤真值表、版本更新、软删除恢复
-和工具默认过滤；上线前还需执行 `scripts/recall-acceptance.mjs`、
-`scripts/recall-schema-acceptance.mjs` 和真实 MCP 客户端验收。
+MCP schema/路由、过滤规范化、D1 条件、Vectorize `$in`、Ask、图召回和工具默认值
+均有单元测试。Workers 集成测试用两个都含 `M1` 的项目验证 D1 图查询的数组 OR 与
+跨维度 AND。生产回填已确认 24 条可检索资产向量和 91 条图向量归属完整；D1 另有
+5 个指针属于同一条已软删且 `deny` 的资产，Vectorize 无对应记录符合预期。
+
+部署后使用 `scripts/record-filter-acceptance.mjs` 做只读真实 MCP 验收；完整记忆质量
+仍可用 `scripts/recall-acceptance.mjs` 和 `scripts/recall-schema-acceptance.mjs` 检查。
 
 ## 实施计划
 
@@ -104,7 +111,7 @@ MCP 路由、记忆写入、scope 过滤和 recall 排序已有单元测试。M3
   repository 端口和 workflow 中的 `createEpisode`。禁止依赖级联直接删表。
 - 实体唯一性、调和候选和图召回改为 `scopeId + contextKey` 隔离。
 
-### M3-A1：整理 MCP 与组合过滤
+### M3-A1：整理 MCP 与组合过滤（已完成）
 
 - `remember`、`remember_agent`、`save_asset` 写入固定的 recordKind/scope 组合。
 - 写入工具接收显式 `contextKey`；客户端在 Git 项目中优先传规范化 remote key。
@@ -125,11 +132,14 @@ MCP 路由、记忆写入、scope 过滤和 recall 排序已有单元测试。M3
 
 ## 待扩展项
 
-- 完成 M3-A1 至 M3-A3；`reinforce`、`link` 继续归 M5。
+- 下一步完成 M3-A2 专用更新/遗忘，再推进 M3-A3 Agent Web 与端到端验收；
+  `reinforce`、`link` 继续归 M5。
 - 完整会话归档作为显式 library 能力评估，不进入 Agent 记忆默认路径。
 
 ## 改动历史
 
+- 2026-07-24：完成 M3-A1，三维数组过滤贯穿 D1、Vectorize、图召回和 MCP；保留
+  旧单值参数并增加冲突校验、默认策略、过滤回显、生产向量回填和只读验收脚本。
 - 2026-07-24：完成 M3-A0，移除 episode，落地三维字段、项目隔离、迁移保护、
   sleep-time 跨项目修复和 Vectorize metadata 索引。
 - 2026-07-24：取消自动会话原文捕获和 episode 目标模型，锁定

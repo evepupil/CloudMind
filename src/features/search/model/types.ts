@@ -1,3 +1,4 @@
+import type { AppliedRecordFilters } from "@/core/records/filters";
 import type {
   AssetChunkMatch,
   AssetDomain,
@@ -44,6 +45,7 @@ export interface SearchResult {
   evidence: EvidencePacket;
   groupedEvidence: GroupedEvidenceGroup[];
   pagination: SearchPagination;
+  appliedRecordFilters?: AppliedRecordFilters | undefined;
   resultScope?: ContextResultScope | undefined;
 }
 
@@ -67,4 +69,5 @@ export interface RecallResult {
   queries: string[];
   memories: RecalledMemory[];
   total: number;
+  appliedRecordFilters?: AppliedRecordFilters | undefined;
 }

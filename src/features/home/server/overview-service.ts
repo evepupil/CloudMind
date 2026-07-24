@@ -1,4 +1,5 @@
 import type { MemoryGraphCounts } from "@/core/memory/ports";
+import { PERSONAL_SCOPE } from "@/core/memory/scope";
 import type { AppBindings } from "@/env";
 import type { AssetStatus, AssetSummary } from "@/features/assets/model/types";
 import { listAssets } from "@/features/assets/server/service";
@@ -25,10 +26,19 @@ export const getOverviewSnapshot = async (
   recentLimit = 5
 ): Promise<OverviewSnapshot> => {
   const [recent, graphCounts, ...statusResults] = await Promise.all([
-    listAssets(bindings, { page: 1, pageSize: recentLimit }),
+    listAssets(bindings, {
+      page: 1,
+      pageSize: recentLimit,
+      scopeIds: [PERSONAL_SCOPE],
+    }),
     getMemoryCounts(bindings),
     ...STATUS_KEYS.map((status) =>
-      listAssets(bindings, { status, page: 1, pageSize: 1 })
+      listAssets(bindings, {
+        status,
+        page: 1,
+        pageSize: 1,
+        scopeIds: [PERSONAL_SCOPE],
+      })
     ),
   ]);
 

@@ -518,7 +518,6 @@ describe("search service", () => {
       topK: 2,
       filter: {
         aiVisibility: { $eq: "allow" },
-        scopeId: { $eq: "personal" },
       },
     });
     expect(repository.summaryQueries).toEqual([
@@ -654,6 +653,7 @@ describe("search service", () => {
         total: 2,
         totalPages: 1,
       },
+      appliedRecordFilters: {},
     });
   });
 
@@ -783,6 +783,7 @@ describe("search service", () => {
         total: 1,
         totalPages: 1,
       },
+      appliedRecordFilters: {},
     });
   });
 
@@ -974,6 +975,9 @@ describe("search service", () => {
         page: 1,
         pageSize: 1,
         domain: "engineering",
+        recordKinds: ["library", "memory"],
+        scopeIds: ["personal", "agent"],
+        contextKeys: ["global", "project:github:evepupil/CloudMind"],
       }
     );
 
@@ -984,7 +988,16 @@ describe("search service", () => {
     expect(searchInputs[0]?.filter).toMatchObject({
       aiVisibility: { $eq: "allow" },
       domain: { $eq: "engineering" },
-      scopeId: { $eq: "personal" },
+      recordKind: { $in: ["library", "memory"] },
+      scopeId: { $in: ["personal", "agent"] },
+      contextKey: {
+        $in: ["global", "project:github:evepupil/CloudMind"],
+      },
+    });
+    expect(result.appliedRecordFilters).toEqual({
+      recordKinds: ["library", "memory"],
+      scopeIds: ["personal", "agent"],
+      contextKeys: ["global", "project:github:evepupil/CloudMind"],
     });
     expect(result.items).toHaveLength(1);
     expect(result.items[0]?.kind).toBe("chunk");

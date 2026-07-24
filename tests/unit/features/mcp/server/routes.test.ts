@@ -779,6 +779,9 @@ describe("mcp routes", () => {
     expect(recallProps.queries).toBeDefined();
     expect(recallProps.queries?.type).toBe("array");
     expect(recallProps.queries?.maxItems).toBe(5);
+    expect(recallProps.recordKinds?.type).toBe("array");
+    expect(recallProps.scopeIds?.type).toBe("array");
+    expect(recallProps.contextKeys?.type).toBe("array");
     expect(toolsByName.recall?.inputSchema.required).toContain("queries");
 
     // 同根问题（.transform()/.and() 都会退化）：这三个工具也必须保留 properties。
@@ -787,10 +790,22 @@ describe("mcp routes", () => {
       "search_assets_for_context",
       "list_assets",
     ]) {
-      const props = toolsByName[name]?.inputSchema.properties ?? {};
+      const props = (toolsByName[name]?.inputSchema.properties ?? {}) as Record<
+        string,
+        { type?: string }
+      >;
 
       expect(Object.keys(props).length).toBeGreaterThan(0);
+      expect(props.recordKinds?.type).toBe("array");
+      expect(props.scopeIds?.type).toBe("array");
+      expect(props.contextKeys?.type).toBe("array");
     }
+
+    const askProps = (toolsByName.ask_library?.inputSchema.properties ??
+      {}) as Record<string, { type?: string }>;
+    expect(askProps.recordKinds?.type).toBe("array");
+    expect(askProps.scopeIds?.type).toBe("array");
+    expect(askProps.contextKeys?.type).toBe("array");
   });
 
   it("save_asset ingests text content through the existing ingest service", async () => {
@@ -817,6 +832,9 @@ describe("mcp routes", () => {
       title: "MCP note",
       content: "Saved from MCP",
       sourceKind: "mcp",
+      recordKind: "library",
+      scopeId: "personal",
+      contextKey: "global",
     });
   });
 
@@ -849,6 +867,8 @@ describe("mcp routes", () => {
       title: "Cloudflare Docs",
       url: "https://developers.cloudflare.com",
       sourceKind: "mcp",
+      scopeId: "personal",
+      contextKey: "global",
     });
   });
 
@@ -878,6 +898,7 @@ describe("mcp routes", () => {
     expect(ingestService.rememberMemory).toHaveBeenCalledWith(env, {
       content: "The user prefers TypeScript with 2-space indentation.",
       title: "Coding preference",
+      contextKey: "global",
     });
   });
 
@@ -908,6 +929,7 @@ describe("mcp routes", () => {
     expect(ingestService.rememberAgentMemory).toHaveBeenCalledWith(env, {
       content: "Kept the L2 DB default unchanged to avoid table rebuild.",
       title: "Refactor decision",
+      contextKey: "global",
     });
   });
 
@@ -947,11 +969,16 @@ describe("mcp routes", () => {
     });
 
     expect(getStructuredContent(result)).toEqual(recallResult);
-    expect(searchService.recallMemories).toHaveBeenCalledWith(env, {
-      queries: ["income", "city"],
-      domain: "finance",
-      limit: 10,
-    });
+    expect(searchService.recallMemories).toHaveBeenCalledWith(
+      env,
+      expect.objectContaining({
+        queries: ["income", "city"],
+        domain: "finance",
+        limit: 10,
+        recordKinds: ["memory"],
+        scopeIds: ["personal"],
+      })
+    );
   });
 
   it("recall_agent reads the agent scope through the search service", async () => {
@@ -976,10 +1003,13 @@ describe("mcp routes", () => {
     });
 
     expect(getStructuredContent(result)).toEqual(recallResult);
-    // recall_agent 读隔离的关键：必须显式传 scopeId=agent（日常 recall 不传、只查 personal）。
     expect(searchService.recallMemories).toHaveBeenCalledWith(
       env,
-      expect.objectContaining({ scopeId: "agent" })
+      expect.objectContaining({
+        recordKinds: ["memory"],
+        scopeIds: ["personal", "agent"],
+        contextKeys: ["global"],
+      })
     );
   });
 
@@ -1015,6 +1045,9 @@ describe("mcp routes", () => {
         collection: "site:developers.cloudflare.com",
         createdAtFrom: "2026-01-01",
         createdAtTo: "2026-12-31",
+        recordKinds: ["library", "memory"],
+        scopeIds: ["personal", "agent"],
+        contextKeys: ["global", "project:github:evepupil/CloudMind"],
       },
     });
     const getAssetCall = await client.callTool({
@@ -1033,7 +1066,10 @@ describe("mcp routes", () => {
 
     expect(getStructuredContent(searchCall)).toEqual(searchResult);
     expect(getStructuredContent(getAssetCall)).toEqual({ item });
-    expect(getStructuredContent(askCall)).toEqual(askResult);
+    expect(getStructuredContent(askCall)).toEqual({
+      ...askResult,
+      appliedRecordFilters: {},
+    });
     expect(searchService.searchAssets).toHaveBeenCalledWith(env, {
       query: "cloudmind mcp",
       page: 1,
@@ -1047,6 +1083,9 @@ describe("mcp routes", () => {
       collection: "site:developers.cloudflare.com",
       createdAtFrom: "2026-01-01T00:00:00.000Z",
       createdAtTo: "2026-12-31T23:59:59.999Z",
+      recordKinds: ["library", "memory"],
+      scopeIds: ["personal", "agent"],
+      contextKeys: ["global", "project:github:evepupil/CloudMind"],
     });
     expect(assetService.getAssetById).toHaveBeenCalledWith(
       env,
@@ -1120,6 +1159,7 @@ describe("mcp routes", () => {
     });
     expect(getStructuredContent(askCall)).toEqual({
       ...askResult,
+      appliedRecordFilters: {},
       appliedPolicy: {
         profile: "coding",
         preferredDomains: ["engineering", "research"],
@@ -1304,6 +1344,7 @@ describe("mcp routes", () => {
         total: 1,
         totalPages: 1,
       },
+      appliedRecordFilters: {},
     });
     expect(getStructuredContent(updateCall)).toEqual({
       item: expect.objectContaining({

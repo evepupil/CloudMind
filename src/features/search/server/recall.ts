@@ -1,5 +1,4 @@
-import type { MemoryScope } from "@/core/memory/scope";
-import type { ContextKey, RecordKind } from "@/core/records/classification";
+import type { RecordFilterInput } from "@/core/records/filters";
 import type { AssetDomain } from "@/features/assets/model/types";
 import type { EvidenceItem } from "@/features/search/model/evidence";
 import type {
@@ -14,7 +13,7 @@ export const RECALL_PER_QUERY_PAGE_SIZE = 10;
 // recall 排序模式：relevance=语义相关优先（默认）；recency=最近创建优先（"最近发生了什么"）。
 export type RecallOrder = "relevance" | "recency";
 
-export interface RecallMemoriesInput {
+export interface RecallMemoriesInput extends RecordFilterInput {
   queries: string[];
   domain?: AssetDomain | undefined;
   limit?: number | undefined;
@@ -22,10 +21,6 @@ export interface RecallMemoriesInput {
   createdAtFrom?: string | undefined;
   createdAtTo?: string | undefined;
   order?: RecallOrder | undefined;
-  // 显式指定检索 scope（recall_agent 传 agent）；不传默认 personal（日常 recall）。
-  scopeId?: MemoryScope | undefined;
-  recordKind?: RecordKind | undefined;
-  contextKey?: ContextKey | undefined;
 }
 
 // 单个子查询的检索结果，连同发起它的子查询文本一起带回，便于记录 matchedQueries。

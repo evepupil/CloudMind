@@ -36,6 +36,7 @@ import {
   normalizeContextKey,
   type RecordKind,
 } from "@/core/records/classification";
+import type { AppliedRecordFilters } from "@/core/records/filters";
 import { createDb } from "@/platform/db/d1/client";
 import {
   edges,
@@ -370,15 +371,12 @@ export class D1MemoryRepository implements MemoryRepository {
 
   public async findEntityIdsByVectorIds(
     vectorIds: string[],
-    scopeId?: string,
-    contextKey?: string
+    filters: AppliedRecordFilters = {}
   ): Promise<EntityVectorRef[]> {
     if (vectorIds.length === 0) {
       return [];
     }
 
-    const scope = scopeId ?? DEFAULT_SCOPE;
-    const context = normalizeContextKey(contextKey);
     const rows = await this.db
       .select({
         id: entities.id,
@@ -389,8 +387,12 @@ export class D1MemoryRepository implements MemoryRepository {
         and(
           inArray(entities.embeddingVectorId, vectorIds),
           isNotNull(entities.embeddingVectorId),
-          eq(entities.scopeId, scope),
-          eq(entities.contextKey, context)
+          filters.scopeIds
+            ? inArray(entities.scopeId, filters.scopeIds)
+            : undefined,
+          filters.contextKeys
+            ? inArray(entities.contextKey, filters.contextKeys)
+            : undefined
         )
       );
 
@@ -401,16 +403,11 @@ export class D1MemoryRepository implements MemoryRepository {
 
   public async findActiveOutgoingEdges(
     srcEntityIds: string[],
-    scopeId?: string | undefined,
-    contextKey?: string | undefined,
-    recordKind?: RecordKind | undefined
+    filters: AppliedRecordFilters = {}
   ): Promise<MemoryEdge[]> {
     if (srcEntityIds.length === 0) {
       return [];
     }
-
-    const scope = scopeId ?? DEFAULT_SCOPE;
-    const context = normalizeContextKey(contextKey);
 
     const rows = await this.db
       .select({
@@ -425,9 +422,15 @@ export class D1MemoryRepository implements MemoryRepository {
       .from(edges)
       .where(
         and(
-          eq(edges.scopeId, scope),
-          eq(edges.contextKey, context),
-          recordKind ? eq(edges.recordKind, recordKind) : undefined,
+          filters.scopeIds
+            ? inArray(edges.scopeId, filters.scopeIds)
+            : undefined,
+          filters.contextKeys
+            ? inArray(edges.contextKey, filters.contextKeys)
+            : undefined,
+          filters.recordKinds
+            ? inArray(edges.recordKind, filters.recordKinds)
+            : undefined,
           inArray(edges.srcEntityId, srcEntityIds),
           isNull(edges.expiredAt)
         )
@@ -438,25 +441,26 @@ export class D1MemoryRepository implements MemoryRepository {
 
   public async findActiveStatementsBySubjects(
     subjectEntityIds: string[],
-    scopeId?: string | undefined,
-    contextKey?: string | undefined,
-    recordKind?: RecordKind | undefined
+    filters: AppliedRecordFilters = {}
   ): Promise<MemoryStatement[]> {
     if (subjectEntityIds.length === 0) {
       return [];
     }
-
-    const scope = scopeId ?? DEFAULT_SCOPE;
-    const context = normalizeContextKey(contextKey);
 
     const rows = await this.db
       .select()
       .from(statements)
       .where(
         and(
-          eq(statements.scopeId, scope),
-          eq(statements.contextKey, context),
-          recordKind ? eq(statements.recordKind, recordKind) : undefined,
+          filters.scopeIds
+            ? inArray(statements.scopeId, filters.scopeIds)
+            : undefined,
+          filters.contextKeys
+            ? inArray(statements.contextKey, filters.contextKeys)
+            : undefined,
+          filters.recordKinds
+            ? inArray(statements.recordKind, filters.recordKinds)
+            : undefined,
           inArray(statements.subjectEntityId, subjectEntityIds),
           isNull(statements.expiredAt)
         )

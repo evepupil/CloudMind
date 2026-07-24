@@ -8,7 +8,7 @@
 >
 > 当前状态：已完成
 >
-> 最近更新时间：2026-07-23
+> 最近更新时间：2026-07-24
 
 ## 职责与边界
 
@@ -34,6 +34,8 @@ user action -> REST route -> domain service -> redirect / partial navigation
 4. 纯视觉和布局通过构建与人工检查验证，不增加脆弱的样式单测。
 5. M4 提供通用页面结构和交互组件；Agent 记忆的业务能力、页面数据和完成状态
    归 M3 管理。
+6. 通用资产、搜索、问答、首页和 Activity 页面显式限定 personal scope，避免 Agent
+   工作记忆在 M3-A3 管理入口交付前混入个人工作台。
 
 ## 当前实现
 
@@ -41,6 +43,7 @@ user action -> REST route -> domain service -> redirect / partial navigation
 - 记忆图谱、时间线、整合页，以及对应 `/api/memory/*` 数据接口。
 - 登录、改密、MCP token 管理和移动端导航。
 - 统一按钮、输入框、状态、空状态、面板和反馈组件。
+- 资产、搜索、问答、首页和 Activity 服务端查询统一传入 personal scope 过滤。
 
 ## 验证方式
 
@@ -56,6 +59,8 @@ user action -> REST route -> domain service -> redirect / partial navigation
 
 ## 改动历史
 
+- 2026-07-24：通用 Web 查询显式限制 personal scope，Agent 数据继续由 M3-A3
+  专用管理入口承接。
 - 2026-07-23：明确 M4 已完成边界，Agent Web 管理随 M3 生命周期能力交付。
 - 2026-07-22：确认 Observatory 重构和 Activity 均已完成，建立模块归档。
 - 2026-06-07：记忆图谱、时间线与整合页面接入真实接口。

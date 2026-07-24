@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import type { z } from "zod";
 
+import { PERSONAL_SCOPE } from "@/core/memory/scope";
 import type { AppEnv } from "@/env";
 
 import { askLibraryPayloadSchema } from "./schemas";
@@ -26,7 +27,10 @@ export const registerChatRoutes = (app: Hono<AppEnv>): void => {
       return context.json(getValidationErrorBody(parsedPayload.error), 400);
     }
 
-    const result = await askLibrary(context.env, parsedPayload.data);
+    const result = await askLibrary(context.env, {
+      ...parsedPayload.data,
+      scopeIds: [PERSONAL_SCOPE],
+    });
 
     return context.json(result);
   });

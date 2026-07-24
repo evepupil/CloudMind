@@ -1,6 +1,6 @@
 // 这里定义知识资产相关的领域类型，供页面和 API 统一复用。
-import type { MemoryScope } from "@/core/memory/scope";
 import type { ContextKey, RecordKind } from "@/core/records/classification";
+import type { RecordFilterInput } from "@/core/records/filters";
 
 export type AssetType = "url" | "pdf" | "note" | "image" | "chat";
 
@@ -46,7 +46,7 @@ export type IngestJobType =
 
 export type AssetDeletedFilter = "exclude" | "only" | "include";
 
-export interface AssetSearchFilters {
+export interface AssetSearchFilters extends RecordFilterInput {
   type?: AssetType | undefined;
   domain?: AssetDomain | undefined;
   sourceKind?: AssetSourceKind | undefined;
@@ -57,10 +57,6 @@ export interface AssetSearchFilters {
   topic?: string | undefined;
   tag?: string | undefined;
   collection?: string | undefined;
-  // scope 隔离维度（非普通 facet）：不传时检索默认只查 personal（人记忆）。
-  scopeId?: MemoryScope | undefined;
-  recordKind?: RecordKind | undefined;
-  contextKey?: ContextKey | undefined;
 }
 
 export interface AssetListQuery extends AssetSearchFilters {

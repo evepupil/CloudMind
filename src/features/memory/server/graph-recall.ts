@@ -1,10 +1,9 @@
 import type { MemoryRepository, MemoryStatement } from "@/core/memory/ports";
-import { DEFAULT_SCOPE } from "@/core/memory/scope";
 import {
-  GLOBAL_CONTEXT_KEY,
-  type RecordKind,
-} from "@/core/records/classification";
-import type { VectorStore } from "@/core/vector/ports";
+  normalizeRecordFilters,
+  type RecordFilterInput,
+} from "@/core/records/filters";
+import type { VectorMetadataFilter, VectorStore } from "@/core/vector/ports";
 
 // 图检索只需要 MemoryRepository 的读侧子集，收窄依赖便于测试注入。
 export type GraphRecallRepository = Pick<
@@ -26,13 +25,10 @@ export interface GraphRecallOptions {
   maxStatements?: number | undefined;
 }
 
-export interface GraphRecallInput {
+export interface GraphRecallInput extends RecordFilterInput {
   queryVector: number[];
   repository: GraphRecallRepository;
   graphVectorStore: VectorStore;
-  scopeId?: string | undefined;
-  contextKey?: string | undefined;
-  recordKind?: RecordKind | undefined;
   options?: GraphRecallOptions | undefined;
 }
 
@@ -54,14 +50,8 @@ interface Reach {
 export const recallGraphStatements = async (
   input: GraphRecallInput
 ): Promise<GraphRecallHit[]> => {
-  const {
-    queryVector,
-    repository,
-    graphVectorStore,
-    scopeId,
-    contextKey,
-    recordKind,
-  } = input;
+  const { queryVector, repository, graphVectorStore } = input;
+  const recordFilters = normalizeRecordFilters(input);
   const seedTopK = input.options?.seedTopK ?? 8;
   const maxHops = input.options?.maxHops ?? 2;
   const hopDecay = input.options?.hopDecay ?? 0.6;
@@ -73,15 +63,20 @@ export const recallGraphStatements = async (
 
   // 1. ANN 种子：query 向量在 graph_entities 找最相似实体向量（按 scope 隔离，
   //    防 agent 种子稀释 personal 召回 / 反之）。
-  const seedScope = scopeId ?? DEFAULT_SCOPE;
-  const seedContext = contextKey ?? GLOBAL_CONTEXT_KEY;
+  const seedFilter: VectorMetadataFilter = {};
+
+  if (recordFilters.scopeIds) {
+    seedFilter.scopeId = { $in: recordFilters.scopeIds };
+  }
+
+  if (recordFilters.contextKeys) {
+    seedFilter.contextKey = { $in: recordFilters.contextKeys };
+  }
+
   const seedMatches = await graphVectorStore.search({
     values: queryVector,
     topK: seedTopK,
-    filter: {
-      scopeId: { $eq: seedScope },
-      contextKey: { $eq: seedContext },
-    },
+    ...(Object.keys(seedFilter).length > 0 ? { filter: seedFilter } : {}),
   });
 
   if (seedMatches.length === 0) {
@@ -93,8 +88,7 @@ export const recallGraphStatements = async (
   );
   const seedRefs = await repository.findEntityIdsByVectorIds(
     seedMatches.map((match) => match.id),
-    seedScope,
-    seedContext
+    recordFilters
   );
 
   if (seedRefs.length === 0) {
@@ -119,9 +113,7 @@ export const recallGraphStatements = async (
   for (let hop = 1; hop <= maxHops && frontier.length > 0; hop += 1) {
     const outgoing = await repository.findActiveOutgoingEdges(
       frontier,
-      seedScope,
-      seedContext,
-      recordKind
+      recordFilters
     );
     const nextFrontier = new Set<string>();
 
@@ -148,9 +140,7 @@ export const recallGraphStatements = async (
   const reachedEntityIds = [...reached.keys()];
   const statements = await repository.findActiveStatementsBySubjects(
     reachedEntityIds,
-    seedScope,
-    seedContext,
-    recordKind
+    recordFilters
   );
 
   if (statements.length === 0) {

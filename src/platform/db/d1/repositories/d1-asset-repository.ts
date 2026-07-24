@@ -430,7 +430,7 @@ export class D1AssetRepository implements AssetRepository {
       aiVisibility: "allow",
       retrievalPriority: 0,
       recordKind: LIBRARY_RECORD_KIND,
-      scopeId: PERSONAL_SCOPE,
+      scopeId: input.scopeId ?? PERSONAL_SCOPE,
       contextKey: normalizeContextKey(input.contextKey),
       sourceHost: null,
       collectionKey: null,

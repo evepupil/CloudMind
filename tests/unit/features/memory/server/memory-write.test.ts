@@ -19,6 +19,7 @@ import type {
   MemoryStatement,
   UpsertEntityInput,
 } from "@/core/memory/ports";
+import type { AppliedRecordFilters } from "@/core/records/filters";
 import {
   type ExtractedGraph,
   normalizeEntityName,
@@ -196,7 +197,7 @@ class FakeMemoryRepository implements MemoryRepository {
 
   public async findActiveOutgoingEdges(
     _srcEntityIds: string[],
-    _scopeId?: string | undefined
+    _filters?: AppliedRecordFilters | undefined
   ): Promise<MemoryEdge[]> {
     // 该 fake 的 edges 不带 id/expired，图遍历在 graph-recall 专用 fake 中测试。
     return [];
@@ -204,14 +205,14 @@ class FakeMemoryRepository implements MemoryRepository {
 
   public async findActiveStatementsBySubjects(
     subjectEntityIds: string[],
-    scopeId?: string | undefined
+    filters?: AppliedRecordFilters | undefined
   ): Promise<MemoryStatement[]> {
-    const scope = scopeId ?? "default";
+    const scopes: readonly string[] = filters?.scopeIds ?? ["default"];
     const subjects = new Set(subjectEntityIds);
 
     return [...this.statementRecords.values()].filter(
       (statement) =>
-        statement.scopeId === scope &&
+        scopes.includes(statement.scopeId) &&
         subjects.has(statement.subjectEntityId) &&
         statement.expiredAt === null
     );

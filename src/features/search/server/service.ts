@@ -5,9 +5,16 @@ import type {
 } from "@/core/assets/ports";
 import { createLogger } from "@/core/logging/logger";
 import type { MemoryRepository } from "@/core/memory/ports";
-import { PERSONAL_SCOPE } from "@/core/memory/scope";
 import type { JobQueue } from "@/core/queue/ports";
-import type { VectorMetadataFilter, VectorStore } from "@/core/vector/ports";
+import {
+  type AppliedRecordFilters,
+  normalizeRecordFilters,
+} from "@/core/records/filters";
+import type {
+  VectorFilterCondition,
+  VectorMetadataFilter,
+  VectorStore,
+} from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
 import type {
   AssetChunkMatch,
@@ -56,6 +63,8 @@ const SUMMARY_ONLY_AI_VISIBILITY = ["summary_only"] as const;
 const searchLogger = createLogger("search");
 
 const getSearchFilters = (input: AssetSearchFilters): AssetSearchFilters => {
+  const recordFilters = normalizeRecordFilters(input);
+
   return {
     type: input.type,
     domain: input.domain,
@@ -66,9 +75,7 @@ const getSearchFilters = (input: AssetSearchFilters): AssetSearchFilters => {
     topic: input.topic,
     tag: input.tag,
     collection: input.collection,
-    scopeId: input.scopeId,
-    recordKind: input.recordKind,
-    contextKey: input.contextKey,
+    ...recordFilters,
   };
 };
 
@@ -77,6 +84,12 @@ const getAppliedFilterKeys = (filters: AssetSearchFilters): string[] => {
     .filter(([, value]) => value !== undefined)
     .map(([key]) => key)
     .sort();
+};
+
+const toVectorFilterCondition = (
+  values: readonly string[]
+): VectorFilterCondition => {
+  return { $in: [...values] };
 };
 
 interface SearchServiceDependencies {
@@ -306,26 +319,28 @@ const buildSemanticEvidence = (
   ].sort((left, right) => right.score - left.score);
 };
 
-// 这里把硬过滤映射为 Vectorize 原生 metadata 过滤（单值字段 + aiVisibility + scopeId）。
+// 这里把硬过滤映射为 Vectorize 原生 metadata 过滤。
 // topic/tag 为多值 facet、日期为范围，仍交由下游 D1 join 兜底，不进原生过滤。
 const buildSemanticVectorFilter = (
   filters: AssetSearchFilters
 ): VectorMetadataFilter => {
   const applied = getSearchFilters(filters);
+  const recordFilters = normalizeRecordFilters(applied);
   const filter: VectorMetadataFilter = {
     aiVisibility: { $eq: "allow" },
-    // 检索默认只查 personal（人记忆）；recall_agent 显式传 scope=agent 时查 agent。
-    scopeId: { $eq: applied.scopeId ?? PERSONAL_SCOPE },
   };
 
   if (applied.type) {
     filter.type = { $eq: applied.type };
   }
-  if (applied.recordKind) {
-    filter.recordKind = { $eq: applied.recordKind };
+  if (recordFilters.recordKinds) {
+    filter.recordKind = toVectorFilterCondition(recordFilters.recordKinds);
   }
-  if (applied.contextKey) {
-    filter.contextKey = { $eq: applied.contextKey };
+  if (recordFilters.scopeIds) {
+    filter.scopeId = toVectorFilterCondition(recordFilters.scopeIds);
+  }
+  if (recordFilters.contextKeys) {
+    filter.contextKey = toVectorFilterCondition(recordFilters.contextKeys);
   }
   if (applied.domain) {
     filter.domain = { $eq: applied.domain };
@@ -409,9 +424,7 @@ const buildGraphEvidence = async (
   contextPolicy?: ContextRetrievalPolicy,
   createdAtFrom?: string,
   createdAtTo?: string,
-  scopeId?: string,
-  contextKey?: string,
-  recordKind?: AssetSearchFilters["recordKind"]
+  recordFilters: AppliedRecordFilters = {}
 ): Promise<EvidenceItem[]> => {
   const getMemory = dependencies.getMemoryRepository;
   const getGraph = dependencies.getGraphVectorStore;
@@ -434,10 +447,7 @@ const buildGraphEvidence = async (
       queryVector,
       repository: memoryRepository,
       graphVectorStore,
-      // L2 图通道与 dense/lexical 一致：默认 personal，显式传入时查指定 scope。
-      scopeId: scopeId ?? PERSONAL_SCOPE,
-      contextKey,
-      recordKind,
+      ...recordFilters,
     });
 
     const hydrate = assetRepository.getAssetSummariesByIds;
@@ -571,6 +581,7 @@ export const createSearchService = (
     const page = input.page ?? 1;
     const pageSize = input.pageSize ?? 20;
     const appliedFilterKeys = getAppliedFilterKeys(input);
+    const appliedRecordFilters = normalizeRecordFilters(input);
 
     try {
       if (!query) {
@@ -584,6 +595,7 @@ export const createSearchService = (
             total: 0,
             totalPages: 0,
           },
+          appliedRecordFilters,
         };
 
         searchLogger.info("search_completed", {
@@ -661,9 +673,7 @@ export const createSearchService = (
             contextPolicy,
             input.createdAtFrom,
             input.createdAtTo,
-            input.scopeId,
-            input.contextKey,
-            input.recordKind
+            appliedRecordFilters
           )
         : [];
       const fusedEvidence =
@@ -702,6 +712,7 @@ export const createSearchService = (
                 ? 0
                 : Math.ceil(orderedGroups.length / pageSize),
           },
+          appliedRecordFilters,
         },
         resultScope
       );
@@ -766,6 +777,7 @@ export const createSearchService = (
     ): Promise<RecallResult> {
       const limit = input.limit ?? DEFAULT_RECALL_LIMIT;
       const order = input.order ?? "relevance";
+      const appliedRecordFilters = normalizeRecordFilters(input);
       const perQuery = await Promise.all(
         input.queries.map(async (query): Promise<PerQueryRecall> => {
           const searchInput: AssetSearchInput = {
@@ -773,9 +785,7 @@ export const createSearchService = (
             page: 1,
             pageSize: RECALL_PER_QUERY_PAGE_SIZE,
             ...(input.domain ? { domain: input.domain } : {}),
-            ...(input.scopeId ? { scopeId: input.scopeId } : {}),
-            ...(input.recordKind ? { recordKind: input.recordKind } : {}),
-            ...(input.contextKey ? { contextKey: input.contextKey } : {}),
+            ...appliedRecordFilters,
             // 时间窗（已规范化 ISO）下推检索：向量层原生过滤 + D1 兜底，召回不被 topK 截断。
             ...(input.createdAtFrom
               ? { createdAtFrom: input.createdAtFrom }
@@ -792,6 +802,7 @@ export const createSearchService = (
         queries: input.queries,
         memories,
         total: memories.length,
+        appliedRecordFilters,
       };
     },
   };

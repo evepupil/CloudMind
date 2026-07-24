@@ -152,6 +152,18 @@ describe("Workers runtime quality gate", () => {
     expect(await repository.findDriftedEdges("agent")).toEqual([
       expect.objectContaining({ id: drifted.id, contextKey: contextA }),
     ]);
+    expect(
+      await repository.findActiveOutgoingEdges([entityA.id, entityB.id], {
+        scopeIds: ["agent"],
+        contextKeys: [contextA, contextB],
+        recordKinds: ["memory"],
+      })
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: drifted.id, contextKey: contextA }),
+        expect.objectContaining({ id: backed.id, contextKey: contextB }),
+      ])
+    );
 
     await repository.invalidateActiveEdges({
       scopeId: "agent",
@@ -163,12 +175,11 @@ describe("Workers runtime quality gate", () => {
     });
 
     expect(
-      await repository.findActiveOutgoingEdges(
-        [entityB.id],
-        "agent",
-        contextB,
-        "memory"
-      )
+      await repository.findActiveOutgoingEdges([entityB.id], {
+        scopeIds: ["agent"],
+        contextKeys: [contextB],
+        recordKinds: ["memory"],
+      })
     ).toEqual([expect.objectContaining({ id: backed.id })]);
   });
 

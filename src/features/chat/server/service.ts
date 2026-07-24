@@ -1,6 +1,7 @@
 import type { AIProvider } from "@/core/ai/ports";
 import type { AssetSearchRepository } from "@/core/assets/ports";
 import { createLogger } from "@/core/logging/logger";
+import { normalizeRecordFilters } from "@/core/records/filters";
 import type { VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
@@ -834,6 +835,7 @@ export const createChatService = (
   ): Promise<AskLibraryResult> => {
     const startedAt = Date.now();
     const question = input.question.trim();
+    const appliedRecordFilters = normalizeRecordFilters(input);
 
     if (!question) {
       throw new Error("Question is required.");
@@ -860,7 +862,8 @@ export const createChatService = (
         repository,
         question,
         retrievalLimit,
-        contextPolicy
+        contextPolicy,
+        appliedRecordFilters
       );
 
       if (!queryVector) {
@@ -977,6 +980,18 @@ export const createChatService = (
       const vectorMatches = await vectorStore.search({
         values: queryVector,
         topK: retrievalLimit,
+        filter: {
+          aiVisibility: { $in: [...CHAT_ALLOWED_AI_VISIBILITY] },
+          ...(appliedRecordFilters.recordKinds
+            ? { recordKind: { $in: appliedRecordFilters.recordKinds } }
+            : {}),
+          ...(appliedRecordFilters.scopeIds
+            ? { scopeId: { $in: appliedRecordFilters.scopeIds } }
+            : {}),
+          ...(appliedRecordFilters.contextKeys
+            ? { contextKey: { $in: appliedRecordFilters.contextKeys } }
+            : {}),
+        },
       });
 
       const chunkMatches =
@@ -985,6 +1000,7 @@ export const createChatService = (
               vectorMatches.map((match) => match.id),
               {
                 aiVisibility: [...CHAT_ALLOWED_AI_VISIBILITY],
+                ...appliedRecordFilters,
               }
             )
           : [];

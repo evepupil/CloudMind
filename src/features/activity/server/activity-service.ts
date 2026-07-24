@@ -1,3 +1,4 @@
+import { PERSONAL_SCOPE } from "@/core/memory/scope";
 import type { AppBindings } from "@/env";
 import type { AssetSummary } from "@/features/assets/model/types";
 import { listAssets } from "@/features/assets/server/service";
@@ -22,9 +23,21 @@ export const getActivitySnapshot = async (
   bindings: AppBindings | undefined
 ): Promise<ActivitySnapshot> => {
   const [failed, processing, pending] = await Promise.all([
-    listAssets(bindings, { status: "failed", ...PAGE }),
-    listAssets(bindings, { status: "processing", ...PAGE }),
-    listAssets(bindings, { status: "pending", ...PAGE }),
+    listAssets(bindings, {
+      status: "failed",
+      scopeIds: [PERSONAL_SCOPE],
+      ...PAGE,
+    }),
+    listAssets(bindings, {
+      status: "processing",
+      scopeIds: [PERSONAL_SCOPE],
+      ...PAGE,
+    }),
+    listAssets(bindings, {
+      status: "pending",
+      scopeIds: [PERSONAL_SCOPE],
+      ...PAGE,
+    }),
   ]);
 
   return {

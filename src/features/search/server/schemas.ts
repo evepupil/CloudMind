@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import { contextKeySchema, recordKindSchema } from "@/core/records/schemas";
+import {
+  recordFilterSchemaShape,
+  validateRecordFilterConflicts,
+} from "@/core/records/schemas";
 
 import {
   createdAtFilterInputSchema,
@@ -29,9 +32,8 @@ const assetSourceKindSchema = z.enum([
 ]);
 
 const assetSearchFiltersRawSchema = z.object({
+  ...recordFilterSchemaShape,
   type: assetTypeSchema.optional(),
-  recordKind: recordKindSchema.optional(),
-  contextKey: contextKeySchema.optional(),
   domain: assetDomainSchema.optional(),
   sourceKind: assetSourceKindSchema.optional(),
   timezoneOffsetMinutes: timezoneOffsetMinutesSchema,
@@ -89,6 +91,7 @@ export const validateCreatedAtFilters = (
 
 export const assetSearchFiltersSchema = assetSearchFiltersRawSchema
   .superRefine((value, context) => {
+    validateRecordFilterConflicts(value, context);
     validateCreatedAtFilters(value, context);
   })
   .transform(normalizeCreatedAtFilters);
@@ -108,6 +111,7 @@ export const assetSearchPayloadRawSchema = assetSearchFiltersRawSchema.extend({
 
 export const assetSearchPayloadSchema = assetSearchPayloadRawSchema
   .superRefine((value, context) => {
+    validateRecordFilterConflicts(value, context);
     validateCreatedAtFilters(value, context);
   })
   .transform(normalizeCreatedAtFilters);

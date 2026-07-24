@@ -1,4 +1,5 @@
 import { createRoute } from "honox/factory";
+import { PERSONAL_SCOPE } from "@/core/memory/scope";
 import { AskPage } from "@/features/chat/components/ask-page";
 import type { AskLibraryResult } from "@/features/chat/model/types";
 import { askLibrary } from "@/features/chat/server/service";
@@ -14,6 +15,7 @@ export default createRoute(async (context) => {
       result = await askLibrary(context.env, {
         question,
         topK: 5,
+        scopeIds: [PERSONAL_SCOPE],
       });
     } catch (error) {
       errorMessage =

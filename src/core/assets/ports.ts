@@ -30,6 +30,7 @@ export interface CreateUrlAssetInput {
   title?: string | undefined;
   url: string;
   sourceKind?: AssetSourceKind | undefined;
+  scopeId?: MemoryScope | undefined;
   contextKey?: ContextKey | undefined;
 }
 

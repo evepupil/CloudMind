@@ -1,5 +1,6 @@
 import { createRoute } from "honox/factory";
 
+import { PERSONAL_SCOPE } from "@/core/memory/scope";
 import { SearchPage } from "@/features/search/components/search-page";
 import type { SearchResult } from "@/features/search/model/types";
 import { searchAssets } from "@/features/search/server/service";
@@ -15,6 +16,7 @@ export default createRoute(async (context) => {
           query,
           page,
           pageSize: 20,
+          scopeIds: [PERSONAL_SCOPE],
         })
       : {
           items: [],
@@ -27,6 +29,9 @@ export default createRoute(async (context) => {
             pageSize: 20,
             total: 0,
             totalPages: 0,
+          },
+          appliedRecordFilters: {
+            scopeIds: [PERSONAL_SCOPE],
           },
         };
 

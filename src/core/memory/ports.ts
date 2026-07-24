@@ -1,4 +1,5 @@
 import type { RecordKind } from "@/core/records/classification";
+import type { AppliedRecordFilters } from "@/core/records/filters";
 
 // L2 语义记忆层写侧端口。
 // 与基础设施实现解耦：业务层只依赖本接口，D1 实现可替换（未来 pg）。
@@ -234,22 +235,17 @@ export interface MemoryRepository {
   // 把 ANN 命中的向量 id 解析为实体 id（图检索的种子解析）；按 scope 隔离。
   findEntityIdsByVectorIds(
     vectorIds: string[],
-    scopeId?: string | undefined,
-    contextKey?: string | undefined
+    filters?: AppliedRecordFilters | undefined
   ): Promise<EntityVectorRef[]>;
   // 取一批源实体的未失效出边，作为 BFS / 递归遍历的一跳。
   findActiveOutgoingEdges(
     srcEntityIds: string[],
-    scopeId?: string | undefined,
-    contextKey?: string | undefined,
-    recordKind?: RecordKind | undefined
+    filters?: AppliedRecordFilters | undefined
   ): Promise<MemoryEdge[]>;
   // 取一批主语实体下所有未失效的陈述（图证据事实集）。
   findActiveStatementsBySubjects(
     subjectEntityIds: string[],
-    scopeId?: string | undefined,
-    contextKey?: string | undefined,
-    recordKind?: RecordKind | undefined
+    filters?: AppliedRecordFilters | undefined
   ): Promise<MemoryStatement[]>;
   // 按记忆 id 批量取出处（钻取回 L1 资产）。
   findProvenanceByMemoryIds(

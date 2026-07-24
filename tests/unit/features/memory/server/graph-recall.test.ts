@@ -7,6 +7,7 @@ import type {
   MemoryProvenanceRef,
   MemoryStatement,
 } from "@/core/memory/ports";
+import type { AppliedRecordFilters } from "@/core/records/filters";
 import type {
   VectorSearchInput,
   VectorSearchMatch,
@@ -67,17 +68,13 @@ const STATEMENTS: Record<string, MemoryStatement> = {
 const PROVENANCE: Record<string, string> = { s1: "a1", s2: "a2", s3: "a3" };
 
 class FakeGraphRepository implements GraphRecallRepository {
-  // 记录种子映射收到的 scopeId，断言 scope 隔离一路下推到仓储层。
-  public lastFindScopeId: string | undefined;
-  public lastFindContextKey: string | undefined;
+  public lastFindFilters: AppliedRecordFilters | undefined;
 
   public async findEntityIdsByVectorIds(
     vectorIds: string[],
-    scopeId?: string,
-    contextKey?: string
+    filters?: AppliedRecordFilters
   ): Promise<EntityVectorRef[]> {
-    this.lastFindScopeId = scopeId;
-    this.lastFindContextKey = contextKey;
+    this.lastFindFilters = filters;
     return vectorIds.flatMap((vectorId) => {
       const entityId = ENTITY_BY_VECTOR[vectorId];
       return entityId ? [{ vectorId, entityId }] : [];
@@ -202,7 +199,7 @@ describe("recallGraphStatements", () => {
 
   // 二期 scope 隔离回归：图检索的 ANN 种子必须把 scope 过滤下推到 graph_entities 向量库，
   // 并把同一 scope 透传给仓储的实体反查；否则 personal 召回会混入 agent 实体（反之亦然）。
-  it("种子检索默认把 personal scope 下推到向量库与仓储", async () => {
+  it("省略三维过滤时不限制向量库与仓储", async () => {
     const store = new FakeGraphVectorStore([{ id: "v1", score: 0.9 }]);
     const repo = new FakeGraphRepository();
 
@@ -212,12 +209,8 @@ describe("recallGraphStatements", () => {
       graphVectorStore: store,
     });
 
-    expect(store.lastSearchInput?.filter).toEqual({
-      scopeId: { $eq: "personal" },
-      contextKey: { $eq: "global" },
-    });
-    expect(repo.lastFindScopeId).toBe("personal");
-    expect(repo.lastFindContextKey).toBe("global");
+    expect(store.lastSearchInput?.filter).toBeUndefined();
+    expect(repo.lastFindFilters).toEqual({});
   });
 
   it("种子检索传 scopeId=agent 时按 agent 过滤并透传", async () => {
@@ -228,15 +221,18 @@ describe("recallGraphStatements", () => {
       queryVector: [0.1, 0.2],
       repository: repo,
       graphVectorStore: store,
-      scopeId: "agent",
-      contextKey: "project:github:evepupil/CloudMind",
+      scopeIds: ["personal", "agent"],
+      contextKeys: ["project:github:evepupil/CloudMind"],
     });
 
     expect(store.lastSearchInput?.filter).toEqual({
-      scopeId: { $eq: "agent" },
-      contextKey: { $eq: "project:github:evepupil/CloudMind" },
+      scopeId: { $in: ["personal", "agent"] },
+      contextKey: { $in: ["project:github:evepupil/CloudMind"] },
     });
-    expect(repo.lastFindScopeId).toBe("agent");
-    expect(repo.lastFindContextKey).toBe("project:github:evepupil/CloudMind");
+    expect(repo.lastFindFilters).toEqual({
+      recordKinds: undefined,
+      scopeIds: ["personal", "agent"],
+      contextKeys: ["project:github:evepupil/CloudMind"],
+    });
   });
 });

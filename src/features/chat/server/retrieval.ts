@@ -1,4 +1,5 @@
 import type { AssetSearchRepository } from "@/core/assets/ports";
+import type { AppliedRecordFilters } from "@/core/records/filters";
 import type { VectorStore } from "@/core/vector/ports";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
 import {
@@ -28,7 +29,8 @@ export const getSummaryGroundingContexts = async (
   repository: AssetSearchRepository,
   question: string,
   limit: number,
-  contextPolicy?: ContextRetrievalPolicy
+  contextPolicy?: ContextRetrievalPolicy,
+  recordFilters: AppliedRecordFilters = {}
 ): Promise<GroundingContext[]> => {
   if (contextPolicy && !contextPolicy.includeSummaryOnly) {
     return [];
@@ -39,6 +41,7 @@ export const getSummaryGroundingContexts = async (
       query: question,
       limit,
       aiVisibility: [...CHAT_SUMMARY_ONLY_AI_VISIBILITY],
+      ...recordFilters,
     })
     .catch(() => []);
 

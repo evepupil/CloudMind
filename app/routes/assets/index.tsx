@@ -1,5 +1,6 @@
 import { createRoute } from "honox/factory";
 
+import { PERSONAL_SCOPE } from "@/core/memory/scope";
 import { AssetsPage } from "@/features/assets/components/assets-page";
 import { assetListQuerySchema } from "@/features/assets/server/schemas";
 import { listAssets } from "@/features/assets/server/service";
@@ -24,7 +25,10 @@ export default createRoute(async (context) => {
   try {
     const parsedQuery = assetListQuerySchema.safeParse(context.req.query());
     const filters = parsedQuery.success ? parsedQuery.data : {};
-    const result = await listAssets(context.env, filters);
+    const result = await listAssets(context.env, {
+      ...filters,
+      scopeIds: [PERSONAL_SCOPE],
+    });
     const errorMessage = context.req.query("error");
     const flashMessage = getFlashMessage(
       context.req.query("created"),

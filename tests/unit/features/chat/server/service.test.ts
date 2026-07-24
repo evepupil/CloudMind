@@ -264,13 +264,16 @@ class SummaryOnlySearchRepository implements AssetSearchRepository {
 }
 
 class InMemoryVectorStore implements VectorStore {
+  public lastSearchInput: VectorSearchInput | undefined;
+
   public constructor(private readonly matches: VectorSearchMatch[]) {}
 
   public async upsert(): Promise<void> {
     return undefined;
   }
 
-  public async search(_input: VectorSearchInput): Promise<VectorSearchMatch[]> {
+  public async search(input: VectorSearchInput): Promise<VectorSearchMatch[]> {
+    this.lastSearchInput = input;
     return this.matches;
   }
 
@@ -745,6 +748,9 @@ describe("chat service", () => {
       {
         question: "What does CloudMind emphasize?",
         topK: 2,
+        recordKinds: ["library"],
+        scopeIds: ["personal", "agent"],
+        contextKeys: ["global"],
       }
     );
 
@@ -752,12 +758,21 @@ describe("chat service", () => {
       texts: ["What does CloudMind emphasize?"],
       purpose: "query",
     });
+    expect(vectorStore.lastSearchInput?.filter).toEqual({
+      aiVisibility: { $in: ["allow"] },
+      recordKind: { $in: ["library"] },
+      scopeId: { $in: ["personal", "agent"] },
+      contextKey: { $in: ["global"] },
+    });
     expect(repository.chunkMatchQueries).toEqual([["allow"]]);
     expect(repository.summaryQueries).toEqual([
       {
         query: "What does CloudMind emphasize?",
         limit: 2,
         aiVisibility: ["summary_only"],
+        recordKinds: ["library"],
+        scopeIds: ["personal", "agent"],
+        contextKeys: ["global"],
       },
     ]);
     expect(aiProvider.generateText).toHaveBeenCalledWith(

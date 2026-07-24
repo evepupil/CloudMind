@@ -9,22 +9,19 @@ import {
 
 const dialect = new SQLiteSyncDialect();
 
-// 一期 scope 隔离：L1 检索默认只查 personal（人记忆），agent 记忆走独立 scope、不进默认检索。
-// 这里把 where 条件编译成 SQL 直接断言确实带 scope_id = 'personal'，
-// 防止后续有人无意把过滤改回全量、导致 agent 记忆泄漏进默认检索。
-describe("scope 隔离 · L1 检索条件", () => {
-  it("资产列表 where 默认带 scope_id = 'personal'", () => {
+describe("三维归属 · L1 检索条件", () => {
+  it("省略归属维度时不添加 scope 条件", () => {
     const where = buildAssetListWhereClause();
     if (!where) {
       throw new Error("buildAssetListWhereClause 不应返回 undefined");
     }
 
     const { sql, params } = dialect.sqlToQuery(where);
-    expect(sql).toContain("scope_id");
-    expect(params).toContain("personal");
+    expect(sql).not.toContain("scope_id");
+    expect(params).not.toContain("personal");
   });
 
-  it("lexical 检索条件默认带 scope_id = 'personal'", () => {
+  it("lexical 省略归属维度时不添加 scope 条件", () => {
     const conditions = buildAssetSearchFilterConditions();
     const combined = and(...conditions);
     if (!combined) {
@@ -32,12 +29,10 @@ describe("scope 隔离 · L1 检索条件", () => {
     }
 
     const { sql, params } = dialect.sqlToQuery(combined);
-    expect(sql).toContain("scope_id");
-    expect(params).toContain("personal");
+    expect(sql).not.toContain("scope_id");
+    expect(params).not.toContain("personal");
   });
 
-  // 二期：显式传 scopeId=agent 时按 agent 过滤（recall_agent 走这条路读 agent 记忆，
-  // 同时反向保证日常 personal 检索不会混入 agent）。
   it("资产列表 where 传 scopeId=agent 时按 agent 过滤", () => {
     const where = buildAssetListWhereClause({ scopeId: "agent" });
     if (!where) {
@@ -82,6 +77,35 @@ describe("scope 隔离 · L1 检索条件", () => {
         "memory",
         "agent",
         "project:github:evepupil/CloudMind",
+      ])
+    );
+  });
+
+  it("同维度多值使用 OR，三个维度之间使用 AND", () => {
+    const conditions = buildAssetSearchFilterConditions({
+      recordKinds: ["library", "memory"],
+      scopeIds: ["personal", "agent"],
+      contextKeys: [
+        "project:github:evepupil/CloudMind",
+        "project:github:evepupil/AnotherProject",
+      ],
+    });
+    const combined = and(...conditions);
+
+    if (!combined) {
+      throw new Error("buildAssetSearchFilterConditions 不应为空");
+    }
+
+    const { sql, params } = dialect.sqlToQuery(combined);
+    expect(sql.match(/ in \(\?, \?\)/g)).toHaveLength(3);
+    expect(params).toEqual(
+      expect.arrayContaining([
+        "library",
+        "memory",
+        "personal",
+        "agent",
+        "project:github:evepupil/CloudMind",
+        "project:github:evepupil/AnotherProject",
       ])
     );
   });
