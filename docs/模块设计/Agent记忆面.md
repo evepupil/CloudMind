@@ -119,6 +119,10 @@ Agent 项目记忆，验证生产 D1 列表、FTS/Vectorize 混合检索和 L2 s
 在 finally 中调用 `forget` 清理活跃测试数据。生产验收通过：2 条测试记录均已遗忘，
 活跃数为 0，对应 chunk 向量残留数为 0。
 
+M6 使用 `scripts/hard-delete-acceptance.mjs` 验证已软删除 memory 的整条版本链可从
+D1、R2、chunk Vectorize、图 Vectorize 和独占 L2 中清理，完成审计只保留目标哈希、
+数量和时间；生产验收已经通过。
+
 ## 实施计划
 
 ### M3-A0：简化核心模型（已完成）
@@ -152,12 +156,14 @@ Agent 项目记忆，验证生产 D1 列表、FTS/Vectorize 混合检索和 L2 s
 
 ## 待扩展项
 
-- M6 阶段 B 继续补完整导出、导入和恢复演练。
+- M6 的完整导出、导入、恢复和 hard delete 验收已完成；发布自动化归 M7。
 - `reinforce`、`link` 继续归 M5。
 - 完整会话归档作为显式 library 能力评估，不进入 Agent 记忆默认路径。
 
 ## 改动历史
 
+- 2026-07-24：M6 生产 hard delete 和数据包 v2 恢复验收通过，确认版本链跨存储清理、
+  审计最小化和项目过滤可恢复。
 - 2026-07-24：`forget` 增加保持向后兼容的 soft/hard 模式；hard 要求目标已软删除、
   `confirmId` 完全一致，并清理完整 memory 版本链。
 - 2026-07-24：M3-A3 生产验收通过；两个同含 `M1/M2` 的项目在 D1、FTS、Vectorize

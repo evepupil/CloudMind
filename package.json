@@ -24,6 +24,7 @@
     "test:workers": "vitest run --config vitest.workers.config.ts",
     "eval": "vitest run tests/eval",
     "acceptance:project-isolation": "node scripts/project-isolation-acceptance.mjs",
+    "acceptance:hard-delete": "node scripts/hard-delete-acceptance.mjs",
     "e2e:smoke": "node scripts/e2e-smoke.mjs",
     "bindings:generate": "wrangler types worker-configuration.d.ts --env-interface CloudflareBindings --include-runtime=false",
     "bindings:check": "wrangler types worker-configuration.d.ts --env-interface CloudflareBindings --include-runtime=false --check",
