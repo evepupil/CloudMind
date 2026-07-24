@@ -10,5 +10,7 @@ coverage
 .vscode
 *.tsbuildinfo
 *.log
+.cloudmind-exports/
+cloudmind-export-*/
 public/styles.css
 package-lock.json

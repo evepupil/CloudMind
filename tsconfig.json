@@ -2,6 +2,7 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "baseUrl": ".",
+    "allowImportingTsExtensions": true,
     "types": [
       "node",
       "vite/client",
@@ -19,6 +20,7 @@
     "app/**/*.tsx",
     "src/**/*.ts",
     "src/**/*.tsx",
+    "scripts/**/*.ts",
     "tests/**/*.ts",
     "tests/**/*.tsx",
     "worker-configuration.d.ts",
