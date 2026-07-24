@@ -16,6 +16,7 @@ const isPublicPath = (path: string): boolean => {
     path === "/login" ||
     path === "/auth/login" ||
     path === "/auth/logout" ||
+    path === "/api/health" ||
     path === "/styles.css" ||
     path === "/favicon.ico" ||
     path.startsWith("/node_modules/") ||
