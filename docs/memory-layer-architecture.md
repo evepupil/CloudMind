@@ -28,18 +28,19 @@ CloudMind 的目标是做一个**真正的、完备的 AI 记忆层**，能力�
 
 ---
 
-## 二、当前实现与目标差距
+## 二、当前实现与保留方向
 
-截至 2026-07-24，检索地基和 L2 图谱已经可运行。当前差距集中在 M3 记忆面，
-不再沿用 2026-06-05 设计初稿里的“只有文档搜索”判断。
+截至 2026-07-24，检索地基、L2 图谱、M3 记忆生命周期和 M6 数据主权已经完成。
+高级相对时间、评价、聚合、手动强化和显式建边已退出当前 roadmap，只保留为
+真实使用需求驱动的候选方向。
 
-| 轴 | 已实现 | M3 仍需完成 |
+| 轴 | 已实现 | 未来候选 |
 |---|---|---|
-| 写入模型 | `remember`、`remember_agent` 可进入统一处理和 L2 调和，三维字段已贯穿 | 专用 `update_memory`、`forget` |
-| 记忆单元 | chunks、entities、statements、edges、provenance 已落库，episode 已移除 | 版本化更新与恢复 |
-| 时间维度 | 日期范围、recency、显著性衰减和双时间事实 | 记忆版本历史、软删除/恢复；相对时间归 M5 |
-| 结构 | 实体抽取、关系边、调和和图召回已接通，并按记忆域和项目共同隔离 | 三维数组组合过滤与 Web 项目视图 |
-| 反馈 | 排序已读取 importance、age、accessCount | 接通专用强化与访问回写；`reinforce` 归 M5 |
+| 写入模型 | `remember`、`remember_agent`、版本化更新、遗忘和恢复 | 按真实反馈扩展 |
+| 记忆单元 | chunks、entities、statements、edges、provenance；episode 已移除 | community 收益验证 |
+| 时间维度 | 日期范围、recency、显著性衰减、双时间事实和版本历史 | 相对事件锚定 |
+| 结构 | 实体抽取、关系边、调和、图召回、三维过滤和项目视图 | 手动建边 |
+| 反馈 | importance、age、accessCount 排序和自动访问回写 | 评价、聚合和手动强化 |
 
 ### 已完成的检索地基
 
@@ -78,7 +79,7 @@ CloudMind 的目标是做一个**真正的、完备的 AI 记忆层**，能力�
 
 ```
 ┌─ L3 工作 & 记忆面 ────────────────────────────────────────┐
-│ MCP 记忆动词(remember/recall/update/forget/reinforce/link) │
+│ MCP 记忆动词(remember/recall/update/forget/restore)        │
 │ 混合+图检索管线 · context scope · sleep-time 整合/遗忘 job  │
 ├─ L2 语义记忆层(新增·可变·带时间与显著性·完整知识图谱) ─────┤
 │ entities(节点) · statements/facts(bi-temporal) · edges(关系)│
@@ -210,23 +211,21 @@ Cloudflare **Cron Trigger + Queue/Workflows** 跑后台"睡眠期"维护：
 
 ## 十、L3 记忆面：自编辑动词（Letta 工具化 + 现成 MCP 管道）
 
-当前 17 个 MCP 工具平铺注册，覆盖知识库、记忆和运维能力。目标保留兼容入口，
-补齐专用记忆动词，并按职责整理默认过滤语义（复用 `withToolLogging`、token 鉴权和
-context profiles 管道）：
+当前 MCP 工具平铺注册，覆盖知识库、记忆和运维能力。专用记忆生命周期动词已经
+接入，并复用 `withToolLogging`、token 鉴权和 context profiles 管道：
 
 | 动词 | 语义 | 复用 |
 |---|---|---|
 | `remember(text, context?)` | 写 `memory + personal`，再抽取、调和 | 复用文本管线 |
 | `remember_agent(text, context?)` | 写 `memory + agent`，再抽取、调和 | 复用文本管线 |
-| `recall(query, scope, as_of?)` | 读 L2 引 L1，支持**时间回溯**(as_of 查双时间) | 扩 `search_assets_for_context` |
+| `recall(queries, filters)` | 通过混合检索读 L2 并引用 L1 | 复用检索主干 |
 | `update_memory(id, patch)` | 新建版本并让旧版本失效 | 专用生命周期服务 |
-| `forget(id\|query, hard?)` | 默认软删；硬删同时清向量 | 专用生命周期服务 |
-| `reinforce(id)` | 强化显著性 | 新写回 |
-| `link(a, rel, b)` | 显式建边 | 新图操作 |
+| `forget(id, scope, context, hard?)` | 默认软删；硬删同时清理版本链和派生数据 | 专用生命周期服务 |
+| `restore_memory(id)` | 从不可变快照恢复并重建派生数据 | 专用生命周期服务 |
 
 `record_kind × scope_id × context_key` 贯穿三层。查询支持维度内 OR、维度间 AND，
-省略某个维度表示不限制；`recall_agent` 默认按当前项目 context 查询 memory，同时
-允许 personal 与 agent 两个 scope。
+省略某个维度表示不限制；客户端调用 `recall_agent` 时显式传当前项目 context，
+并允许 personal 与 agent 两个 scope。省略 context 只保留兼容期的 global 行为。
 
 ---
 
@@ -313,7 +312,7 @@ context profiles 管道）：
 ## 十四、待定问题（Open Questions）
 
 1. ~~**L1 迁移方式**~~ → **已定（ADR-003）**：新库重来，不写迁移脚本。
-2. ~~**下一步详设展开**~~ → **已定**：当前进入 M3，实施顺序见 Agent 记忆模块。
+2. ~~**下一步详设展开**~~ → **已定**：M3 与 M6 已完成，当前进入 M7 发布收尾。
 3. ~~**记录过滤维度**~~ → **已定（ADR-004）**：record kind、scope、context 三维。
 4. ~~**AGENTS.md 是否更新**~~ → **已完成**：AGENTS.md（及镜像 CLAUDE.md）已记录方向升级并标注 superseded 旧立场。
 

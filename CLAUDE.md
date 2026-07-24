@@ -25,7 +25,7 @@ CloudMind 的目标从"自称记忆层的 RAG"正式升级为 **大而完备、�
 
 - **L1 来源层**（瘦身后的 assets + chunks + R2 原始快照）：不可变、可导出的"真相之源"。
 - **L2 语义记忆层**：**完整知识图谱**（entities + 带 bi-temporal 有效期的 statements + 关系 edges + 指回 L1 的 provenance + community 摘要）。
-- **L3 记忆面**：MCP 记忆动词（remember/recall/update/forget/reinforce/link）+ 混合·图检索 + sleep-time 整合/遗忘。
+- **L3 记忆面**：MCP 记忆动词（remember/recall/update/forget/restore）+ 混合·图检索 + sleep-time 整合/遗忘。
 
 **已锁定决策（ADR）：**
 

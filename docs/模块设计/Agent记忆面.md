@@ -191,13 +191,14 @@ D1、R2、chunk Vectorize、图 Vectorize 和独占 L2 中清理，完成审计�
 ## 待扩展项
 
 - M6 的完整导出、导入、恢复和 hard delete 验收已完成；发布自动化归 M7。
-- `reinforce`、`link` 继续归 M5。
+- 专用 `reinforce`、`link` 已移出当前 roadmap；现有自动访问强化和图谱关系继续保留。
 - 完整会话归档沿用显式 personal library 资产，不进入 Agent 记忆默认路径。
 - 将单个 Skill 与 MCP 配置打包为可安装的 CloudMind Codex Plugin，或提供幂等的
   `cloudmind setup-agent codex`，属于后续分发体验增强。
 
 ## 改动历史
 
+- 2026-07-24：M5 退出当前 roadmap；Agent 记忆面维持现有生命周期工具边界。
 - 2026-07-24：新增 `cloudmind-memory` 客户端 Skill，落实主动召回、选择性沉淀、
   项目 key、写前去重、生命周期安全边界和 MCP 依赖声明，并开始本机体验验证。
 - 2026-07-24：M6 生产 hard delete 和数据包 v2 恢复验收通过，确认版本链跨存储清理、
