@@ -265,9 +265,9 @@ D1 migration 只向前执行。schema 改动必须兼容上一个 Worker 版本�
 CloudMind 在 `POST /mcp` 提供无状态 HTTP MCP Server。请求需要携带从
 `/mcp-tokens` 创建的 bearer token。
 
-每个有效 token 都可以生成通用配置 JSON，或生成面向 Codex、Claude Code 和其他
-AI 客户端的可复制安装提示词。提示词会要求 AI 配置 MCP、安装
-`cloudmind-memory` Skill、验证工具列表，并禁止把 token 写入日志、仓库或长期记忆。
+每个有效 token 都可以生成通用配置 JSON 或可复制的 AI 安装提示词。AI 客户端会自行
+识别 MCP 与 Skill 的安装方式，配置 CloudMind、安装 `cloudmind-memory` Skill、验证
+工具列表，并避免把 token 写入日志、仓库或长期记忆。
 
 当前 20 个工具按职责分组：
 

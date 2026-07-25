@@ -37,8 +37,9 @@ user action -> REST route -> domain service -> redirect / partial navigation
    归 M3 管理。
 6. 通用资产、搜索、问答、首页和 Activity 页面显式限定 personal scope，避免 Agent
    工作记忆混入个人工作台；Agent 数据从独立管理入口访问。
-7. MCP 安装提示词按客户端切换，复制逻辑只读取当前可见内容；token 不进入浏览器
-   日志、URL 或额外持久化状态。
+7. MCP 安装提示词保持客户端无关，由 AI 自行识别安装方式；复制逻辑由全站静态脚本
+   通过事件委托处理，站内局部导航后仍然有效。token 不进入浏览器日志、URL 或额外
+   持久化状态。
 
 ## 当前实现
 
@@ -64,8 +65,9 @@ user action -> REST route -> domain service -> redirect / partial navigation
 
 ## 改动历史
 
-- 2026-07-25：MCP token 卡片增加安装视图，可切换提示词/JSON、选择 Codex、
-  Claude Code 或其他 AI，并一键复制当前内容。
+- 2026-07-25：修复站内局部导航后安装面板无法复制的问题；提示词改为客户端无关，
+  去掉 AI 客户端选择，由当前 AI 自行识别 MCP 和 Skill 安装方式。
+- 2026-07-25：MCP token 卡片增加安装视图，可切换提示词/JSON 并一键复制当前内容。
 - 2026-07-24：移除对 M5 的依赖；高级聚合视图退出当前 roadmap。
 - 2026-07-24：增加 Agent 记忆导航、三维筛选、项目视图、详情、版本历史和专用生命
   周期操作入口；保持通用个人工作台与 Agent 数据分区。

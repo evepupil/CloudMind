@@ -1,31 +1,3 @@
-export type McpInstallTarget = "codex" | "claude-code" | "generic";
-
-export interface McpInstallTargetOption {
-  value: McpInstallTarget;
-  label: string;
-}
-
-export const MCP_INSTALL_TARGETS: McpInstallTargetOption[] = [
-  { value: "codex", label: "Codex" },
-  { value: "claude-code", label: "Claude Code" },
-  { value: "generic", label: "其他 AI" },
-];
-
-const targetGuidance: Record<McpInstallTarget, string[]> = {
-  codex: [
-    "你当前运行在 Codex 中。优先使用 codex mcp 命令或用户级 config.toml 配置远程 MCP。",
-    "把 cloudmind-memory Skill 安装到用户级 Codex Skills 目录；如果内置 skill-installer 可用，优先使用它。",
-  ],
-  "claude-code": [
-    "你当前运行在 Claude Code 中。使用当前版本支持的用户级 MCP 配置方式，不要只改当前项目。",
-    "把 cloudmind-memory 安装为用户级 Skill；先检查当前 Claude Code 的 Skill 目录和安装命令。",
-  ],
-  generic: [
-    "先识别当前 AI 客户端支持的 MCP 和 Skill 配置方式，优先写入用户级配置。",
-    "客户端支持 Skills 时安装 cloudmind-memory；不支持时，只完成 MCP 连接并说明限制。",
-  ],
-};
-
 export const buildMcpConfigSnippet = (
   endpointUrl: string,
   tokenValue: string
@@ -44,18 +16,17 @@ export const buildMcpConfigSnippet = (
   );
 
 export const buildMcpInstallPrompt = ({
-  target,
   endpointUrl,
   tokenValue,
 }: {
-  target: McpInstallTarget;
   endpointUrl: string;
   tokenValue: string;
 }): string =>
   [
     "请直接在当前电脑上完成 CloudMind 客户端安装和验证，不要只给我步骤说明。",
     "",
-    ...targetGuidance[target],
+    "请自行识别当前 AI 客户端支持的 MCP 和 Skill 安装方式，并使用用户级配置。",
+    "客户端支持 Skills 时安装 cloudmind-memory；不支持时，完成 MCP 连接并说明限制。",
     "",
     "连接信息：",
     `- MCP 名称：cloudmind`,

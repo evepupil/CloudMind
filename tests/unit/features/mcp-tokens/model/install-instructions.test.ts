@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildMcpConfigSnippet,
   buildMcpInstallPrompt,
-  MCP_INSTALL_TARGETS,
 } from "@/features/mcp-tokens/model/install-instructions";
 
 const endpointUrl = "https://memory.example.com/mcp";
@@ -21,11 +20,8 @@ describe("MCP client install instructions", () => {
     });
   });
 
-  it.each(
-    MCP_INSTALL_TARGETS
-  )("builds a complete $label installation prompt", ({ value }) => {
+  it("builds a client-independent installation prompt", () => {
     const prompt = buildMcpInstallPrompt({
-      target: value,
       endpointUrl,
       tokenValue,
     });
@@ -39,5 +35,8 @@ describe("MCP client install instructions", () => {
     expect(prompt).toContain("不要为了测试创建、修改或删除记忆");
     expect(prompt).toContain("recall_agent");
     expect(prompt).toContain("所有敏感值必须脱敏");
+    expect(prompt).toContain("自行识别当前 AI 客户端");
+    expect(prompt).not.toContain("你当前运行在 Codex 中");
+    expect(prompt).not.toContain("你当前运行在 Claude Code 中");
   });
 });

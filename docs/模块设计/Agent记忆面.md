@@ -18,7 +18,7 @@
 - 用稳定项目上下文隔离不同仓库里的里程碑、决策、进度和调试轨迹。
 - 只保存用户或 Agent 选中的记忆内容；完整会话原文由用户显式归档。
 - 复用 MCP token 鉴权、工具日志和统一错误返回。
-- 为非技术用户生成面向具体 AI 客户端的安装提示词，完成 MCP 和 Skill 接入。
+- 为非技术用户生成通用 AI 安装提示词，完成 MCP 和 Skill 接入。
 - 通用资产 CRUD 继续服务知识库管理，不代替专用记忆生命周期语义。
 
 ## 结构与数据流
@@ -105,8 +105,8 @@ Skill 使用以下规则：
 这层规则属于选择性客户端采用，不会让服务端自动捕获外部会话。新会话会根据 Skill
 描述隐式触发；调试时也可用 `$cloudmind-memory` 显式触发。
 
-`/mcp-tokens` 为每个有效 token 提供两种交付形态：通用 MCP 配置 JSON，以及 Codex、
-Claude Code、其他 AI 三类安装提示词。提示词要求当前 AI 直接完成用户级 MCP 配置、
+`/mcp-tokens` 为每个有效 token 提供两种交付形态：通用 MCP 配置 JSON 和通用 AI
+安装提示词。提示词要求当前 AI 自行识别客户端安装方式，直接完成用户级 MCP 配置、
 安装仓库中的 `skills/cloudmind-memory`、只读核对关键工具，并全程对 token 脱敏。
 
 ## 当前实现
@@ -114,8 +114,8 @@ Claude Code、其他 AI 三类安装提示词。提示词要求当前 AI 直接�
 - `remember`、`recall`、`remember_agent`、`recall_agent` 四个 MCP 工具。
 - `skills/cloudmind-memory` 已提供召回、写入、去重更新、遗忘、恢复和完整会话归档的
   客户端决策流程，并声明 CloudMind MCP 依赖与隐式触发策略。
-- MCP token 页面支持“给 AI 的提示词 / 配置 JSON”切换、客户端选择和一键复制；安装
-  提示词包含 MCP、Skill、只读验证和 secret 处理边界。
+- MCP token 页面支持“给 AI 的提示词 / 配置 JSON”切换和一键复制；安装提示词不区分
+  客户端，包含 MCP、Skill、只读验证和 secret 处理边界。
 - `recordKind`、`scopeId`、`contextKey` 已贯穿 asset、chunk、D1 检索、Vectorize
   metadata、实体消歧、statement、edge 和 provenance。
 - `remember` 与 `remember_agent` 已固定写 memory；普通采集默认写 library。
@@ -212,8 +212,10 @@ D1、R2、chunk Vectorize、图 Vectorize 和独占 L2 中清理，完成审计�
 
 ## 改动历史
 
-- 2026-07-25：MCP token 页面新增 Codex、Claude Code、其他 AI 安装提示词，与配置
-  JSON 切换并支持一键复制；提示词内置 token 脱敏、Skill 安装和只读验证边界。
+- 2026-07-25：安装提示词改为客户端无关，由 AI 自行识别安装方式；复制交互移到全站
+  静态脚本，修复站内局部导航后按钮无响应的问题。
+- 2026-07-25：MCP token 页面新增 AI 安装提示词，与配置 JSON 切换并支持一键复制；
+  提示词内置 token 脱敏、Skill 安装和只读验证边界。
 - 2026-07-24：M5 退出当前 roadmap；Agent 记忆面维持现有生命周期工具边界。
 - 2026-07-24：新增 `cloudmind-memory` 客户端 Skill，落实主动召回、选择性沉淀、
   项目 key、写前去重、生命周期安全边界和 MCP 依赖声明，并开始本机体验验证。

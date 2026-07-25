@@ -273,10 +273,10 @@ the previous Worker version. See the
 CloudMind exposes a stateless HTTP MCP server at `POST /mcp`. Requests require
 a bearer token created from `/mcp-tokens`.
 
-Each active token can produce generic config JSON or a copyable installation
-prompt for Codex, Claude Code, and other AI clients. The prompt asks the client
-to configure MCP, install the `cloudmind-memory` Skill, verify the tool catalog,
-and keep the token out of logs, repositories, and long-term memory.
+Each active token can produce generic config JSON or a copyable AI installation
+prompt. The client identifies its own MCP and Skill setup method, configures
+CloudMind, installs the `cloudmind-memory` Skill, verifies the tool catalog, and
+keeps the token out of logs, repositories, and long-term memory.
 
 The current 20 tools are grouped by responsibility:
 

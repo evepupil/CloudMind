@@ -41,6 +41,8 @@ export default jsxRenderer(({ children }) => {
         <div id="boost-root">{children}</div>
         {/* 客户端导航增强（渐进增强：无 JS / 出错时退化为原生整页导航） */}
         <script src="/boost.js" defer />
+        {/* MCP 安装面板使用事件委托，站内局部导航后仍可切换和复制。 */}
+        <script src="/mcp-token-install.js" defer />
       </body>
     </html>
   );
