@@ -2,14 +2,14 @@
 
 > 模块定位：通过 MCP 和 Web 完成个人与 Agent 记忆的写入、召回、更新、遗忘和管理。
 >
-> 对应代码：`src/features/{mcp,memory,search}/*`、`src/core/{assets,memory}/*`、
+> 对应代码：`src/features/{mcp,mcp-tokens,memory,search}/*`、`src/core/{assets,memory}/*`、
 > `src/platform/db/d1/{schema,repositories}/*`、`skills/cloudmind-memory/*`
 >
 > 所属 M 里程碑：[`M3 Agent 记忆面`](../roadmap.md#m3-agent-记忆面)
 >
 > 当前状态：已完成
 >
-> 最近更新时间：2026-07-24
+> 最近更新时间：2026-07-25
 
 ## 职责与边界
 
@@ -18,6 +18,7 @@
 - 用稳定项目上下文隔离不同仓库里的里程碑、决策、进度和调试轨迹。
 - 只保存用户或 Agent 选中的记忆内容；完整会话原文由用户显式归档。
 - 复用 MCP token 鉴权、工具日志和统一错误返回。
+- 为非技术用户生成面向具体 AI 客户端的安装提示词，完成 MCP 和 Skill 接入。
 - 通用资产 CRUD 继续服务知识库管理，不代替专用记忆生命周期语义。
 
 ## 结构与数据流
@@ -27,6 +28,7 @@ remember(_agent) -> recordKind + scopeId + contextKey -> immutable memory asset
                  -> chunks / vectors / L2 graph -> provenance(asset + chunk)
 recall(_agent)   -> explicit three-axis filters -> hybrid search -> merged bundle
 Agent Web        -> filterable list/detail -> update / forget / restore
+MCP token page   -> JSON or client prompt -> MCP + Skill installation
 ```
 
 核心三元组：
@@ -54,17 +56,20 @@ Agent Web        -> filterable list/detail -> update / forget / restore
 6. `update_memory` 创建新版本并让旧版本失效；`forget` 默认软删除。二者都直接作用
    于 memory 记录，不创建 correction episode。
 7. L2 provenance 直接指向 asset/chunk。episode 中间层不参与目标架构。
+8. AI 安装提示词可以携带当前 token，但必须明确禁止回显、日志、Git 和记忆写入；安装
+   结果只报告脱敏状态。
 
 ## MCP 工具分组
 
-当前 20 个工具仍全部平铺注册，目标按职责收敛为四组：
+当前 20 个工具仍全部平铺注册，使用时按五组理解：
 
 | 分组 | 工具与目标 |
 | --- | --- |
 | 个人记忆 | `remember`、`recall`、`update_memory`、`forget`、`restore_memory` |
 | Agent 记忆 | `remember_agent`、`recall_agent`；写入固定 `scopeId=agent` |
-| 知识库 | `save_asset`、`list_assets`、`search_assets`、`get_asset`、`ask_library` 和资产管理工具 |
-| 运维 | `list_asset_workflows`、`get_workflow_run`，后续通过独立配置暴露 |
+| 资料库 | `save_asset`、`list_assets`、`search_assets`、`search_assets_for_context`、`get_asset`、`ask_library`、`ask_library_for_context` |
+| 资产管理 | `update_asset`、`delete_asset`、`restore_asset`、`reprocess_asset` |
+| 运维 | `list_asset_workflows`、`get_workflow_run` |
 
 `remember` 固定写 `memory + personal`；`remember_agent` 固定写
 `memory + agent`；`save_asset` 固定写 `library`。三个写入工具都接收 `contextKey`，
@@ -100,11 +105,17 @@ Skill 使用以下规则：
 这层规则属于选择性客户端采用，不会让服务端自动捕获外部会话。新会话会根据 Skill
 描述隐式触发；调试时也可用 `$cloudmind-memory` 显式触发。
 
+`/mcp-tokens` 为每个有效 token 提供两种交付形态：通用 MCP 配置 JSON，以及 Codex、
+Claude Code、其他 AI 三类安装提示词。提示词要求当前 AI 直接完成用户级 MCP 配置、
+安装仓库中的 `skills/cloudmind-memory`、只读核对关键工具，并全程对 token 脱敏。
+
 ## 当前实现
 
 - `remember`、`recall`、`remember_agent`、`recall_agent` 四个 MCP 工具。
 - `skills/cloudmind-memory` 已提供召回、写入、去重更新、遗忘、恢复和完整会话归档的
   客户端决策流程，并声明 CloudMind MCP 依赖与隐式触发策略。
+- MCP token 页面支持“给 AI 的提示词 / 配置 JSON”切换、客户端选择和一键复制；安装
+  提示词包含 MCP、Skill、只读验证和 secret 处理边界。
 - `recordKind`、`scopeId`、`contextKey` 已贯穿 asset、chunk、D1 检索、Vectorize
   metadata、实体消歧、statement、edge 和 provenance。
 - `remember` 与 `remember_agent` 已固定写 memory；普通采集默认写 library。
@@ -157,6 +168,9 @@ D1、R2、chunk Vectorize、图 Vectorize 和独占 L2 中清理，完成审计�
 会话归档七类行为用例检查工具选择。用户级安装后需要新建 Codex 任务，让 Codex 重新
 发现 Skill 和全局 `AGENTS.md`。
 
+安装提示词纯函数测试覆盖三类客户端、MCP 地址与 token 注入、Skill 路径、只读验证、
+禁止写入 Git/记忆和最终脱敏报告。切换与复制属于展示交互，通过构建和人工检查验证。
+
 ## 实施计划
 
 ### M3-A0：简化核心模型（已完成）
@@ -193,11 +207,13 @@ D1、R2、chunk Vectorize、图 Vectorize 和独占 L2 中清理，完成审计�
 - M6 的完整导出、导入、恢复和 hard delete 验收已完成；发布自动化归 M7。
 - 专用 `reinforce`、`link` 已移出当前 roadmap；现有自动访问强化和图谱关系继续保留。
 - 完整会话归档沿用显式 personal library 资产，不进入 Agent 记忆默认路径。
-- 将单个 Skill 与 MCP 配置打包为可安装的 CloudMind Codex Plugin，或提供幂等的
-  `cloudmind setup-agent codex`，属于后续分发体验增强。
+- 当前已用 AI 安装提示词完成最短接入路径；Codex Plugin 或
+  `cloudmind setup-agent codex` 保留为批量分发与无人值守场景的后续增强。
 
 ## 改动历史
 
+- 2026-07-25：MCP token 页面新增 Codex、Claude Code、其他 AI 安装提示词，与配置
+  JSON 切换并支持一键复制；提示词内置 token 脱敏、Skill 安装和只读验证边界。
 - 2026-07-24：M5 退出当前 roadmap；Agent 记忆面维持现有生命周期工具边界。
 - 2026-07-24：新增 `cloudmind-memory` 客户端 Skill，落实主动召回、选择性沉淀、
   项目 key、写前去重、生命周期安全边界和 MCP 依赖声明，并开始本机体验验证。

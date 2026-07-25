@@ -84,7 +84,7 @@ CloudMind 不会自动归档完整的外部会话。AI 客户端通过 `remember
 | Web | Observatory 工作台、资料库、搜索、问答、图谱、时间线、整合、活动和 Agent 记忆管理 |
 | 数据主权 | 不可变原始快照、带校验和的完整导出、离线校验和全新资源恢复 |
 | 发布 | SemVer、changelog 门禁、远端 migration 核验、生产 smoke、自动回滚和回滚演练 |
-| 认证 | 单用户登录、首次强制改密、会话中间件和 MCP token 管理 |
+| 认证 | 单用户登录、首次强制改密、MCP token 和可复制的 AI 安装提示词 |
 
 ## 架构
 
@@ -246,7 +246,7 @@ D1 migration 只向前执行。schema 改动必须兼容上一个 Worker 版本�
 | `/memory/timeline` | 按时间查看记忆 |
 | `/memory/consolidation` | 记忆整合与维护视图 |
 | `/activity` | 处理和系统活动 |
-| `/mcp-tokens` | MCP token 管理 |
+| `/mcp-tokens` | MCP token 管理、配置 JSON 和 AI 安装提示词 |
 | `/login`、`/change-password` | 单用户认证 |
 
 ## API
@@ -264,6 +264,10 @@ D1 migration 只向前执行。schema 改动必须兼容上一个 Worker 版本�
 
 CloudMind 在 `POST /mcp` 提供无状态 HTTP MCP Server。请求需要携带从
 `/mcp-tokens` 创建的 bearer token。
+
+每个有效 token 都可以生成通用配置 JSON，或生成面向 Codex、Claude Code 和其他
+AI 客户端的可复制安装提示词。提示词会要求 AI 配置 MCP、安装
+`cloudmind-memory` Skill、验证工具列表，并禁止把 token 写入日志、仓库或长期记忆。
 
 当前 20 个工具按职责分组：
 

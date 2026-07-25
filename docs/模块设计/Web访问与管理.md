@@ -8,7 +8,7 @@
 >
 > 当前状态：已完成
 >
-> 最近更新时间：2026-07-24
+> 最近更新时间：2026-07-25
 
 ## 职责与边界
 
@@ -16,6 +16,7 @@
 - 各 feature 页面负责把服务端数据转换为可扫描、可操作的工作界面。
 - 记忆区展示图谱、时间线和整合状态，Activity 集中展示任务运行情况。
 - 业务规则留在 server/core 层，展示组件不直接访问 Cloudflare 资源。
+- MCP token 页面负责把连接信息转换为可复制的 JSON 或 AI 安装提示词。
 
 ## 结构与数据流
 
@@ -36,6 +37,8 @@ user action -> REST route -> domain service -> redirect / partial navigation
    归 M3 管理。
 6. 通用资产、搜索、问答、首页和 Activity 页面显式限定 personal scope，避免 Agent
    工作记忆混入个人工作台；Agent 数据从独立管理入口访问。
+7. MCP 安装提示词按客户端切换，复制逻辑只读取当前可见内容；token 不进入浏览器
+   日志、URL 或额外持久化状态。
 
 ## 当前实现
 
@@ -43,7 +46,7 @@ user action -> REST route -> domain service -> redirect / partial navigation
 - 记忆图谱、时间线、整合页，以及对应 `/api/memory/*` 数据接口。
 - `/memory/agent` Agent 记忆控制台与 `/memory/agent/:id` 详情：三维筛选、项目视图、
   版本历史、来源、更新、遗忘和恢复。
-- 登录、改密、MCP token 管理和移动端导航。
+- 登录、改密、MCP token 管理、配置 JSON、AI 安装提示词和移动端导航。
 - 统一按钮、输入框、状态、空状态、面板和反馈组件。
 - 资产、搜索、问答、首页和 Activity 服务端查询统一传入 personal scope 过滤。
 - Agent 管理页面只调用 memory server service；组件不直接访问 D1、R2 或 Vectorize。
@@ -61,6 +64,8 @@ user action -> REST route -> domain service -> redirect / partial navigation
 
 ## 改动历史
 
+- 2026-07-25：MCP token 卡片增加安装视图，可切换提示词/JSON、选择 Codex、
+  Claude Code 或其他 AI，并一键复制当前内容。
 - 2026-07-24：移除对 M5 的依赖；高级聚合视图退出当前 roadmap。
 - 2026-07-24：增加 Agent 记忆导航、三维筛选、项目视图、详情、版本历史和专用生命
   周期操作入口；保持通用个人工作台与 Agent 数据分区。

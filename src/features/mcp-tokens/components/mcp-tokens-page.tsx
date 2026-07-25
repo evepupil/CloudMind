@@ -8,6 +8,8 @@ import {
   StatusBadge,
 } from "@/features/ui/components";
 
+import { McpTokenInstallPanel } from "./mcp-token-install-panel";
+
 const formatDate = (value: string | null): string => {
   if (!value) {
     return "从未";
@@ -21,20 +23,6 @@ const maskTokenValue = (tokenValue: string): string => {
   }
   return `${tokenValue.slice(0, 12)}...${tokenValue.slice(-8)}`;
 };
-
-const buildConfigSnippet = (endpointUrl: string, tokenValue: string): string =>
-  JSON.stringify(
-    {
-      mcpServers: {
-        cloudmind: {
-          url: endpointUrl,
-          headers: { Authorization: `Bearer ${tokenValue}` },
-        },
-      },
-    },
-    null,
-    2
-  );
 
 const codeBlockClass =
   "block break-all rounded-md border border-line bg-ink-raised px-3 py-2 font-mono text-[13px] text-bone";
@@ -91,7 +79,7 @@ export const McpTokensPage = ({
             </div>
             <p class="text-[13.5px] leading-relaxed text-bone-soft">
               任何有效令牌都能调用 <code class="text-brass">/mcp</code>
-              。本版本只 校验令牌有效性，不区分读写权限。
+              。本版本只校验令牌有效性，不区分读写权限。
             </p>
             <p class="text-[12.5px] leading-relaxed text-status-pending">
               后台页本身尚未由应用内登录保护。若此部署公开，请把管理 UI 放在
@@ -196,14 +184,13 @@ export const McpTokensPage = ({
 
             <details class="mt-2.5 rounded-md border border-line bg-ink-raised">
               <summary class="cursor-pointer list-none px-4 py-3 text-[13.5px] font-medium text-bone">
-                查看配置片段
+                连接 AI 客户端
               </summary>
               <div class="border-t border-line px-4 py-3">
-                <pre class="m-0 overflow-x-auto font-mono text-[12px] leading-relaxed text-bone-soft">
-                  <code>
-                    {buildConfigSnippet(endpointUrl, item.tokenValue)}
-                  </code>
-                </pre>
+                <McpTokenInstallPanel
+                  endpointUrl={endpointUrl}
+                  tokenValue={item.tokenValue}
+                />
               </div>
             </details>
           </Panel>

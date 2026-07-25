@@ -88,7 +88,7 @@ can explicitly archive a complete source or conversation as a library asset.
 | Web | Observatory workspace, library, search, ask, graph, timeline, consolidation, activity, and Agent Memory management |
 | Data sovereignty | Immutable raw snapshots, checksummed full export, offline validation, and fresh-resource restore |
 | Release | SemVer, changelog gate, remote migration verification, production smoke, automatic rollback, and rehearsal |
-| Auth | Single-user login, forced first password change, session middleware, and MCP token management |
+| Auth | Single-user login, forced first password change, MCP tokens, and copyable AI installation prompts |
 
 ## Architecture
 
@@ -254,7 +254,7 @@ the previous Worker version. See the
 | `/memory/timeline` | Time-oriented memory view |
 | `/memory/consolidation` | Consolidation and maintenance view |
 | `/activity` | Processing and system activity |
-| `/mcp-tokens` | MCP token management |
+| `/mcp-tokens` | MCP token management, config JSON, and AI installation prompts |
 | `/login`, `/change-password` | Single-user authentication |
 
 ## API Surface
@@ -272,6 +272,11 @@ the previous Worker version. See the
 
 CloudMind exposes a stateless HTTP MCP server at `POST /mcp`. Requests require
 a bearer token created from `/mcp-tokens`.
+
+Each active token can produce generic config JSON or a copyable installation
+prompt for Codex, Claude Code, and other AI clients. The prompt asks the client
+to configure MCP, install the `cloudmind-memory` Skill, verify the tool catalog,
+and keep the token out of logs, repositories, and long-term memory.
 
 The current 20 tools are grouped by responsibility:
 
