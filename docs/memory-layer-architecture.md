@@ -1,6 +1,6 @@
 # CloudMind 记忆层架构设计（私有化自托管 · 对标 mem0 / Zep / Letta / Cognee）
 
-> 状态：现行设计 v2 · 2026-07-24
+> 状态：现行设计 v2 · 2026-07-25
 > 定位变更：本文档将 CloudMind 从"自称记忆层的 RAG"正式升级为**大而完备、个人私有化部署的 AI 记忆层**。
 > 注意：本设计**有意反转** `AGENTS.md` 的两条既有立场（见文末决策记录 ADR-001）。
 
@@ -80,10 +80,10 @@ CloudMind 的目标是做一个**真正的、完备的 AI 记忆层**，能力�
 ```
 ┌─ L3 工作 & 记忆面 ────────────────────────────────────────┐
 │ MCP 记忆动词(remember/recall/update/forget/restore)        │
-│ 混合+图检索管线 · context scope · sleep-time 整合/遗忘 job  │
+│ 混合+图检索管线 · context scope · sleep-time 一致性维护      │
 ├─ L2 语义记忆层(新增·可变·带时间与显著性·完整知识图谱) ─────┤
 │ entities(节点) · statements/facts(bi-temporal) · edges(关系)│
-│ provenance(→L1) · communities/insights(整合摘要)           │
+│ provenance(→L1) · communities/insights(预留，当前不生成)    │
 ├─ L1 来源层(瘦身·不可变·可导出·真相之源) ─────────────────┤
 │ assets(library|memory) · chunks(检索/取证) · R2 原始快照    │
 └────────────────────────────────────────────────────────────┘
@@ -179,7 +179,8 @@ doc 导入与 agent remember 走同一条管线，仅入口不同：
 4 Reconcile LLM 判 ADD/UPDATE/DELETE/NOOP                  （mem0；矛盾→置 expired_at 失效）
 5 Load      写 L2 + provenance 指回 L1                      （图↔向量同写，按 content_hash 幂等去重）
 ```
-关键：**第 4 步是"记忆 vs 文档库"的分水岭**。D1+Vectorize 非事务 → 第 5 步做成**幂等调和**，可被 sleep-time job 重放修复。
+关键：**第 4 步是"记忆 vs 文档库"的分水岭**。D1+Vectorize 非事务，第 5 步通过
+稳定键保持幂等，异常由 workflow 重试；定时任务只修复 D1 中的漂移边和重复陈述。
 
 ---
 
@@ -200,12 +201,16 @@ query → 并行召回:
 
 ---
 
-## 九、Sleep-time 整合 / 遗忘（Letta 空闲计算 + Cron）
+## 九、Sleep-time 一致性维护（Cron）
 
-Cloudflare **Cron Trigger + Queue/Workflows** 跑后台"睡眠期"维护：
-- **整合**：近重复 statement 合并、社区聚类 + 生成 community summary、summary-of-summaries
-- **遗忘**：低 importance × 长期未访问 → 衰减/归档（隐私感知遗忘）
-- **修复**：重放未完成调和、补 provenance、修图↔向量漂移
+Cloudflare **Cron Trigger** 当前直接运行幂等 D1 一致性维护：
+
+- 归档近重复 statement。
+- 修复失效或漂移的关系边。
+- 覆盖 personal/agent 两个 scope 及其全部项目上下文。
+
+系统不按年龄、访问频率或 importance 自动删除个人记忆。community 聚类和摘要仍是
+待验证候选；需要修改数据的高级整合能力必须先进入新 roadmap，并保留可追溯版本。
 
 ---
 
@@ -239,7 +244,7 @@ Cloudflare **Cron Trigger + Queue/Workflows** 跑后台"睡眠期"维护：
 | 词面检索 | Elasticsearch | **D1 FTS5 + trigram** |
 | 重排 | Cohere / 外部 reranker | **Workers AI `bge-reranker-base`** |
 | LLM 抽取/调和 | OpenAI | **Workers AI（`qwen3-30b`）** |
-| 后台整合 | Celery / 常驻 worker | **Cron Trigger + Queues / Workflows** |
+| 后台维护 | Celery / 常驻 worker | **Cron Trigger + 幂等 D1 修复** |
 
 > 标杆要拼 5-6 个外部服务才能跑的记忆层，CloudMind 用一个 Cloudflare 账户就能私有化全包——这就是"个人私有云记忆层"成立的工程基础。
 
@@ -247,21 +252,21 @@ Cloudflare **Cron Trigger + Queue/Workflows** 跑后台"睡眠期"维护：
 
 ## 十二、分阶段路线图（增量交付，不 big-bang 重写）
 
-> 本节保留记忆层的架构分期。项目当前状态、跨模块依赖与后续顺序统一以
-> [`docs/roadmap.md`](roadmap.md) 为准。
+> 本节保留记忆层的架构分期和实施历史。P1-P4 对应能力均已交付；项目当前状态与
+> 后续顺序统一以 [`docs/roadmap.md`](roadmap.md) 为准。
 
 | 阶段 | 主题 | 主要内容 | 产出 |
 |---|---|---|---|
 | **P1 地基** | 检索可信 | 结构/token 切块、RRF 融合、bge-reranker 重排、FTS5 中文、Vectorize 原生过滤、bge-m3 prefix、3 个 bug、最小 eval harness | 真正好用的私有 RAG/搜索 |
 | **P2 分层** | 事实/记忆分离 | L1 瘦身迁移、建 L2 表(entities/statements/edges/provenance/communities)、激活 `extract_entities` | 数据干净，骨架就位 |
-| **P3 心脏** | 真记忆 | 智能写(调和+双时间)、图检索融入读路径、显著性/衰减、sleep-time 整合/遗忘 | 名副其实的记忆层 |
+| **P3 心脏** | 真记忆 | 智能写(调和+双时间)、图检索融入读路径、显著性排序/访问强化、sleep-time 一致性修复 | 名副其实的记忆层 |
 | **P4 面** | agent-native | 三维记录模型、项目隔离、记忆动词 MCP、Agent Web | 私有记忆基础设施 |
 
 依赖：每阶段独立可发布；**P1 的 re-embed 必须先于 P2 的迁移**，避免重嵌两遍。
 
 ### P1 检索质量基线（eval 棘轮，2026-07-22 校准）
 
-`npm run eval` 离线确定性跑 25 条金标准（含 8 条 CJK、2 条过滤正确性、3 条多样性/多相关），按四个管线阶段分别度量，使各阶段贡献可归因、回归可定位。离线 embedder 是 token-hash 确定性替身，故本 eval 是排序**接线的回归门禁**，非语义质量绝对证明（语义增益靠真环境冒烟）。
+`pnpm eval` 离线确定性跑 25 条金标准（含 8 条 CJK、2 条过滤正确性、3 条多样性/多相关），按四个管线阶段分别度量，使各阶段贡献可归因、回归可定位。离线 embedder 是 token-hash 确定性替身，故本 eval 是排序**接线的回归门禁**，非语义质量绝对证明（语义增益靠真环境冒烟）。
 
 | 阶段 | Recall@10 | MRR | nDCG@10 | MAP |
 |---|---|---|---|---|
@@ -312,7 +317,7 @@ Cloudflare **Cron Trigger + Queue/Workflows** 跑后台"睡眠期"维护：
 ## 十四、待定问题（Open Questions）
 
 1. ~~**L1 迁移方式**~~ → **已定（ADR-003）**：新库重来，不写迁移脚本。
-2. ~~**下一步详设展开**~~ → **已定**：M3 与 M6 已完成，当前进入 M7 发布收尾。
+2. ~~**下一步详设展开**~~ → **已完成**：M3、M6、M7 与 v0.3.0 发布闭环已交付。
 3. ~~**记录过滤维度**~~ → **已定（ADR-004）**：record kind、scope、context 三维。
 4. ~~**AGENTS.md 是否更新**~~ → **已完成**：AGENTS.md（及镜像 CLAUDE.md）已记录方向升级并标注 superseded 旧立场。
 

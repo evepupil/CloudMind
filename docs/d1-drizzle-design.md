@@ -1,5 +1,10 @@
 # D1 + Drizzle + drizzle-zod 设计文档
 
+> 文档状态：历史 MVP 数据层设计，停止维护。本文只保留早期选型背景，表结构已明显
+> 扩展，禁止据此编写 migration 或判断当前 schema。
+>
+> 当前实现以 `src/platform/db/d1/schema/*`、`drizzle/*` 和各模块设计文档为准。
+
 ## 目标
 
 本文档定义 CloudMind 在 MVP 阶段的数据层设计方案，采用以下组合：

@@ -14,18 +14,43 @@ The intended split is:
 This keeps CloudMind aligned with its memory-layer role and avoids
 double-generation noise.
 
-## Recommended Tool Order
+## Choose The Memory Surface First
 
-Use this order by default when the user question may depend on private
-history, project context, or prior decisions:
+Choose the tool family before retrieving:
 
-1. `search_assets_for_context`
-2. `search_assets`
-3. `get_asset`
-4. `ask_library_for_context` or `ask_library` only as a shortcut
+- Use `recall` for the user's preferences, background, and personal history.
+- Use `recall_agent` for project decisions, prior progress, blockers, and
+  agent working memory.
+- Use `search_assets_for_context` or `search_assets` for library sources and
+  broad evidence discovery.
+- Use `get_asset` after retrieval identifies a source worth expanding.
+- Use `ask_library_for_context` or `ask_library` only as a shortcut.
+
+Project-aware memory calls should pass the stable project key explicitly.
+Memory and library retrieval share three composable dimensions:
+
+```text
+recordKind  = library | memory
+scopeId     = personal | agent
+contextKey  = global | project:<stable-key>
+```
+
+Filters use OR within one dimension and AND across dimensions. Omitting a
+dimension means no restriction on that dimension.
+
+## Recommended Retrieval Order
+
+Use this order after selecting the correct tool family:
+
+1. Apply the narrowest relevant `recordKinds`, `scopeIds`, and `contextKeys`.
+2. Retrieve grouped evidence.
+3. Expand one or two selected assets when full source text is needed.
+4. Broaden the query only when the narrow result is insufficient.
 
 Recommended behavior:
 
+- Prefer `recall_agent` when the current project key is known and prior work
+  may change the answer.
 - Prefer `search_assets_for_context` when you know the current work
   context, such as `coding`, `research`, `writing`, `general`, or
   `personal_review`
@@ -68,6 +93,8 @@ Interpretation guidance:
 
 ### Primary tools
 
+- `recall`
+- `recall_agent`
 - `search_assets`
 - `search_assets_for_context`
 - `get_asset`
@@ -77,9 +104,15 @@ These are the main tools for retrieval-first workflows.
 
 ### Secondary tools
 
+- `remember`
+- `remember_agent`
+- `update_memory`
+- `forget`
+- `restore_memory`
 - `list_assets`
 - `update_asset`
 - `delete_asset`
+- `restore_asset`
 - `reprocess_asset`
 - `list_asset_workflows`
 - `get_workflow_run`
@@ -111,8 +144,8 @@ Do not prefer them when:
 
 For most AI clients, the recommended loop is:
 
-1. decide whether user-specific context is likely useful
-2. call `search_assets_for_context`
+1. decide whether personal memory, agent memory, or library evidence is useful
+2. call `recall`, `recall_agent`, or a library search tool with explicit scope
 3. inspect `groupedEvidence`
 4. optionally call `get_asset` for one or two selected assets
 5. synthesize the final answer in the caller model

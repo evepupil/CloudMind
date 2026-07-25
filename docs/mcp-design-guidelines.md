@@ -154,13 +154,15 @@ CloudMind 不应在服务端替调用方 AI 猜测这些策略。
 
 ### 模式四：记忆工具按职责分组
 
-当前工具仍平铺注册，目标能力按四组组织：
+当前工具仍平铺注册，使用时按五组理解：
 
-- 个人记忆：`remember`、`recall`、`update_memory`、`forget`
+- 个人记忆：`remember`、`recall`、`update_memory`、`forget`、`restore_memory`
 - Agent 记忆：`remember_agent`、`recall_agent`
-- 知识库：`save_asset`、`list_assets`、`search_assets`、`get_asset`、
-  `ask_library` 和资产管理工具
-- 运维：`list_asset_workflows`、`get_workflow_run`，后续通过独立配置暴露
+- 资料库：`save_asset`、`list_assets`、`search_assets`、
+  `search_assets_for_context`、`get_asset`、`ask_library`、
+  `ask_library_for_context`
+- 资产管理：`update_asset`、`delete_asset`、`restore_asset`、`reprocess_asset`
+- 运维：`list_asset_workflows`、`get_workflow_run`
 
 记忆和检索统一使用三个正交维度：
 

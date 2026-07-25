@@ -42,7 +42,7 @@ export default {
       await consumeWorkflowQueueMessage(body as JobQueueMessage, env);
     });
   },
-  // Cron 触发的 sleep-time 维护（知识图谱一致性修复，后续叠加遗忘/整合/社区）。
+  // Cron 触发知识图谱一致性维护：失效漂移边并归档重复活跃 statements。
   scheduled: async (
     controller: ScheduledController,
     env: AppEnv["Bindings"]

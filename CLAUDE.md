@@ -11,7 +11,8 @@ CloudMind 是一个 **开源、个人可控、serverless-first 的 AI 时代个�
 - 默认优先支持 Cloudflare 原生设施
 - 架构上保留未来迁移到 `PostgreSQL + pgvector` 的能力
 
-当前阶段目标是：**优先做出可用的快速原型（MVP）**，而不是一开始追求最完美的长期架构。
+当前基线是已发布的 **v0.3.0 个人私有化 AI 记忆层**。现行 roadmap 已全部完成；
+后续功能必须由真实使用反馈进入新里程碑，继续保持小步交付和数据主权边界。
 
 ---
 
@@ -24,8 +25,8 @@ CloudMind 的目标从"自称记忆层的 RAG"正式升级为 **大而完备、�
 采用三层架构：
 
 - **L1 来源层**（瘦身后的 assets + chunks + R2 原始快照）：不可变、可导出的"真相之源"。
-- **L2 语义记忆层**：**完整知识图谱**（entities + 带 bi-temporal 有效期的 statements + 关系 edges + 指回 L1 的 provenance + community 摘要）。
-- **L3 记忆面**：MCP 记忆动词（remember/recall/update/forget/restore）+ 混合·图检索 + sleep-time 整合/遗忘。
+- **L2 语义记忆层**：**完整知识图谱**（entities + 带 bi-temporal 有效期的 statements + 关系 edges + 指回 L1 的 provenance + 可选 community 摘要）。
+- **L3 记忆面**：MCP 记忆动词（remember/recall/update/forget/restore）+ 混合·图检索 + 定时一致性修复。
 
 **已锁定决策（ADR）：**
 
@@ -42,12 +43,12 @@ CloudMind 的目标从"自称记忆层的 RAG"正式升级为 **大而完备、�
 
 ## 当前产品定义
 
-CloudMind 可以理解为一个“全自动知识库”：
+CloudMind 可以理解为一个“个人私有 AI 记忆层”：
 
 1. 把网页、文件、笔记、AI 对话中的重要内容收进来
 2. 自动清洗、总结、分类、向量化
 3. 存成可搜索、可追问、可复用的知识资产
-4. 通过 Web UI 和 MCP 提供访问能力
+4. 通过 Web UI 和 MCP 提供访问、更新、遗忘、恢复和按项目召回能力
 
 当前优先面向：
 
@@ -423,32 +424,21 @@ MVP 队列任务可拆成以下步骤：
 
 ---
 
-## 版本目标
+## 当前版本
 
-### v0.1
+### v0.3.0（个人私有化记忆层 · 已发布）
 
-- URL / 文本 / PDF 采集
-- 异步处理
-- 摘要 + 标签 + embedding
-- 搜索与资产详情
-
-### v0.2
-
-- AI 问答
-- MCP 接入
-- 浏览器插件
-- 重处理与导出
-
-### v0.3（个人私有化记忆层 · 方向确立）
-
-本版起，项目转向「个人私有化 AI 记忆层」，详见 [`docs/memory-layer-architecture.md`](docs/memory-layer-architecture.md)。落地分四阶段：
+本版已完成「个人私有化 AI 记忆层」闭环，详见
+[`docs/roadmap.md`](docs/roadmap.md) 和
+[`docs/memory-layer-architecture.md`](docs/memory-layer-architecture.md)：
 
 - **P1 地基**：检索可信（结构/token 切块、RRF 融合、bge-reranker 重排、D1 FTS5/BM25+trigram 中文、Vectorize 原生过滤、bge-m3 query prefix、最小 eval harness）+ 3 个检索 bug
 - **P2 分层**：L1 瘦身 + 建 L2 知识图谱表（entities/statements/edges/provenance/communities）+ 激活 extract_entities
-- **P3 心脏**：智能写（ADD/UPDATE/DELETE/NOOP 调和 + bi-temporal）+ 图检索融入 + 显著性/衰减 + sleep-time 整合/遗忘
+- **P3 心脏**：智能写（ADD/UPDATE/DELETE/NOOP 调和 + bi-temporal）+ 图检索融入 + 显著性排序/访问强化 + sleep-time 一致性修复
 - **P4 面**：三维记录模型 + 项目隔离 + 记忆动词 MCP + Agent Web 管理
 
-> 历史 v0.3 设想（更好分类 / 多 provider / pgvector 迁移准备）并入后续版本评估。
+同时交付不可变原始快照、完整导出恢复、生产 migration 核验、冒烟和回滚演练。
+早期 v0.1/v0.2 目标已经并入现行能力，不再作为单独进度来源。
 
 ---
 
@@ -472,7 +462,8 @@ MVP 队列任务可拆成以下步骤：
 
 ## 当前一句话目标
 
-先做出一个 **能保存网页/PDF/文本，能自动总结、能语义搜索、能聊天追问、能被 MCP 调用** 的开源个人知识库原型。
+维护一个 **数据由用户掌控、可完整导出、支持个人与 Agent 项目记忆、能被不同 AI
+通过 MCP 组合调用** 的开源私有记忆层。
 
 ---
 

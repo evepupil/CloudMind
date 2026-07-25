@@ -2,8 +2,7 @@
   <br>
   <h1 align="center">CloudMind</h1>
   <p align="center">
-    Open-source, Cloudflare-native personal AI memory for searchable,
-    answerable, user-owned knowledge.
+    Open-source, user-owned AI memory on your own Cloudflare account.
   </p>
   <p align="center">
     <a href="https://www.typescriptlang.org/">
@@ -15,14 +14,11 @@
     <a href="https://developers.cloudflare.com/">
       <img src="https://img.shields.io/badge/Cloudflare-native-f38020?logo=cloudflare" alt="Cloudflare Native">
     </a>
-    <a href="https://orm.drizzle.team/">
-      <img src="https://img.shields.io/badge/Drizzle-ORM-c5f74f" alt="Drizzle ORM">
+    <a href="https://github.com/evepupil/CloudMind/releases/tag/v0.3.0">
+      <img src="https://img.shields.io/badge/release-v0.3.0-2563eb" alt="v0.3.0">
     </a>
     <a href="https://vitest.dev/">
       <img src="https://img.shields.io/badge/Vitest-tested-6e9f18?logo=vitest" alt="Vitest">
-    </a>
-    <a href="https://biomejs.dev/">
-      <img src="https://img.shields.io/badge/Biome-lint%20%2B%20format-60a5fa" alt="Biome">
     </a>
   </p>
   <p align="center">
@@ -30,414 +26,359 @@
     <a href="./README.zh-CN.md">简体中文</a>
   </p>
   <p align="center">
-    <a href="#features">Features</a> .
-    <a href="#why-cloudmind">Why CloudMind</a> .
-    <a href="#architecture">Architecture</a> .
-    <a href="#quick-start">Quick Start</a> .
-    <a href="#deployment">Deployment</a> .
-    <a href="#mcp-server">MCP Server</a>
+    <a href="#capabilities">Capabilities</a> ·
+    <a href="#architecture">Architecture</a> ·
+    <a href="#quick-start">Quick Start</a> ·
+    <a href="#deployment">Deployment</a> ·
+    <a href="#mcp-server">MCP Server</a> ·
+    <a href="#data-sovereignty">Data Sovereignty</a>
   </p>
-</p>
-
-<p align="center">
-  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/evepupil/CloudMind">
-    <img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare">
-  </a>
 </p>
 
 ---
 
 ## Overview
 
-CloudMind is a BYOC (Bring Your Own Cloud) knowledge system for the AI era.
-It helps you save URLs, notes, PDFs, browser captures, and AI-originated
-content into your own Cloudflare account, then turns them into structured
-assets that can be searched, cited, reprocessed, and used by AI clients.
+CloudMind is a BYOC (Bring Your Own Cloud) personal AI memory layer. It runs
+inside the user's Cloudflare account and keeps raw sources, structured memory,
+search indexes, and exports under the user's control.
 
-The current project is a single HonoX full-stack application with a Web UI,
-REST API, queue-driven processing workflows, and a stateless remote MCP server.
-It uses Cloudflare D1, R2, Vectorize, Queues, and Workers AI by default while
-keeping the core domain behind replaceable ports.
+It can ingest URLs, notes, and PDFs; extract and reconcile knowledge; retrieve
+evidence through lexical, semantic, and graph channels; and expose selective
+personal or agent working memory to AI clients through MCP.
 
-## Features
+The current release is **v0.3.0**. Its roadmap milestones are complete and
+covered by local gates, GitHub Actions, production smoke checks, and a Worker
+rollback rehearsal.
 
-| Category | Highlights |
+## Memory Model
+
+CloudMind uses three layers:
+
+| Layer | Responsibility |
 | --- | --- |
-| Ingest | Save text notes, URLs, and PDF files through Web UI, REST APIs, and MCP tools |
-| Processing | Workflow-based normalization, summarization, chunking, embedding, indexing, and finalization |
-| Search | Hybrid retrieval with Vectorize semantic recall, D1 metadata filters, grouped evidence, and summary fallback |
-| Chat | Library-grounded Q&A with source-aware responses |
-| Asset Management | Asset list, detail pages, edit actions, soft delete, restore, reprocess, workflow history |
-| MCP | Stateless HTTP MCP endpoint with retrieval-first tools for AI clients |
-| Auth | Single-user login, password change, session middleware, MCP token management |
-| Infrastructure | Cloudflare D1, R2, Vectorize, Queues, Workers AI, and optional Jina Reader integration |
-| Tooling | Strict TypeScript, Zod validation, Drizzle ORM, Biome, Vitest |
-| Deployment | Cloudflare deploy button, one-command resource bootstrap, and standard Wrangler deployment |
+| L1 Source | Immutable assets, chunks, and R2 snapshots; the exportable source of truth |
+| L2 Semantic Memory | D1 knowledge graph with entities, bi-temporal statements, edges, provenance, and optional communities |
+| L3 Memory Surface | Web management and MCP verbs for remember, recall, update, forget, and restore |
 
-## Why CloudMind
+Every record also carries three composable dimensions:
 
-| | CloudMind | Hosted knowledge SaaS |
-| --- | --- | --- |
-| Data ownership | Runs in your own Cloudflare account | Data lives with the vendor |
-| Raw assets | Preserved for export and reprocessing | Export shape depends on platform support |
-| AI memory | Exposed through Web UI, REST, and MCP | Often tied to one product surface |
-| Infrastructure | Serverless-first, low-ops Cloudflare stack | Opaque hosted infrastructure |
-| Migration path | Ports for repositories, blobs, vectors, queues, and AI providers | Migration depends on vendor APIs |
-| Retrieval model | Semantic chunks, metadata terms, grouped evidence, source-aware Q&A | Usually hidden behind product UX |
-| Extensibility | Feature-first TypeScript codebase | Extension points vary by product |
+```text
+recordKind = library | memory
+scopeId    = personal | agent
+contextKey = global | project:<stable-key>
+```
+
+These dimensions keep record shape, memory owner, and project context
+independent. Filters use OR within one dimension and AND across dimensions.
+
+CloudMind does not automatically archive complete external conversations.
+AI clients write selected, high-density memory through `remember_agent`; users
+can explicitly archive a complete source or conversation as a library asset.
+
+## Capabilities
+
+| Area | Current capability |
+| --- | --- |
+| Ingest | Save text, URLs, and PDFs through Web, REST, or MCP |
+| Processing | Queue-driven normalization, summarization, chunking, embedding, entity extraction, and reconciliation |
+| Retrieval | Dense Vectorize recall, D1 FTS5/BM25, graph recall, RRF fusion, Workers AI reranking, and MMR |
+| Memory | Personal and agent memory, global/project context, date filters, version history, and provenance |
+| Lifecycle | Dedicated update, soft forget, restore, confirmed hard delete, and cross-storage cleanup |
+| Web | Observatory workspace, library, search, ask, graph, timeline, consolidation, activity, and Agent Memory management |
+| Data sovereignty | Immutable raw snapshots, checksummed full export, offline validation, and fresh-resource restore |
+| Release | SemVer, changelog gate, remote migration verification, production smoke, automatic rollback, and rehearsal |
+| Auth | Single-user login, forced first password change, session middleware, and MCP token management |
 
 ## Architecture
 
 ```mermaid
-graph TD
-    Browser["Web UI"] --> HonoX["HonoX + Hono App"]
-    API["REST API"] --> HonoX
-    MCP["AI Clients / MCP"] --> HonoX
-    HonoX --> Auth["Auth + MCP Tokens"]
-    HonoX --> Assets["Asset Services"]
-    HonoX --> Search["Search + Chat Services"]
-    Assets --> Workflows["Workflow Runtime"]
-    Workflows --> Queue["Cloudflare Queues"]
-    Workflows --> AI["Workers AI"]
-    Workflows --> Blob["R2 BlobStore"]
-    Workflows --> Vector["Vectorize VectorStore"]
-    Assets --> DB[("D1 + Drizzle")]
-    Search --> DB
-    Search --> Vector
-    Queue --> Workflows
+flowchart TD
+    Sources["Web / REST / MCP"] --> App["HonoX + Hono Worker"]
+    App --> Auth["Single-user auth + MCP tokens"]
+    App --> L1["L1 assets + chunks"]
+    L1 --> R2["R2 immutable snapshots"]
+    L1 --> Queue["Cloudflare Queues"]
+    Queue --> AI["Workers AI processing"]
+    AI --> L2["L2 graph in D1"]
+    AI --> AssetVectors["Asset Vectorize index"]
+    L2 --> GraphVectors["Graph Vectorize index"]
+    L2 --> Retrieval["Dense + FTS5 + graph retrieval"]
+    AssetVectors --> Retrieval
+    GraphVectors --> Retrieval
+    Retrieval --> L3["L3 Web + MCP memory surface"]
 ```
 
-CloudMind keeps product logic separated from infrastructure details:
-
-| Port | Default implementation |
-| --- | --- |
-| `AssetRepository` | Cloudflare D1 + Drizzle ORM |
-| `WorkflowRepository` | Cloudflare D1 + Drizzle ORM |
-| `BlobStore` | Cloudflare R2 |
-| `VectorStore` | Cloudflare Vectorize |
-| `JobQueue` | Cloudflare Queues |
-| `AIProvider` | Cloudflare Workers AI |
-
-This shape supports the current Cloudflare-native MVP and leaves room for
-future PostgreSQL + pgvector, S3-compatible storage, and multi-provider AI.
+The application is one HonoX full-stack project. Domain behavior stays behind
+repository, blob, vector, queue, and AI provider ports so D1, R2, Vectorize,
+Queues, and Workers AI can be replaced later.
 
 ## Processing Model
 
-Assets move through type-specific workflows:
+Assets enter type-specific workflows:
 
 - `note_ingest_v1`
 - `url_ingest_v1`
 - `pdf_ingest_v1`
 
-Typical workflow:
+A typical run saves the immutable source, normalizes content, creates chunks,
+embeds and indexes evidence, extracts graph candidates, reconciles current and
+historical statements, and then marks the asset ready. A retry reuses the first
+archived source instead of overwriting it.
 
-1. Create asset metadata.
-2. Persist raw input.
-3. Create a workflow run.
-4. Normalize and persist clean content.
-5. Generate summary and metadata terms.
-6. Split content into chunks.
-7. Create embeddings.
-8. Write vectors and chunk metadata.
-9. Finalize asset status.
+## Requirements
 
-Queue consumption is wired in [`app/server.ts`](./app/server.ts), and workflow
-dispatch is registered in
-[`src/features/workflows/server/registry.ts`](./src/features/workflows/server/registry.ts).
+- Node.js `>=24.18.0 <25`
+- pnpm `10.21.0` through Corepack
+- A Cloudflare account and Wrangler login for cloud deployment
 
 ## Quick Start
 
 ```bash
 git clone https://github.com/evepupil/CloudMind.git
 cd CloudMind
-npm install
-npm run dev
+corepack enable
+pnpm install
+cp .dev.vars.example .dev.vars
 ```
 
-The Vite development server starts at:
-
-```text
-http://localhost:5173
-```
-
-For a Cloudflare Worker-like local runtime, use:
+Replace `JWT_SECRET` in `.dev.vars` with a long random value, then initialize
+the local D1 database and start Vite:
 
 ```bash
-npm run worker:dev
+pnpm exec wrangler d1 migrations apply DB --local
+pnpm dev
 ```
 
-### Environment And Bindings
+The default development URL is `http://localhost:5173`.
 
-CloudMind reads Cloudflare bindings from [`wrangler.jsonc`](./wrangler.jsonc).
-The application expects:
+To run through Wrangler's Worker runtime:
+
+```bash
+pnpm build
+pnpm worker:dev
+```
+
+## Environment And Bindings
 
 | Binding / Var | Purpose |
 | --- | --- |
-| `DB` | D1 database for assets, chunks, facets, jobs, auth, MCP tokens, and workflows |
-| `ASSET_FILES` | R2 bucket for raw and processed asset content |
+| `DB` | D1 metadata, auth, workflows, memory versions, graph, and audit data |
+| `ASSET_FILES` | R2 raw and processed source objects |
 | `ASSET_VECTORS` | Vectorize index for asset chunks |
-| `WORKFLOW_QUEUE` | Queue for async workflow execution |
-| `AI` | Workers AI binding for summaries, classification, embeddings, and chat |
-| `JWT_SECRET` | Session signing secret |
-| `JINA_API_KEY` | Optional key for Jina Reader URL extraction |
+| `GRAPH_VECTORS` | Vectorize index for entity and graph recall |
+| `WORKFLOW_QUEUE` | Queue for asynchronous ingest workflows |
+| `AI` | Workers AI for generation, embedding, extraction, and reranking |
+| `JWT_SECRET` | Required session-signing secret |
+| `JINA_API_KEY` | Optional Jina Reader key for URL extraction |
 
-Binding types live in [`src/env.ts`](./src/env.ts).
+Wrangler-generated binding types live in `worker-configuration.d.ts`; optional
+application variables are added in [`src/env.ts`](./src/env.ts).
 
 ## Deployment
 
-### Option A: Cloudflare Deploy Button
+### Fresh Cloudflare Account
 
-Use the deploy button at the top of this README, or open:
+The bootstrap script creates account-specific D1, R2, two Vectorize indexes,
+metadata indexes, Queue resources, and bindings before the first Worker deploy:
+
+```bash
+pnpm install
+pnpm exec wrangler login
+pnpm deploy:one-click -- --prefix my-cloudmind
+pnpm exec wrangler secret put JWT_SECRET
+```
+
+The first deployment skips production smoke because a public URL may not exist
+yet. After assigning a `workers.dev` or custom-domain URL, run:
+
+```bash
+SMOKE_BASE_URL=https://your-cloudmind.example.com pnpm release:smoke
+```
+
+Sign in with the one-time default credentials `admin / admin`; CloudMind forces
+an immediate password change.
+
+The generic Cloudflare Deploy Button is intentionally not the fresh-account
+path. CloudMind requires account-specific storage resources, metadata indexes,
+and a required secret, all of which are created explicitly by the bootstrap
+script.
+
+### Existing Deployment
+
+`pnpm deploy` builds the application and then runs the verified release chain:
 
 ```text
-https://deploy.workers.cloudflare.com/?url=https://github.com/evepupil/CloudMind
+remote D1 migrations
+  -> exact migration verification
+  -> Worker deploy
+  -> production health, login, and MCP-auth smoke
+  -> automatic Worker rollback when post-deploy smoke fails
 ```
 
-Cloudflare guides repository connection, resource provisioning, and deployment.
-
-### Option B: One-Command Bootstrap
-
-For a fresh Cloudflare account:
+Bash:
 
 ```bash
-npm install
-npm run deploy:one-click -- --prefix my-cloudmind
+SMOKE_BASE_URL=https://cloudmind.example.com pnpm deploy
 ```
 
-The script will:
+PowerShell:
 
-- create D1, R2, Vectorize, and Queue resources
-- update `wrangler.jsonc` bindings
-- apply D1 migrations from `drizzle/`
-- run the standard deployment pipeline
-
-Bootstrap resources without deploying:
-
-```bash
-npm run deploy:bootstrap -- --prefix my-cloudmind
+```powershell
+$env:SMOKE_BASE_URL='https://cloudmind.example.com'
+try {
+  pnpm deploy
+} finally {
+  Remove-Item Env:SMOKE_BASE_URL -ErrorAction SilentlyContinue
+}
 ```
 
-### Option C: Standard Wrangler Deploy
-
-```bash
-npm run build
-npm run db:migrate:remote
-npm run deploy
-```
+D1 migrations only move forward. Schema changes must remain compatible with
+the previous Worker version. See the
+[`Release and Rollback Runbook`](./docs/runbooks/发布与回滚.md).
 
 ## Web Routes
 
 | Route | Purpose |
 | --- | --- |
-| `/` | Home |
-| `/login` | Sign in |
-| `/change-password` | Change password |
-| `/capture` | Save text, URL, or PDF assets |
-| `/assets` | Asset list and management actions |
-| `/assets/:id` | Asset detail, metadata, jobs, and content |
-| `/assets/:id/workflows` | Workflow run history for one asset |
-| `/search` | Semantic search UI |
-| `/ask` | Library-grounded Q&A |
+| `/` | Observatory overview |
+| `/capture` | Save text, URL, or PDF sources |
+| `/assets` | Library list and management |
+| `/assets/:id` | Asset detail, provenance, content, and workflow state |
+| `/assets/:id/workflows` | Workflow history for one asset |
+| `/search` | Hybrid retrieval UI |
+| `/ask` | Source-aware library Q&A |
+| `/memory/agent` | Agent memory filters, projects, and lifecycle management |
+| `/memory/agent/:id` | Agent memory detail and version history |
+| `/memory/graph` | Knowledge graph view |
+| `/memory/timeline` | Time-oriented memory view |
+| `/memory/consolidation` | Consolidation and maintenance view |
+| `/activity` | Processing and system activity |
 | `/mcp-tokens` | MCP token management |
+| `/login`, `/change-password` | Single-user authentication |
 
 ## API Surface
 
-### Ingest
-
-- `POST /api/ingest/text`
-- `POST /api/ingest/url`
-- `POST /api/ingest/file`
-- `POST /api/assets/:id/process`
-- `POST /api/assets/backfill/chunks`
-
-### Assets
-
-- `GET /api/assets`
-- `GET /api/assets/:id`
-- `PATCH /api/assets/:id`
-- `DELETE /api/assets/:id`
-- `POST /api/assets/:id/restore`
-- `GET /api/assets/:id/jobs`
-- `GET /api/assets/:id/workflows`
-
-### Workflows, Search, Chat, Health
-
-- `GET /api/workflows/:id`
-- `POST /api/search`
-- `POST /api/chat`
-- `GET /api/health`
+| Area | Endpoints |
+| --- | --- |
+| Ingest | `POST /api/ingest/text`, `/url`, `/file`; `POST /api/assets/:id/process` |
+| Assets | `GET /api/assets`, `GET/PATCH/DELETE /api/assets/:id`, restore, jobs, and workflows |
+| Retrieval | `POST /api/search`, `POST /api/chat` |
+| Memory Web | `GET /api/memory/graph`, `/timeline`, `/consolidation`, `/manage`, `/manage/:id` |
+| Health | `GET /api/health` |
+| MCP | Authenticated `POST /mcp`; `GET` and `DELETE` return `405` |
 
 ## MCP Server
 
-CloudMind exposes a stateless HTTP MCP server at:
+CloudMind exposes a stateless HTTP MCP server at `POST /mcp`. Requests require
+a bearer token created from `/mcp-tokens`.
 
-```text
-POST /mcp
-```
+The current 20 tools are grouped by responsibility:
 
-Requests require a bearer token created from the `/mcp-tokens` page.
-`GET /mcp` and `DELETE /mcp` return `405 Method not allowed`.
-
-Available MCP tools:
-
-| Tool | Purpose |
+| Group | Tools |
 | --- | --- |
-| `save_asset` | Save a text note or URL and trigger processing |
-| `list_assets` | List assets with filters and pagination |
-| `search_assets` | Run evidence-rich semantic retrieval |
-| `search_assets_for_context` | Run retrieval with context-aware profiles |
-| `get_asset` | Fetch one asset detail by ID |
-| `update_asset` | Update title, summary, or source URL |
-| `delete_asset` | Soft delete one asset |
-| `restore_asset` | Restore a soft-deleted asset |
-| `reprocess_asset` | Trigger asset reprocessing |
-| `list_asset_workflows` | List workflow runs for one asset |
-| `get_workflow_run` | Fetch workflow run detail with steps and artifacts |
-| `ask_library` | Generate a quick grounded answer from the library |
-| `ask_library_for_context` | Generate a context-profiled grounded answer |
+| Personal memory | `remember`, `recall`, `update_memory`, `forget`, `restore_memory` |
+| Agent memory | `remember_agent`, `recall_agent` |
+| Library | `save_asset`, `list_assets`, `search_assets`, `search_assets_for_context`, `get_asset`, `ask_library`, `ask_library_for_context` |
+| Asset management | `update_asset`, `delete_asset`, `restore_asset`, `reprocess_asset` |
+| Operations | `list_asset_workflows`, `get_workflow_run` |
+
+Use `recall` for personal preferences and history. Use `recall_agent` with an
+explicit stable project `contextKey` for prior decisions, progress, blockers,
+and agent working memory. Use library search for broad source material.
 
 Tool registration lives in
-[`src/features/mcp/server/service.ts`](./src/features/mcp/server/service.ts),
-and routing lives in
-[`src/features/mcp/server/routes.ts`](./src/features/mcp/server/routes.ts).
+[`src/features/mcp/server/service.ts`](./src/features/mcp/server/service.ts).
+The client workflow is documented in
+[`skills/cloudmind-memory/SKILL.md`](./skills/cloudmind-memory/SKILL.md).
 
-## Example Requests
+## Data Sovereignty
 
-Create a text asset:
-
-```bash
-curl -X POST http://localhost:5173/api/ingest/text \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Cloudflare Queues notes",
-    "content": "Queues drive async workflow execution in CloudMind."
-  }'
-```
-
-Run semantic search:
+CloudMind exports D1 business tables, referenced R2 objects, and both vector
+indexes into a versioned package with a checksummed manifest:
 
 ```bash
-curl -X POST http://localhost:5173/api/search \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "queue-driven ingestion",
-    "page": 1,
-    "pageSize": 10
-  }'
+pnpm data:export -- --output <package-directory> --remote
+pnpm data:validate -- --package <package-directory>
+pnpm data:restore -- --package <package-directory> --remote \
+  --database <fresh-d1> --bucket <fresh-r2> \
+  --asset-index <fresh-asset-index> --graph-index <fresh-graph-index> \
+  --confirm-empty-target
 ```
 
-Ask the memory layer:
-
-```bash
-curl -X POST http://localhost:5173/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "question": "How does CloudMind process ingested content?",
-    "topK": 5
-  }'
-```
+Restore only accepts explicitly named isolated resources and verifies tables,
+FTS, foreign keys, objects, and vectors. Read the
+[`Data Export and Restore Runbook`](./docs/runbooks/数据导出与恢复.md) before use.
 
 ## Project Structure
 
 ```text
-app/
-  routes/                         HonoX pages
-  server.ts                       app entry and queue consumer
-src/
-  core/                           domain ports and contracts
-  env.ts                          Cloudflare binding types
-  features/
-    assets/                       asset queries, editing, soft delete, restore
-    auth/                         login, password, session middleware
-    capture/                      ingest UI
-    chat/                         grounded Q&A
-    health/                       health endpoint
-    ingest/                       ingest services, PDF extraction, AI enrichment
-    layout/                       app shell components
-    mcp/                          remote MCP server
-    mcp-tokens/                   MCP token management
-    search/                       retrieval, evidence, term search
-    workflows/                    workflow runtime and definitions
-  platform/
-    ai/                           Workers AI adapter
-    blob/                         R2 adapter
-    db/                           D1 schema and repositories
-    observability/                structured logger
-    queue/                        Cloudflare Queue adapter
-    vector/                       Vectorize adapter
-    web/                          URL extraction adapters
-drizzle/                          D1 migrations
-docs/                             design notes and product direction
-tests/unit/                       Vitest unit tests
+app/routes/                         HonoX pages
+app/server.ts                       HTTP, Queue, and scheduled entrypoint
+src/core/                           domain ports and contracts
+src/features/assets/                library and asset lifecycle
+src/features/ingest/                text, URL, and PDF ingest
+src/features/search/                hybrid and graph retrieval
+src/features/memory/                graph, memory lifecycle, and Agent Web
+src/features/sovereignty/           hard-delete and data-sovereignty services
+src/features/mcp/                   remote MCP server
+src/features/workflows/             workflow, Queue, and scheduled consumers
+src/platform/                       D1, R2, Vectorize, AI, Queue adapters
+drizzle/                            D1 migrations
+scripts/ops/                        export, restore, and acceptance operations
+scripts/release/                    version, migration, smoke, deploy, rollback
+tests/                              unit, eval, and Workers integration tests
+docs/模块设计/                       current module documentation
 ```
 
 ## Scripts
 
-```bash
-npm run dev                 # Vite development server
-npm run build               # Tailwind CSS build + Vite production build
-npm run preview             # Preview production build
-npm run worker:dev          # Wrangler local development
-npm run worker:deploy       # Alias for deploy
-npm run deploy              # Build, migrate remote D1, deploy Worker
-npm run deploy:bootstrap    # Create Cloudflare resources and apply migrations
-npm run deploy:one-click    # Bootstrap resources and deploy
-npm run db:generate         # Generate Drizzle migrations
-npm run db:migrate:remote   # Apply D1 migrations remotely
-npm run typecheck           # TypeScript strict check
-npm run lint                # Biome check
-npm run format              # Biome format
-npm run test                # Vitest unit tests
-```
+| Command | Purpose |
+| --- | --- |
+| `pnpm dev` | Vite development server |
+| `pnpm build` | Production CSS and Worker build |
+| `pnpm worker:dev` | Wrangler local Worker runtime |
+| `pnpm gate` | Full config, version, type, lint, test, eval, build, binding, and Workers gate |
+| `pnpm eval` | Deterministic 25-query retrieval regression suite |
+| `pnpm deploy:one-click` | Create fresh Cloudflare resources and first deploy |
+| `pnpm deploy` | Build and run the verified production release chain |
+| `pnpm release:smoke` | Production health, login, and MCP-auth smoke |
+| `pnpm release:rollback:rehearse` | Roll back to the previous stable Worker and restore current |
+| `pnpm data:export` | Create a versioned full data package |
+| `pnpm data:validate` | Validate a package offline |
+| `pnpm data:restore` | Restore into explicitly named isolated resources |
 
-## Testing
+## Verification
 
-The repository includes unit coverage for:
-
-- ingest services, routes, content processing, and PDF extraction
-- asset services and routes
-- search services, routes, evidence, and term expansion
-- chat services and routes
-- MCP routes and tool-facing behavior
-- workflow services and components
-- D1 repositories
-- Workers AI provider
-- observability logger
-
-Recommended verification before a pull request:
+Run the same gate used by GitHub Actions:
 
 ```bash
-npm run typecheck
-npm run lint
-npm run test
+pnpm gate
+git diff --check
 ```
 
-## Design Principles
+The gate covers strict TypeScript, Biome, unit tests, retrieval eval, production
+build, generated binding drift, and Miniflare D1/Queue integration tests.
 
-- Keep raw assets durable; derived AI output can be recomputed.
-- Keep business logic behind ports instead of scattering D1, R2, Vectorize, or
-  Workers AI details across features.
-- Prefer queue-driven workflows for expensive processing.
-- Validate external input with Zod at API and tool boundaries.
-- Treat AI output as retryable, replaceable, and source-aware.
-- Let retrieval degrade gracefully when some derived artifacts are missing.
-- Keep feature code under `src/features/<feature>` and infrastructure adapters
-  under `src/platform`.
+## Documentation
 
-## Roadmap
+- Product north star: [`docs/vision.md`](./docs/vision.md)
+- Current roadmap: [`docs/roadmap.md`](./docs/roadmap.md)
+- Memory architecture: [`docs/memory-layer-architecture.md`](./docs/memory-layer-architecture.md)
+- Current modules: [`docs/模块设计/`](./docs/模块设计/)
+- Release runbook: [`docs/runbooks/发布与回滚.md`](./docs/runbooks/发布与回滚.md)
+- Export and restore: [`docs/runbooks/数据导出与恢复.md`](./docs/runbooks/数据导出与恢复.md)
 
-The authoritative roadmap, current milestone status, dependencies, and exit
-criteria live in [`docs/roadmap.md`](./docs/roadmap.md). Historical memory,
-frontend, and code-quality plans are preserved under `docs/roadmap-archive/`.
+Historical roadmaps are kept under `docs/roadmap-archive/` and do not describe
+current project status.
 
 ## Contributing
 
-- Put new product modules under `src/features/<name>`.
-- Keep infrastructure-specific code under `src/platform`.
-- Use strict TypeScript and avoid `any`.
-- Add focused tests when behavior crosses service, repository, API, or MCP
-  boundaries.
-- Run `npm run typecheck`, `npm run lint`, and `npm run test` before opening a
-  pull request.
+- Keep product logic under `src/features` and infrastructure under
+  `src/platform`.
+- Preserve strict TypeScript and avoid `any`.
+- Add focused tests for service, repository, API, MCP, and state transitions.
+- Update the corresponding module document with implementation changes.
+- Run `pnpm gate` before committing.
 
-For deeper product and architecture constraints, see [`AGENTS.md`](./AGENTS.md).
+Project-specific engineering rules live in [`AGENTS.md`](./AGENTS.md).
