@@ -263,6 +263,80 @@ class SummaryOnlySearchRepository implements AssetSearchRepository {
   }
 }
 
+class SummaryOnlyFallbackSearchRepository implements AssetSearchRepository {
+  public async searchAssets(): Promise<AssetListResult> {
+    return {
+      items: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      },
+    };
+  }
+
+  public async getChunkMatchesByVectorIds(): Promise<AssetChunkMatch[]> {
+    return [
+      {
+        id: "engineering-noise-chunk",
+        chunkIndex: 0,
+        textPreview: "Unrelated engineering runbook",
+        contentText:
+          "A generic runbook about queue retries and deployment checks.",
+        vectorId: "engineering-noise:0",
+        asset: {
+          id: "asset-engineering-noise",
+          type: "note",
+          title: "Engineering Runbook",
+          summary: "Generic queue and deployment guidance.",
+          sourceUrl: null,
+          sourceKind: "manual",
+          status: "ready",
+          domain: "engineering",
+          aiVisibility: "allow",
+          retrievalPriority: 10,
+          recordKind: "memory" as const,
+          scopeId: "agent",
+          contextKey: "project:github:evepupil/CloudMind",
+          collectionKey: "engineering:runbooks",
+          capturedAt: "2026-07-25T00:00:00.000Z",
+          createdAt: "2026-07-25T00:00:00.000Z",
+          updatedAt: "2026-07-25T00:00:00.000Z",
+        },
+      },
+    ];
+  }
+
+  public async searchAssetSummaries(): Promise<AssetSummaryMatch[]> {
+    return [
+      {
+        asset: {
+          id: "asset-personal-acceptance",
+          type: "note",
+          title: "CloudMind 插件验收",
+          summary:
+            "CloudMind 插件验收目标是验证项目记忆隔离、更新、遗忘和恢复。",
+          sourceUrl: null,
+          sourceKind: "mcp",
+          status: "ready",
+          domain: "personal",
+          aiVisibility: "summary_only",
+          retrievalPriority: 5,
+          recordKind: "memory" as const,
+          scopeId: "agent",
+          contextKey: "project:github:evepupil/CloudMind",
+          collectionKey: "inbox:mcp",
+          capturedAt: "2026-07-25T00:00:00.000Z",
+          createdAt: "2026-07-25T00:00:00.000Z",
+          updatedAt: "2026-07-25T00:00:00.000Z",
+        },
+        summary: "CloudMind 插件验收目标是验证项目记忆隔离、更新、遗忘和恢复。",
+      },
+    ];
+  }
+}
+
 class InMemoryVectorStore implements VectorStore {
   public lastSearchInput: VectorSearchInput | undefined;
 
@@ -759,7 +833,7 @@ describe("chat service", () => {
       purpose: "query",
     });
     expect(vectorStore.lastSearchInput?.filter).toEqual({
-      aiVisibility: { $in: ["allow"] },
+      aiVisibility: { $eq: "allow" },
       recordKind: { $in: ["library"] },
       scopeId: { $in: ["personal", "agent"] },
       contextKey: { $in: ["global"] },
@@ -819,7 +893,7 @@ describe("chat service", () => {
             id: "asset-1",
           }),
           assetScore: expect.any(Number),
-          topScore: 0.97,
+          topScore: 1,
           matchedLayers: ["chunk"],
           groupSummary: expect.objectContaining({
             headline: expect.any(String),
@@ -1543,6 +1617,69 @@ describe("chat service", () => {
       topics: [],
     });
     expect(result.resultScope).toBe("fallback_expanded");
+  });
+
+  it("askLibraryForContext answers from summary-only fallback evidence", async () => {
+    const repository = new SummaryOnlyFallbackSearchRepository();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        id: "engineering-noise:0",
+        score: 0.99,
+      },
+    ]);
+    const aiProvider: AIProvider = {
+      createEmbeddings: vi.fn(async () => ({
+        embeddings: [[0.11, 0.22, 0.33]],
+      })),
+      generateText: vi.fn(async () => ({
+        text: "验收目标包括验证项目记忆隔离、更新、遗忘和恢复 [S1]。",
+      })),
+    };
+    const service = createChatService({
+      getAssetRepository: getAssetRepositoryMock.mockResolvedValue(repository),
+      getVectorStore: getVectorStoreMock.mockResolvedValue(vectorStore),
+      getAiProvider: getAiProviderMock.mockResolvedValue(aiProvider),
+    });
+
+    const result = await service.askLibraryForContext(
+      { APP_NAME: "cloudmind-test" },
+      {
+        question: "CloudMind 插件验收目标是什么？",
+        topK: 2,
+        recordKinds: ["memory"],
+        scopeIds: ["agent"],
+        contextKeys: ["project:github:evepupil/CloudMind"],
+      },
+      {
+        profile: "coding",
+        preferredDomains: ["engineering", "research"],
+        boostedDomains: ["engineering", "research"],
+        suppressedDomains: ["personal", "finance", "health"],
+        includeSummaryOnly: true,
+        overfetchMultiplier: 3,
+        allowFallback: true,
+      }
+    );
+
+    expect(result.answer).toContain("项目记忆隔离");
+    expect(result.resultScope).toBe("fallback_expanded");
+    expect(result.sources[0]).toEqual({
+      sourceType: "summary",
+      assetId: "asset-personal-acceptance",
+      title: "CloudMind 插件验收",
+      sourceUrl: null,
+      snippet: "CloudMind 插件验收目标是验证项目记忆隔离、更新、遗忘和恢复。",
+    });
+    expect(aiProvider.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining("Source Type: summary"),
+      })
+    );
+    expect(aiProvider.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.not.stringContaining("原始私密正文"),
+      })
+    );
   });
 
   it("askLibraryForContext refuses to answer when the remaining context is too weak", async () => {
