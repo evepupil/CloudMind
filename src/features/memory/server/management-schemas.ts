@@ -30,7 +30,14 @@ const toOptionalArray = (value: unknown): unknown => {
     return undefined;
   }
 
-  return Array.isArray(value) ? value : [value];
+  if (Array.isArray(value)) {
+    const filtered = value.filter(
+      (item) => typeof item !== "string" || item.trim().length > 0
+    );
+    return filtered.length > 0 ? filtered : undefined;
+  }
+
+  return [value];
 };
 
 export const memoryManagementQuerySchema = z.object({
