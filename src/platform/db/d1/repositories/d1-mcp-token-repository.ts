@@ -36,6 +36,7 @@ export class D1McpTokenRepository implements McpTokenRepository {
     const records = await this.db
       .select()
       .from(mcpTokens)
+      .where(isNull(mcpTokens.revokedAt))
       .orderBy(desc(mcpTokens.createdAt));
 
     return records.map(mapMcpTokenRecord);

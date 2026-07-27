@@ -135,31 +135,21 @@ export const McpTokensPage = ({
                   <h2 class="font-display text-[17px] font-semibold text-bone">
                     {item.name}
                   </h2>
-                  <StatusBadge
-                    status={item.revokedAt ? "failed" : "ready"}
-                    label={item.revokedAt ? "已吊销" : "活跃"}
-                  />
+                  <StatusBadge status="ready" label="活跃" />
                 </div>
                 <p class="mt-2 font-mono text-[12px] text-bone-faint">
                   创建 {formatDate(item.createdAt)} · 最近使用{" "}
                   {formatDate(item.lastUsedAt)}
                 </p>
-                {item.revokedAt ? (
-                  <p class="mt-1 font-mono text-[12px] text-status-failed">
-                    吊销于 {formatDate(item.revokedAt)}
-                  </p>
-                ) : null}
               </div>
-              {!item.revokedAt ? (
-                <form
-                  action={`/mcp-tokens/actions/${item.id}/revoke`}
-                  method="post"
-                >
-                  <button type="submit" class={buttonClass("danger", "sm")}>
-                    吊销令牌
-                  </button>
-                </form>
-              ) : null}
+              <form
+                action={`/mcp-tokens/actions/${item.id}/revoke`}
+                method="post"
+              >
+                <button type="submit" class={buttonClass("danger", "sm")}>
+                  吊销令牌
+                </button>
+              </form>
             </div>
 
             <div class="mt-4 rounded-md border border-line bg-ink-raised px-4 py-3">
