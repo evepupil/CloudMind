@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="CloudMind 是运行在你自己 Cloudflare 账号中的开源个人 AI 记忆层。"
+    />
+    <title>CloudMind | 你的私有 AI 记忆层</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./main.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <header class="site-header">
+      <div class="page-shell nav-shell">
+        <a class="brand" href="#top" aria-label="CloudMind 首页">
+          <span class="brand-mark" aria-hidden="true">C</span>
+          <span>CloudMind</span>
+        </a>
+        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav">
+          <span class="sr-only">打开导航</span>
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+        </button>
+        <nav class="site-nav" id="site-nav" aria-label="主导航">
+          <a href="#why">为什么 CloudMind</a>
+          <a href="#memory-model">记忆模型</a>
+          <a href="#sovereignty">数据主权</a>
+          <a href="https://github.com/evepupil/CloudMind#部署" target="_blank" rel="noreferrer">文档</a>
+        </nav>
+        <a class="button button-primary nav-cta" href="https://github.com/evepupil/CloudMind#部署" target="_blank" rel="noreferrer">部署到你的 Cloudflare <span aria-hidden="true">↗</span></a>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <section class="hero" id="top">
+        <div class="page-shell hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow">PERSONAL AI MEMORY LAYER</p>
+            <h1>让 AI 记住，<em>但记忆永远属于你。</em></h1>
+            <p class="hero-lede">CloudMind 是部署在你自己的 Cloudflare 账号中的个人 AI 记忆层。它保留原始资料，提炼可追溯的知识，并让不同的 AI 客户端按你的规则调用。</p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="https://github.com/evepupil/CloudMind#部署" target="_blank" rel="noreferrer">开始自托管 <span aria-hidden="true">↗</span></a>
+              <a class="button button-secondary" href="https://github.com/evepupil/CloudMind" target="_blank" rel="noreferrer">查看 GitHub <span aria-hidden="true">↗</span></a>
+            </div>
+            <ul class="proof-list" aria-label="CloudMind 核心特性">
+              <li><span aria-hidden="true">✓</span>开源 BYOC</li>
+              <li><span aria-hidden="true">✓</span>个人与 Agent 隔离</li>
+              <li><span aria-hidden="true">✓</span>可完整导出</li>
+            </ul>
+          </div>
+          <div class="product-stage">
+            <div class="product-stage-topline">
+              <span>OBSERVATORY / LIVE WORKSPACE</span>
+              <span class="status-dot">系统就绪</span>
+            </div>
+            <img src="./public/observatory-overview.png" alt="CloudMind Observatory 工作台，显示记忆图谱、最近采集与速记面板。" />
+            <div class="product-stage-caption">
+              <span>你的私有记忆面</span>
+              <code>provenance: verified</code>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="signal-strip" aria-label="产品能力概览">
+        <div class="page-shell signal-grid">
+          <div><span>L1</span><strong>不可变原始来源</strong></div>
+          <div><span>L2</span><strong>可追溯知识图谱</strong></div>
+          <div><span>L3</span><strong>Web 与 MCP 记忆面</strong></div>
+          <div><span>BYOC</span><strong>资源全在你的账户</strong></div>
+        </div>
+      </section>
+
+      <section class="section page-shell" id="why">
+        <div class="section-heading">
+          <p class="eyebrow">BUILT FOR MEMORY THAT LASTS</p>
+          <h2>长期记忆需要数据主权，也需要可验证的依据。</h2>
+          <p>CloudMind 让每一次召回能够回到来源、时间与版本，避免重要知识只留在不可解释的模型上下文里。</p>
+        </div>
+        <div class="principle-grid">
+          <article class="principle-card">
+            <span class="card-index">01</span>
+            <h3>先留下真相</h3>
+            <p>URL、文本、PDF 与 MCP 输入先保存为不可变原始快照；摘要、索引和图谱都可以重建。</p>
+          </article>
+          <article class="principle-card">
+            <span class="card-index">02</span>
+            <h3>再形成可用记忆</h3>
+            <p>全文、向量和知识图谱协同检索；结论保留来源、版本与有效时间。</p>
+          </article>
+          <article class="principle-card">
+            <span class="card-index">03</span>
+            <h3>最后由你授权</h3>
+            <p>个人记忆与 Agent 记忆分域，项目上下文隔离。你决定谁能读取、更新、遗忘或导出。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="memory-section" id="memory-model">
+        <div class="page-shell memory-layout">
+          <div class="section-heading memory-intro">
+            <p class="eyebrow">A MEMORY SYSTEM, NOT A BLACK BOX</p>
+            <h2>一条信息，从收进来，到被可信地想起来。</h2>
+            <p>切换视角查看个人记忆与 Agent 记忆如何经过同一套可追溯架构。</p>
+            <div class="mode-switch" role="group" aria-label="记忆场景">
+              <button class="mode-button" type="button" data-mode="personal" aria-pressed="true">个人记忆</button>
+              <button class="mode-button" type="button" data-mode="agent" aria-pressed="false">Agent 记忆</button>
+            </div>
+          </div>
+          <div class="memory-flow" aria-live="polite">
+            <article>
+              <span class="flow-layer">01 / L1 来源层</span>
+              <h3 data-flow-title="source">收集</h3>
+              <p data-flow-copy="source">把网页、文件与笔记安全地收进自己的 R2 原始快照。</p>
+            </article>
+            <span class="flow-connector" aria-hidden="true">→</span>
+            <article>
+              <span class="flow-layer">02 / L2 语义层</span>
+              <h3 data-flow-title="semantic">调和</h3>
+              <p data-flow-copy="semantic">提取实体、关系与带有效期的陈述，始终保留来源。</p>
+            </article>
+            <span class="flow-connector" aria-hidden="true">→</span>
+            <article>
+              <span class="flow-layer">03 / L3 记忆面</span>
+              <h3 data-flow-title="memory">调用</h3>
+              <p data-flow-copy="memory">通过 MCP 与 Web，让被授权的 AI 带证据地召回和更新。</p>
+            </article>
+          </div>
+          <div class="boundary-note" id="sovereignty">
+            <span>不可绕过的边界</span>
+            <p id="boundary-copy">原始资料、结构化记忆、索引和导出都在你的 Cloudflare 账户中。CloudMind 可以删除、恢复、校验和迁移，但从不把所有权带走。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section page-shell integration-section">
+        <div class="section-heading">
+          <p class="eyebrow">ONE MEMORY, MANY AI CLIENTS</p>
+          <h2>把同一份可信记忆带给你选择的 AI。</h2>
+          <p>通过标准 MCP 连接，AI 客户端在明确范围内写入、召回、更新、遗忘和恢复记忆。</p>
+        </div>
+        <div class="integration-row" aria-label="可连接的 AI 客户端示例">
+          <span>ChatGPT</span>
+          <span>Claude Code</span>
+          <span>Codex</span>
+          <span>Cursor</span>
+          <span>OpenCode</span>
+          <span>Any MCP client</span>
+        </div>
+      </section>
+
+      <section class="closing-section">
+        <div class="page-shell closing-grid">
+          <div>
+            <p class="eyebrow">OWN YOUR MEMORY</p>
+            <h2>给每个 AI 一份能被验证、能带走的长期记忆。</h2>
+            <p>从自己的资料开始。部署只使用你自己的 Cloudflare 资源，之后也能完整导出与恢复。</p>
+          </div>
+          <div class="closing-actions">
+            <a class="button button-primary" href="https://github.com/evepupil/CloudMind#部署" target="_blank" rel="noreferrer">查看部署指南 <span aria-hidden="true">↗</span></a>
+            <a class="button button-secondary" href="https://github.com/evepupil/CloudMind" target="_blank" rel="noreferrer">在 GitHub 查看 <span aria-hidden="true">↗</span></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="page-shell footer-shell">
+        <span>CloudMind · Open-source personal AI memory layer</span>
+        <div>
+          <a href="https://github.com/evepupil/CloudMind" target="_blank" rel="noreferrer">GitHub</a>
+          <a href="https://github.com/evepupil/CloudMind/blob/main/docs/memory-layer-architecture.md" target="_blank" rel="noreferrer">架构</a>
+          <a href="https://github.com/evepupil/CloudMind#数据主权" target="_blank" rel="noreferrer">数据主权</a>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
