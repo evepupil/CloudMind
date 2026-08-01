@@ -18,13 +18,14 @@ export interface GraphView {
 // 取记忆图谱视图（实体 + 活跃边 + 计数）。
 export const getGraphView = async (
   bindings: AppBindings | undefined,
-  limit = 80
+  limit = 80,
+  contextKey?: string
 ): Promise<GraphView> => {
   const repository = getMemoryRepositoryFromBindings(bindings);
   const [entities, edges, counts] = await Promise.all([
-    repository.listEntities({ scopeId: PERSONAL_SCOPE, limit }),
-    repository.listActiveEdges(PERSONAL_SCOPE),
-    repository.countGraph(PERSONAL_SCOPE),
+    repository.listEntities({ scopeId: PERSONAL_SCOPE, contextKey, limit }),
+    repository.listActiveEdges(PERSONAL_SCOPE, contextKey),
+    repository.countGraph(PERSONAL_SCOPE, contextKey),
   ]);
 
   return { entities, edges, counts };
@@ -39,17 +40,23 @@ export interface TimelineView {
 
 export const getTimelineView = async (
   bindings: AppBindings | undefined,
-  limit = 100
+  limit = 100,
+  contextKey?: string
 ): Promise<TimelineView> => {
   const repository = getMemoryRepositoryFromBindings(bindings);
   const [statements, entities, counts] = await Promise.all([
     repository.listStatements({
       scopeId: PERSONAL_SCOPE,
+      contextKey,
       includeExpired: true,
       limit,
     }),
-    repository.listEntities({ scopeId: PERSONAL_SCOPE, limit: 500 }),
-    repository.countGraph(PERSONAL_SCOPE),
+    repository.listEntities({
+      scopeId: PERSONAL_SCOPE,
+      contextKey,
+      limit: 500,
+    }),
+    repository.countGraph(PERSONAL_SCOPE, contextKey),
   ]);
 
   const entityNames: Record<string, string> = {};
@@ -69,14 +76,19 @@ export interface ConsolidationView {
 }
 
 export const getConsolidationView = async (
-  bindings: AppBindings | undefined
+  bindings: AppBindings | undefined,
+  contextKey?: string
 ): Promise<ConsolidationView> => {
   const repository = getMemoryRepositoryFromBindings(bindings);
   const [drifted, duplicates, counts, entities] = await Promise.all([
-    repository.findDriftedEdges(PERSONAL_SCOPE),
-    repository.findDuplicateActiveStatements(PERSONAL_SCOPE),
-    repository.countGraph(PERSONAL_SCOPE),
-    repository.listEntities({ scopeId: PERSONAL_SCOPE, limit: 500 }),
+    repository.findDriftedEdges(PERSONAL_SCOPE, contextKey),
+    repository.findDuplicateActiveStatements(PERSONAL_SCOPE, contextKey),
+    repository.countGraph(PERSONAL_SCOPE, contextKey),
+    repository.listEntities({
+      scopeId: PERSONAL_SCOPE,
+      contextKey,
+      limit: 500,
+    }),
   ]);
 
   const entityNames: Record<string, string> = {};
@@ -102,8 +114,9 @@ export const getConsolidationView = async (
 
 // 仅取计数（供 Overview 计量条）。
 export const getMemoryCounts = async (
-  bindings: AppBindings | undefined
+  bindings: AppBindings | undefined,
+  contextKey?: string
 ): Promise<MemoryGraphCounts> => {
   const repository = getMemoryRepositoryFromBindings(bindings);
-  return repository.countGraph(PERSONAL_SCOPE);
+  return repository.countGraph(PERSONAL_SCOPE, contextKey);
 };

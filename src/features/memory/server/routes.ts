@@ -9,6 +9,7 @@ import {
   updateMemory,
 } from "@/features/memory/server/lifecycle-service";
 import {
+  memoryBrowseQuerySchema,
   memoryManagementQuerySchema,
   memoryManagementTargetSchema,
   memoryManagementUpdateSchema,
@@ -26,17 +27,69 @@ import {
 // 记忆层只读 API：供前端记忆层区（图谱/时间线/整合）渲染。只读、默认 personal scope。
 export const registerMemoryRoutes = (app: Hono<AppEnv>): void => {
   app.get("/api/memory/graph", async (context) => {
-    const view = await getGraphView(context.env);
+    const parsed = memoryBrowseQuerySchema.safeParse(context.req.queries());
+
+    if (!parsed.success) {
+      return context.json(
+        {
+          error: {
+            code: "INVALID_INPUT",
+            message: "Invalid memory browse filters.",
+            details: parsed.error.flatten(),
+          },
+        },
+        400
+      );
+    }
+
+    const view = await getGraphView(context.env, 80, parsed.data.contextKey);
     return context.json(view);
   });
 
   app.get("/api/memory/timeline", async (context) => {
-    const view = await getTimelineView(context.env);
+    const parsed = memoryBrowseQuerySchema.safeParse(context.req.queries());
+
+    if (!parsed.success) {
+      return context.json(
+        {
+          error: {
+            code: "INVALID_INPUT",
+            message: "Invalid memory browse filters.",
+            details: parsed.error.flatten(),
+          },
+        },
+        400
+      );
+    }
+
+    const view = await getTimelineView(
+      context.env,
+      100,
+      parsed.data.contextKey
+    );
     return context.json(view);
   });
 
   app.get("/api/memory/consolidation", async (context) => {
-    const view = await getConsolidationView(context.env);
+    const parsed = memoryBrowseQuerySchema.safeParse(context.req.queries());
+
+    if (!parsed.success) {
+      return context.json(
+        {
+          error: {
+            code: "INVALID_INPUT",
+            message: "Invalid memory browse filters.",
+            details: parsed.error.flatten(),
+          },
+        },
+        400
+      );
+    }
+
+    const view = await getConsolidationView(
+      context.env,
+      parsed.data.contextKey
+    );
     return context.json(view);
   });
 

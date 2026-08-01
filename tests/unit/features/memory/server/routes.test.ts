@@ -5,6 +5,7 @@ import type { AppEnv } from "@/env";
 import * as lifecycleService from "@/features/memory/server/lifecycle-service";
 import type { MemoryManagementListView } from "@/features/memory/server/management-service";
 import * as managementService from "@/features/memory/server/management-service";
+import * as browseService from "@/features/memory/server/memory-browse-service";
 import { registerMemoryRoutes } from "@/features/memory/server/routes";
 
 vi.mock("@/features/memory/server/memory-browse-service", () => ({
@@ -69,6 +70,38 @@ describe("memory management routes", () => {
       scopeIds: ["personal", "agent"],
       contextKeys: [contextKey],
     });
+  });
+
+  it("passes the optional context filter to the graph browse view", async () => {
+    vi.mocked(browseService.getGraphView).mockResolvedValue({
+      entities: [],
+      edges: [],
+      counts: { entities: 0, statements: 0, edges: 0 },
+    });
+
+    const response = await createApp().request(
+      `/api/memory/graph?contextKey=${encodeURIComponent(contextKey)}`,
+      undefined,
+      env
+    );
+
+    expect(response.status).toBe(200);
+    expect(browseService.getGraphView).toHaveBeenCalledWith(
+      env,
+      80,
+      contextKey
+    );
+  });
+
+  it("rejects an invalid context filter before querying a browse view", async () => {
+    const response = await createApp().request(
+      "/api/memory/timeline?contextKey=other-scope",
+      undefined,
+      env
+    );
+
+    expect(response.status).toBe(400);
+    expect(browseService.getTimelineView).not.toHaveBeenCalled();
   });
 
   it("creates a new version through the dedicated lifecycle service", async () => {

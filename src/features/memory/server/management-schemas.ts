@@ -71,6 +71,13 @@ export const memoryManagementQuerySchema = z.object({
   ),
 });
 
+export const memoryBrowseQuerySchema = z.object({
+  contextKey: z.preprocess(
+    (value) => emptyStringToUndefined(firstValue(value)),
+    contextKeySchema.optional()
+  ),
+});
+
 export const memoryManagementTargetSchema = z.object({
   scopeId: memoryScopeSchema,
   contextKey: contextKeySchema,
