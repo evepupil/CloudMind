@@ -61,6 +61,7 @@ export const createPdfIngestWorkflowDefinition = (): WorkflowDefinition => ({
             extractedLength: extractedText.text.length,
           },
           state: {
+            rawR2Key,
             extractedContent: extractedText.text,
             totalPages: extractedText.totalPages,
           },
@@ -86,7 +87,8 @@ export const createPdfIngestWorkflowDefinition = (): WorkflowDefinition => ({
         }),
       },
       finalize: {
-        getRawR2Key: () => null, // rawR2Key is set from load_source context.asset.rawR2Key, not state
+        getRawR2Key: (state) =>
+          typeof state.rawR2Key === "string" ? state.rawR2Key : null,
       },
     }),
   ],

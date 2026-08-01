@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
 
 import { WorkflowRunNotFoundError } from "@/core/workflows/errors";
 import type {
@@ -21,6 +21,7 @@ import {
 } from "@/platform/db/d1/schema";
 
 const MAX_WORKFLOW_STEP_INSERT_BATCH_SIZE = 7;
+const WORKFLOW_STEP_STALE_AFTER_MS = 30 * 60 * 1000;
 
 const mapWorkflowStepRecord = (
   record: typeof workflowSteps.$inferSelect
@@ -272,6 +273,9 @@ export class D1WorkflowRepository implements WorkflowRepository {
 
   public async markWorkflowStepRunning(stepId: string): Promise<boolean> {
     const now = new Date().toISOString();
+    const staleBefore = new Date(
+      Date.now() - WORKFLOW_STEP_STALE_AFTER_MS
+    ).toISOString();
 
     const claimed = await this.db
       .update(workflowSteps)
@@ -286,7 +290,13 @@ export class D1WorkflowRepository implements WorkflowRepository {
       .where(
         and(
           eq(workflowSteps.id, stepId),
-          inArray(workflowSteps.status, ["pending", "failed"])
+          or(
+            inArray(workflowSteps.status, ["pending", "failed"]),
+            and(
+              eq(workflowSteps.status, "running"),
+              lt(workflowSteps.startedAt, staleBefore)
+            )
+          )
         )
       )
       .returning({ id: workflowSteps.id });

@@ -182,7 +182,14 @@ export const enqueueWorkflow = async (
   let firstStep: WorkflowStepRecord | null = null;
 
   try {
-    await services.assetRepository.markAssetProcessing(asset.id);
+    const claimedAsset = await services.assetRepository.markAssetProcessing(
+      asset.id
+    );
+
+    if (!claimedAsset) {
+      // 另一个调用者已经为同一资产创建了处理中的 workflow，避免重复 run。
+      return services.assetRepository.getAssetById(asset.id);
+    }
 
     if (latestJob) {
       await services.assetRepository.markIngestJobRunning(latestJob.id);
@@ -305,7 +312,11 @@ export const consumeWorkflowStepMessage = async (
   );
 
   if (!claimed) {
-    return;
+    // 另一条 Queue 投递可能正在执行该 step。抛错让当前消息进入 retry，
+    // 这样新鲜 running 不会被 ack；完成或超时后可再次检查并继续。
+    throw new Error(
+      `Workflow step "${step.id}" is already running; retry the queue message.`
+    );
   }
 
   const stepDefinition = getStepDefinition(definition, payload.stepKey);
@@ -314,7 +325,15 @@ export const consumeWorkflowStepMessage = async (
 
   try {
     if (run.status === "failed") {
-      await services.assetRepository.markAssetProcessing(asset.id);
+      const claimedAsset = await services.assetRepository.markAssetProcessing(
+        asset.id
+      );
+
+      if (!claimedAsset) {
+        throw new Error(
+          `Asset "${asset.id}" is already being processed by another workflow.`
+        );
+      }
 
       if (latestJob) {
         await services.assetRepository.markIngestJobRunning(latestJob.id);

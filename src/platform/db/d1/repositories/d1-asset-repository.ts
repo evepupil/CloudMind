@@ -658,8 +658,8 @@ export class D1AssetRepository implements AssetRepository {
     }
   }
 
-  public async markAssetProcessing(id: string): Promise<void> {
-    await this.db
+  public async markAssetProcessing(id: string): Promise<boolean> {
+    const claimed = await this.db
       .update(assets)
       .set({
         status: "processing",
@@ -667,7 +667,15 @@ export class D1AssetRepository implements AssetRepository {
         failedAt: null,
         updatedAt: new Date().toISOString(),
       })
-      .where(eq(assets.id, id));
+      .where(
+        and(
+          eq(assets.id, id),
+          inArray(assets.status, ["pending", "ready", "failed"])
+        )
+      )
+      .returning({ id: assets.id });
+
+    return claimed.length === 1;
   }
 
   public async completeAssetProcessing(

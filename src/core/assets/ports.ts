@@ -151,7 +151,8 @@ export interface AssetIngestRepository {
   createUrlAsset(input: CreateUrlAssetInput): Promise<AssetDetail>;
   createFileAsset(input: CreateFileAssetInput): Promise<AssetDetail>;
   attachAssetRawSnapshot(id: string, rawR2Key: string): Promise<void>;
-  markAssetProcessing(id: string): Promise<void>;
+  // 只允许 pending/ready/failed 原子切换到 processing；false 表示已有处理者占用。
+  markAssetProcessing(id: string): Promise<boolean>;
   completeAssetProcessing(
     id: string,
     input: CompleteAssetProcessingInput

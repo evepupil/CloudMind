@@ -137,7 +137,9 @@ class InMemoryAssetRepository implements AssetRepository {
     this.asset.rawR2Key = rawR2Key;
   }
 
-  public async markAssetProcessing(): Promise<void> {}
+  public async markAssetProcessing(): Promise<boolean> {
+    return true;
+  }
 
   public async completeAssetProcessing(): Promise<void> {}
 

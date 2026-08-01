@@ -482,6 +482,53 @@ describe("Workers runtime quality gate", () => {
     expect(storedStep?.attempt).toBe(1);
   });
 
+  it("atomically claims an asset so concurrent workflows share one processing slot", async () => {
+    const assetId = crypto.randomUUID();
+    await insertAsset(assetId);
+
+    const repository = new D1AssetRepository(env.DB);
+    const claims = await Promise.all([
+      repository.markAssetProcessing(assetId),
+      repository.markAssetProcessing(assetId),
+    ]);
+
+    expect(claims.filter(Boolean)).toHaveLength(1);
+    expect((await repository.getAssetById(assetId)).status).toBe("processing");
+  });
+
+  it("reclaims a workflow step left running after the worker stopped", async () => {
+    const assetId = crypto.randomUUID();
+    await insertAsset(assetId);
+
+    const repository = new D1WorkflowRepository(env.DB);
+    const run = await repository.createWorkflowRun({
+      assetId,
+      workflowType: "note_ingest_v1",
+      triggerType: "ingest",
+    });
+    const [step] = await repository.createWorkflowSteps(run.id, [
+      {
+        assetId,
+        stepKey: "clean_content",
+        stepType: "clean_content",
+      },
+    ]);
+
+    const stepId = step?.id ?? "";
+    expect(await repository.markWorkflowStepRunning(stepId)).toBe(true);
+    const staleStartedAt = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+    await env.DB.prepare(
+      "UPDATE workflow_steps SET started_at = ?, updated_at = ? WHERE id = ?"
+    )
+      .bind(staleStartedAt, staleStartedAt, stepId)
+      .run();
+
+    expect(await repository.markWorkflowStepRunning(stepId)).toBe(true);
+    const [storedStep] = await repository.listWorkflowStepsByRunId(run.id);
+    expect(storedStep?.status).toBe("running");
+    expect(storedStep?.attempt).toBe(2);
+  });
+
   it("acks successful messages and retries failed messages", async () => {
     const success: JobQueueMessage = {
       type: "workflow_step",

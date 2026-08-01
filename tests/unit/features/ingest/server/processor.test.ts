@@ -220,12 +220,14 @@ class InMemoryAssetRepository implements AssetRepository {
     this.asset.rawR2Key = rawR2Key;
   }
 
-  public async markAssetProcessing(id: string): Promise<void> {
+  public async markAssetProcessing(id: string): Promise<boolean> {
     this.assertId(id);
     this.asset.status = "processing";
     this.asset.errorMessage = null;
     this.asset.failedAt = null;
     this.asset.updatedAt = "2026-03-19T00:01:00.000Z";
+
+    return true;
   }
 
   public async completeAssetProcessing(
@@ -1104,7 +1106,7 @@ describe("processTextAsset", () => {
     expect(summaryStep?.attempt).toBe(3);
   });
 
-  it("executes a duplicated workflow message only once", async () => {
+  it("retries a duplicated workflow message while the first execution owns the step", async () => {
     const repository = new InMemoryAssetRepository(
       createAsset({
         contentText: "CloudMind should claim this workflow step atomically.",
@@ -1143,7 +1145,7 @@ describe("processTextAsset", () => {
       jobQueue,
     };
 
-    await Promise.all([
+    const results = await Promise.allSettled([
       consumeWorkflowStepMessage(
         definition,
         payload ?? { runId: "", stepKey: "" },
@@ -1155,6 +1157,17 @@ describe("processTextAsset", () => {
         services
       ),
     ]);
+
+    expect(
+      results.filter((result) => result.status === "rejected")
+    ).toHaveLength(1);
+    expect(results.find((result) => result.status === "rejected")).toEqual(
+      expect.objectContaining({
+        reason: expect.objectContaining({
+          message: expect.stringContaining("already running"),
+        }),
+      })
+    );
 
     const loadSourceStep = workflowRepository.steps.find(
       (step) => step.stepKey === "load_source"
@@ -1943,6 +1956,7 @@ describe("processPdfAsset", () => {
 
     expect(result.status).toBe("ready");
     expect(result.summary).toBe("AI summary for the CloudMind PDF.");
+    expect(result.rawR2Key).toBe("assets/asset-pdf-1/raw/cloudmind.pdf");
     expect(result.contentText).toBe("Hello CloudMind PDF");
     expect(result.contentR2Key).toBe("assets/asset-pdf-1/content/content.txt");
     expect(result.domain).toBe("research");
