@@ -93,15 +93,18 @@
       if (finalUrl.origin !== location.origin) {
         return null;
       }
-      return await response.text();
+      return {
+        html: await response.text(),
+        url: finalUrl.href,
+      };
     } catch {
       return null;
     }
   };
 
   // —— 把取回的 HTML 换进当前页：替换 #boost-root + title + 滚顶 ——
-  const swap = (html, url, push) => {
-    const doc = new DOMParser().parseFromString(html, "text/html");
+  const swap = (page, push) => {
+    const doc = new DOMParser().parseFromString(page.html, "text/html");
     const nextRoot = doc.getElementById(ROOT_ID);
     const currentRoot = document.getElementById(ROOT_ID);
     if (!nextRoot || !currentRoot) {
@@ -110,7 +113,9 @@
     currentRoot.innerHTML = nextRoot.innerHTML;
     document.title = doc.title;
     if (push) {
-      history.pushState({ boost: true }, "", url);
+      history.pushState({ boost: true }, "", page.url);
+    } else if (page.url !== location.href) {
+      history.replaceState({ boost: true }, "", page.url);
     }
     window.scrollTo({ top: 0, behavior: "auto" });
     return true;
@@ -118,8 +123,8 @@
 
   const navigate = async (url, push) => {
     startBar();
-    const html = await fetchPage(url);
-    if (html === null || !swap(html, url, push)) {
+    const page = await fetchPage(url);
+    if (page === null || !swap(page, push)) {
       location.href = url; // 回退整页导航
       return;
     }
@@ -164,8 +169,8 @@
   window.addEventListener("popstate", () => {
     (async () => {
       startBar();
-      const html = await fetchPage(location.href);
-      if (html === null || !swap(html, location.href, false)) {
+      const page = await fetchPage(location.href);
+      if (page === null || !swap(page, false)) {
         location.reload();
         return;
       }

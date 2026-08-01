@@ -1,3 +1,4 @@
+import { tokenizeMixedText } from "@/core/text/tokenize";
 import type { AssetSummaryMatch } from "@/features/assets/model/types";
 
 const clamp = (value: number, min: number, max: number): number => {
@@ -9,14 +10,7 @@ const normalizeText = (value: string | null | undefined): string => {
 };
 
 const tokenizeQuery = (query: string): string[] => {
-  return Array.from(
-    new Set(
-      normalizeText(query)
-        .split(/[\s,.;:!?()[\]{}"'/\\|+-]+/g)
-        .map((term) => term.trim())
-        .filter((term) => term.length >= 2)
-    )
-  );
+  return Array.from(new Set(tokenizeMixedText(normalizeText(query))));
 };
 
 const countMatchedTerms = (haystack: string, terms: string[]): number => {

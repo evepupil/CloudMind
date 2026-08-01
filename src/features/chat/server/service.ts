@@ -5,6 +5,7 @@ import type {
 } from "@/core/assets/ports";
 import { createLogger } from "@/core/logging/logger";
 import { normalizeRecordFilters } from "@/core/records/filters";
+import { tokenizeMixedText } from "@/core/text/tokenize";
 import type { VectorStore } from "@/core/vector/ports";
 import type { AppBindings } from "@/env";
 import type { ContextRetrievalPolicy } from "@/features/mcp/server/context-profiles";
@@ -141,7 +142,6 @@ const buildIndexingSummary = (
   };
 };
 
-const MIN_CONTEXT_TOKEN_LENGTH = 2;
 const MIN_CONTEXT_COVERAGE = 0.18;
 const MIN_CONTEXT_SCORE = 0.8;
 const MIN_CONTEXT_COUNT = 2;
@@ -178,35 +178,8 @@ const CONTEXT_STOP_WORDS = new Set([
   "your",
 ]);
 
-const tokenizeCjkSequence = (value: string): string[] => {
-  if (value.length <= 2) {
-    return [value];
-  }
-
-  const tokens: string[] = [];
-
-  for (let index = 0; index < value.length - 1; index += 1) {
-    tokens.push(value.slice(index, index + 2));
-  }
-
-  return tokens;
-};
-
 const tokenizeForCoverage = (value: string): string[] => {
-  const normalized = value.toLowerCase();
-  const latinTokens = Array.from(normalized.matchAll(/[a-z0-9_]+/g))
-    .map((match) => match[0])
-    .filter(
-      (token) =>
-        token.length >= MIN_CONTEXT_TOKEN_LENGTH &&
-        !CONTEXT_STOP_WORDS.has(token)
-    );
-  // 中文连续文本没有空格，按双字切分后才能衡量问题与摘要的真实重合度。
-  const cjkTokens = Array.from(
-    normalized.matchAll(/[\u3400-\u9fff]+/g)
-  ).flatMap((match) => tokenizeCjkSequence(match[0]));
-
-  return [...latinTokens, ...cjkTokens];
+  return tokenizeMixedText(value, { stopWords: CONTEXT_STOP_WORDS });
 };
 
 const clamp = (value: number, min: number, max: number): number => {
