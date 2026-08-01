@@ -188,94 +188,131 @@ const deleteAsset = async (id) => {
 const run = async () => {
   log(`CloudMind E2E smoke against ${BASE_URL} (tag=${TAG})`);
 
-  await login();
-  log("authenticated");
-
-  // 三篇可区分的样本：英文 D1、英文 reranker、中文向量检索。
-  const docs = [
-    {
-      key: "d1",
-      title: `${TAG} D1`,
-      content:
-        "Cloudflare D1 is a serverless SQLite database that runs at the edge. " +
-        "It is the structured metadata store used by this knowledge base.",
-      query: "serverless sqlite database at the edge",
-    },
-    {
-      key: "rerank",
-      title: `${TAG} Reranker`,
-      content:
-        "A cross-encoder reranker scores query-document relevance and reorders " +
-        "the top candidates returned by hybrid retrieval before grouping.",
-      query: "cross encoder reranker relevance reordering",
-    },
-    {
-      key: "zh",
-      title: `${TAG} 向量检索`,
-      content:
-        "向量检索通过嵌入模型把文本变成向量，使用余弦相似度做语义搜索和召回，" +
-        "支持中文和英文的多语言语义匹配。",
-      query: "向量检索 余弦相似度 语义搜索",
-    },
-  ];
-
   const ids = {};
+  const deletedIds = new Set();
+  let runError = null;
 
-  for (const doc of docs) {
-    ids[doc.key] = await ingestText(doc.title, doc.content);
-    log(`ingested ${doc.key} -> ${ids[doc.key]}`);
+  try {
+    await login();
+    log("authenticated");
+
+    // 三篇可区分的样本：英文 D1、英文 reranker、中文向量检索。
+    const docs = [
+      {
+        key: "d1",
+        title: `${TAG} D1`,
+        content:
+          "Cloudflare D1 is a serverless SQLite database that runs at the edge. " +
+          "It is the structured metadata store used by this knowledge base.",
+        query: "serverless sqlite database at the edge",
+      },
+      {
+        key: "rerank",
+        title: `${TAG} Reranker`,
+        content:
+          "A cross-encoder reranker scores query-document relevance and reorders " +
+          "the top candidates returned by hybrid retrieval before grouping.",
+        query: "cross encoder reranker relevance reordering",
+      },
+      {
+        key: "zh",
+        title: `${TAG} 向量检索`,
+        content:
+          "向量检索通过嵌入模型把文本变成向量，使用余弦相似度做语义搜索和召回，" +
+          "支持中文和英文的多语言语义匹配。",
+        query: "向量检索 余弦相似度 语义搜索",
+      },
+    ];
+
+    for (const doc of docs) {
+      ids[doc.key] = await ingestText(doc.title, doc.content);
+      log(`ingested ${doc.key} -> ${ids[doc.key]}`);
+    }
+
+    for (const doc of docs) {
+      const item = await waitReady(ids[doc.key], doc.title);
+      const chunk = item.chunks?.[0];
+      check(
+        `[T1/T3] ${doc.key}: processed to ready with chunks`,
+        Array.isArray(item.chunks) && item.chunks.length > 0,
+        `chunks=${item.chunks?.length ?? 0}`
+      );
+      check(
+        `[T3] ${doc.key}: chunk carries embedding lineage (model + hash)`,
+        Boolean(chunk?.embeddingModel) && Boolean(chunk?.contentHash),
+        chunk ? `model=${chunk.embeddingModel}` : "no chunk"
+      );
+    }
+
+    // 语义召回（含中文）：每篇用自己的 query 应能召回自己。
+    for (const doc of docs) {
+      const hits = await search(doc.query);
+      check(
+        `[T2/T4/T6] ${doc.key}: semantic search recalls the doc`,
+        hits.includes(ids[doc.key]),
+        `top=${hits.slice(0, 3).join(",")}`
+      );
+    }
+
+    // 原生 metadata 过滤（T4）：按 type=note 过滤仍应召回（样本均为 note）。
+    const filteredHits = await search(docs[0].query, { type: "note" });
+    check(
+      "[T4] native metadata filter (type=note) returns results",
+      filteredHits.includes(ids.d1),
+      `count=${filteredHits.length}`
+    );
+
+    // 删除清向量（T8a）：删掉 D1 篇后，再搜应不再召回它（无 ghost 向量）。
+    await deleteAsset(ids.d1);
+    deletedIds.add(ids.d1);
+    log(`deleted ${ids.d1}`);
+    // 给删除/向量清理一点传播时间。
+    await sleep(POLL_MS);
+    const afterDelete = await search(docs[0].query);
+    check(
+      "[T8a] deleted asset no longer surfaces in search (no ghost vectors)",
+      !afterDelete.includes(ids.d1),
+      `top=${afterDelete.slice(0, 3).join(",")}`
+    );
+
+    const failed = checks.filter((entry) => !entry.ok);
+    log(`\n${checks.length - failed.length}/${checks.length} checks passed`);
+
+    if (failed.length > 0) {
+      runError = new Error(`${failed.length} smoke checks failed.`);
+    }
+  } catch (error) {
+    runError = error;
+  } finally {
+    const cleanupErrors = [];
+
+    for (const id of Object.values(ids)) {
+      if (deletedIds.has(id)) {
+        continue;
+      }
+
+      try {
+        await deleteAsset(id);
+        log(`cleaned up ${id}`);
+      } catch (error) {
+        cleanupErrors.push({ id, error });
+        log(
+          `SMOKE CLEANUP ERROR for ${id}: ${
+            error instanceof Error ? error.message : error
+          }`
+        );
+      }
+    }
+
+    if (cleanupErrors.length > 0 && !runError) {
+      runError = new Error(
+        `${cleanupErrors.length} smoke fixture cleanup operations failed.`
+      );
+    }
   }
 
-  for (const doc of docs) {
-    const item = await waitReady(ids[doc.key], doc.title);
-    const chunk = item.chunks?.[0];
-    check(
-      `[T1/T3] ${doc.key}: processed to ready with chunks`,
-      Array.isArray(item.chunks) && item.chunks.length > 0,
-      `chunks=${item.chunks?.length ?? 0}`
-    );
-    check(
-      `[T3] ${doc.key}: chunk carries embedding lineage (model + hash)`,
-      Boolean(chunk?.embeddingModel) && Boolean(chunk?.contentHash),
-      chunk ? `model=${chunk.embeddingModel}` : "no chunk"
-    );
-  }
-
-  // 语义召回（含中文）：每篇用自己的 query 应能召回自己。
-  for (const doc of docs) {
-    const hits = await search(doc.query);
-    check(
-      `[T2/T4/T6] ${doc.key}: semantic search recalls the doc`,
-      hits.includes(ids[doc.key]),
-      `top=${hits.slice(0, 3).join(",")}`
-    );
-  }
-
-  // 原生 metadata 过滤（T4）：按 type=note 过滤仍应召回（样本均为 note）。
-  const filteredHits = await search(docs[0].query, { type: "note" });
-  check(
-    "[T4] native metadata filter (type=note) returns results",
-    filteredHits.includes(ids.d1),
-    `count=${filteredHits.length}`
-  );
-
-  // 删除清向量（T8a）：删掉 D1 篇后，再搜应不再召回它（无 ghost 向量）。
-  await deleteAsset(ids.d1);
-  log(`deleted ${ids.d1}`);
-  // 给删除/向量清理一点传播时间。
-  await sleep(POLL_MS);
-  const afterDelete = await search(docs[0].query);
-  check(
-    "[T8a] deleted asset no longer surfaces in search (no ghost vectors)",
-    !afterDelete.includes(ids.d1),
-    `top=${afterDelete.slice(0, 3).join(",")}`
-  );
-
-  const failed = checks.filter((entry) => !entry.ok);
-  log(`\n${checks.length - failed.length}/${checks.length} checks passed`);
-
-  if (failed.length > 0) {
-    process.exitCode = 1;
+  if (runError) {
+    throw runError;
   }
 };
 

@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parse, printParseErrorCode } from "jsonc-parser";
 
@@ -8,7 +9,6 @@ const NPM = process.platform === "win32" ? "npm.cmd" : "npm";
 
 const projectRoot = process.cwd();
 const wranglerConfigPath = join(projectRoot, "wrangler.jsonc");
-const wranglerBackupPath = join(projectRoot, "wrangler.backup.jsonc");
 
 const ASSET_VECTOR_METADATA_INDEXES = [
   "aiVisibility",
@@ -192,6 +192,8 @@ const ensureFinalConfig = (queueName) => {
 
 const main = () => {
   const options = parseArgs();
+  const backupDirectory = mkdtempSync(join(tmpdir(), "cloudmind-one-click-"));
+  const wranglerBackupPath = join(backupDirectory, "wrangler.backup.jsonc");
   const workerPrefix = normalizePrefix(options.prefix);
   const workerName = workerPrefix;
   const databaseName = `${workerPrefix}-db`;
@@ -200,96 +202,102 @@ const main = () => {
   const graphVectorIndexName = `${workerPrefix}-graph-entities`;
   const queueName = `${workerPrefix}-workflows`;
 
-  writeFileSync(
-    wranglerBackupPath,
-    readFileSync(wranglerConfigPath, "utf8"),
-    "utf8"
-  );
+  try {
+    writeFileSync(
+      wranglerBackupPath,
+      readFileSync(wranglerConfigPath, "utf8"),
+      "utf8"
+    );
 
-  ensureBootstrapConfig(queueName, workerName);
+    ensureBootstrapConfig(queueName, workerName);
 
-  runCommand("检查 Cloudflare 登录状态", NPX, ["wrangler", "whoami"]);
+    runCommand("检查 Cloudflare 登录状态", NPX, ["wrangler", "whoami"]);
 
-  runCommand("创建 D1 数据库并回写绑定", NPX, [
-    "wrangler",
-    "d1",
-    "create",
-    databaseName,
-    "--location",
-    options.location,
-    "--update-config",
-    "--binding",
-    "DB",
-  ]);
+    runCommand("创建 D1 数据库并回写绑定", NPX, [
+      "wrangler",
+      "d1",
+      "create",
+      databaseName,
+      "--location",
+      options.location,
+      "--update-config",
+      "--binding",
+      "DB",
+    ]);
 
-  runCommand("创建 R2 存储桶并回写绑定", NPX, [
-    "wrangler",
-    "r2",
-    "bucket",
-    "create",
-    bucketName,
-    "--location",
-    options.location,
-    "--update-config",
-    "--binding",
-    "ASSET_FILES",
-  ]);
+    runCommand("创建 R2 存储桶并回写绑定", NPX, [
+      "wrangler",
+      "r2",
+      "bucket",
+      "create",
+      bucketName,
+      "--location",
+      options.location,
+      "--update-config",
+      "--binding",
+      "ASSET_FILES",
+    ]);
 
-  runCommand("创建 Vectorize 索引并回写绑定", NPX, [
-    "wrangler",
-    "vectorize",
-    "create",
-    vectorIndexName,
-    "--dimensions",
-    `${options.vectorDim}`,
-    "--metric",
-    "cosine",
-    "--update-config",
-    "--binding",
-    "ASSET_VECTORS",
-  ]);
-  createMetadataIndexes(vectorIndexName, ASSET_VECTOR_METADATA_INDEXES);
+    runCommand("创建 Vectorize 索引并回写绑定", NPX, [
+      "wrangler",
+      "vectorize",
+      "create",
+      vectorIndexName,
+      "--dimensions",
+      `${options.vectorDim}`,
+      "--metric",
+      "cosine",
+      "--update-config",
+      "--binding",
+      "ASSET_VECTORS",
+    ]);
+    createMetadataIndexes(vectorIndexName, ASSET_VECTOR_METADATA_INDEXES);
 
-  runCommand("创建图谱 Vectorize 索引并回写绑定", NPX, [
-    "wrangler",
-    "vectorize",
-    "create",
-    graphVectorIndexName,
-    "--dimensions",
-    `${options.vectorDim}`,
-    "--metric",
-    "cosine",
-    "--update-config",
-    "--binding",
-    "GRAPH_VECTORS",
-  ]);
-  createMetadataIndexes(graphVectorIndexName, GRAPH_VECTOR_METADATA_INDEXES);
+    runCommand("创建图谱 Vectorize 索引并回写绑定", NPX, [
+      "wrangler",
+      "vectorize",
+      "create",
+      graphVectorIndexName,
+      "--dimensions",
+      `${options.vectorDim}`,
+      "--metric",
+      "cosine",
+      "--update-config",
+      "--binding",
+      "GRAPH_VECTORS",
+    ]);
+    createMetadataIndexes(graphVectorIndexName, GRAPH_VECTOR_METADATA_INDEXES);
 
-  runCommand("创建 Queue", NPX, ["wrangler", "queues", "create", queueName]);
-  runCommand("创建 Queue DLQ", NPX, [
-    "wrangler",
-    "queues",
-    "create",
-    `${queueName}-dlq`,
-  ]);
+    runCommand("创建 Queue", NPX, ["wrangler", "queues", "create", queueName]);
+    runCommand("创建 Queue DLQ", NPX, [
+      "wrangler",
+      "queues",
+      "create",
+      `${queueName}-dlq`,
+    ]);
 
-  ensureFinalConfig(queueName);
+    ensureFinalConfig(queueName);
 
-  if (options.bootstrapOnly) {
-    runCommand("应用 D1 迁移", NPM, ["run", "db:migrate:remote"]);
-    console.log("\n✅ Cloudflare 资源初始化完成。后续可执行 npm run deploy。");
-    return;
+    if (options.bootstrapOnly) {
+      runCommand("应用 D1 迁移", NPM, ["run", "db:migrate:remote"]);
+      console.log(
+        "\n✅ Cloudflare 资源初始化完成。后续可执行 npm run deploy。"
+      );
+      return;
+    }
+
+    runCommand("执行首次部署流程", NPM, ["run", "deploy:first"]);
+
+    console.log("\n✅ 一键部署完成。\n");
+    console.log(`- Worker 名称: ${workerName}`);
+    console.log(`- D1: ${databaseName}`);
+    console.log(`- R2: ${bucketName}`);
+    console.log(`- Vectorize: ${vectorIndexName}`);
+    console.log(`- Graph Vectorize: ${graphVectorIndexName}`);
+    console.log(`- Queue: ${queueName}`);
+  } finally {
+    rmSync(backupDirectory, { recursive: true, force: true });
   }
-
-  runCommand("执行首次部署流程", NPM, ["run", "deploy:first"]);
-
-  console.log("\n✅ 一键部署完成。\n");
-  console.log(`- Worker 名称: ${workerName}`);
-  console.log(`- D1: ${databaseName}`);
-  console.log(`- R2: ${bucketName}`);
-  console.log(`- Vectorize: ${vectorIndexName}`);
-  console.log(`- Graph Vectorize: ${graphVectorIndexName}`);
-  console.log(`- Queue: ${queueName}`);
 };
 
 main();
