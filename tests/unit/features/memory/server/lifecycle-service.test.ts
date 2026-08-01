@@ -83,6 +83,8 @@ describe("memory lifecycle service", () => {
     delete: vi.fn(),
   };
   const purgeRepository: MemoryPurgeRepository = {
+    prepareMemoryRestoreRollback: vi.fn(),
+    completeMemoryRestoreRollback: vi.fn(),
     prepareMemoryPurge: vi.fn(),
     completeMemoryPurge: vi.fn(),
     failMemoryPurge: vi.fn(),
@@ -107,6 +109,14 @@ describe("memory lifecycle service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listMemoryVersions.mockResolvedValue([]);
+    vi.mocked(purgeRepository.prepareMemoryRestoreRollback).mockResolvedValue({
+      assetId: target.id,
+      createdAfter: "2026-07-24T01:00:00.000Z",
+      graphVectorIds: [],
+      statementIds: [],
+      edgeIds: [],
+      entityIds: [],
+    });
   });
 
   it("creates a pending immutable successor while the current version stays active", async () => {
@@ -225,6 +235,38 @@ describe("memory lifecycle service", () => {
     );
     expect(softDeleteAsset).toHaveBeenCalledWith("memory-v1");
     expect(vectorStore.deleteByIds).toHaveBeenCalledWith(["vector-v1"]);
+  });
+
+  it("cleans graph records and graph vectors when restore reprocessing fails", async () => {
+    const deleted = createMemory({
+      deletedAt: "2026-07-24T01:00:00.000Z",
+    });
+    const active = createMemory();
+    const plan = {
+      assetId: target.id,
+      createdAfter: "2026-07-24T01:00:00.000Z",
+      graphVectorIds: ["graph-entity-v1"],
+      statementIds: ["statement-v1"],
+      edgeIds: ["edge-v1"],
+      entityIds: ["entity-v1"],
+    };
+    getAssetById.mockResolvedValueOnce(deleted).mockResolvedValueOnce(active);
+    restoreAsset.mockResolvedValue(active);
+    reprocessAsset.mockRejectedValue(new Error("graph workflow failed"));
+    vi.mocked(purgeRepository.prepareMemoryRestoreRollback).mockResolvedValue(
+      plan
+    );
+
+    await expect(service.restoreMemory(undefined, target)).rejects.toThrow(
+      "graph workflow failed"
+    );
+
+    expect(graphVectorStore.deleteByIds).toHaveBeenCalledWith(
+      plan.graphVectorIds
+    );
+    expect(purgeRepository.completeMemoryRestoreRollback).toHaveBeenCalledWith(
+      plan
+    );
   });
 
   it("hard deletes an already-forgotten version chain across every store", async () => {

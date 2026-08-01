@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type {
+  MemoryGraphRollbackPlan,
   MemoryPurgeFailureCode,
   MemoryPurgePlan,
   MemoryPurgeRepository,
@@ -61,26 +62,41 @@ export class D1MemoryPurgeRepository implements MemoryPurgeRepository {
 
   private async findExclusiveMemoryIds(
     memoryType: "statement" | "entity" | "edge",
-    assetIds: string[]
+    assetIds: string[],
+    createdAfter?: string
   ): Promise<string[]> {
     const assetPlaceholders = placeholders(assetIds.length);
+    const sourceCreatedFilter = createdAfter
+      ? "AND source.created_at >= ?"
+      : "";
+    const retainedCreatedFilter = createdAfter
+      ? "OR retained.created_at < ?"
+      : "";
     const rows = await this.queryRows(
       optionalIdSchema,
       `SELECT DISTINCT source.memory_id AS id
        FROM provenance source
        WHERE source.memory_type = ?
          AND source.asset_id IN (${assetPlaceholders})
+         ${sourceCreatedFilter}
          AND NOT EXISTS (
            SELECT 1
            FROM provenance retained
            WHERE retained.memory_type = source.memory_type
              AND retained.memory_id = source.memory_id
              AND (
-               retained.asset_id IS NULL
-               OR retained.asset_id NOT IN (${assetPlaceholders})
-             )
+             retained.asset_id IS NULL
+             OR retained.asset_id NOT IN (${assetPlaceholders})
+             ${retainedCreatedFilter}
+           )
          )`,
-      [memoryType, ...assetIds, ...assetIds]
+      [
+        memoryType,
+        ...assetIds,
+        ...(createdAfter ? [createdAfter] : []),
+        ...assetIds,
+        ...(createdAfter ? [createdAfter] : []),
+      ]
     );
 
     return uniqueStrings(rows.map((row) => row.id));
@@ -89,7 +105,11 @@ export class D1MemoryPurgeRepository implements MemoryPurgeRepository {
   private async findDeletableEntities(
     candidateIds: string[],
     statementIds: string[],
-    edgeIds: string[]
+    edgeIds: string[],
+    options?: {
+      createdAfter?: string;
+      assetId?: string;
+    }
   ): Promise<Array<{ id: string; vectorId: string | null }>> {
     if (candidateIds.length === 0) {
       return [];
@@ -103,12 +123,29 @@ export class D1MemoryPurgeRepository implements MemoryPurgeRepository {
       edgeIds.length > 0
         ? `AND edge.id NOT IN (${placeholders(edgeIds.length)})`
         : "";
+    const createdAfterFilter = options?.createdAfter
+      ? "AND entity.created_at >= ?"
+      : "";
+    const provenanceRetention =
+      options?.assetId && options.createdAfter
+        ? `AND NOT EXISTS (
+             SELECT 1 FROM provenance entity_provenance
+             WHERE entity_provenance.memory_type = 'entity'
+               AND entity_provenance.memory_id = entity.id
+               AND (
+                 entity_provenance.asset_id IS NULL
+                 OR entity_provenance.asset_id != ?
+                 OR entity_provenance.created_at < ?
+               )
+           )`
+        : "";
 
     return this.queryRows(
       entityPlanRowSchema,
       `SELECT entity.id AS id, entity.embedding_vector_id AS vectorId
        FROM entities entity
        WHERE entity.id IN (${placeholders(candidateIds.length)})
+         ${createdAfterFilter}
          AND NOT EXISTS (
            SELECT 1 FROM statements statement
            WHERE (
@@ -124,9 +161,147 @@ export class D1MemoryPurgeRepository implements MemoryPurgeRepository {
              OR edge.dst_entity_id = entity.id
            )
            ${edgeRetention}
-         )`,
-      [...candidateIds, ...statementIds, ...edgeIds]
+         )
+         ${provenanceRetention}`,
+      [
+        ...candidateIds,
+        ...(options?.createdAfter ? [options.createdAfter] : []),
+        ...statementIds,
+        ...edgeIds,
+        ...(options?.assetId && options.createdAfter
+          ? [options.assetId, options.createdAfter]
+          : []),
+      ]
     );
+  }
+
+  private async findReferencedEntityIds(
+    statementIds: string[],
+    edgeIds: string[]
+  ): Promise<string[]> {
+    const [statementRows, edgeRows] = await Promise.all([
+      statementIds.length > 0
+        ? this.queryRows(
+            optionalIdSchema,
+            `SELECT subject_entity_id AS id
+             FROM statements
+             WHERE id IN (${placeholders(statementIds.length)})
+             UNION ALL
+             SELECT object_entity_id AS id
+             FROM statements
+             WHERE id IN (${placeholders(statementIds.length)})`,
+            [...statementIds, ...statementIds]
+          )
+        : Promise.resolve([]),
+      edgeIds.length > 0
+        ? this.queryRows(
+            optionalIdSchema,
+            `SELECT src_entity_id AS id
+             FROM edges
+             WHERE id IN (${placeholders(edgeIds.length)})
+             UNION ALL
+             SELECT dst_entity_id AS id
+             FROM edges
+             WHERE id IN (${placeholders(edgeIds.length)})`,
+            [...edgeIds, ...edgeIds]
+          )
+        : Promise.resolve([]),
+    ]);
+
+    return uniqueStrings([...statementRows, ...edgeRows].map((row) => row.id));
+  }
+
+  public async prepareMemoryRestoreRollback(
+    target: MemoryPurgeTarget
+  ): Promise<MemoryGraphRollbackPlan> {
+    if (!target.createdAfter) {
+      throw new Error("Memory restore rollback requires a start timestamp.");
+    }
+
+    const createdAfter = target.createdAfter;
+    const [record] = await this.queryRows(
+      targetSchema,
+      `SELECT id, memory_root_id AS memoryRootId, record_kind AS recordKind,
+              scope_id AS scopeId, context_key AS contextKey,
+              deleted_at AS deletedAt, superseded_at AS supersededAt
+       FROM assets WHERE id = ? LIMIT 1`,
+      [target.id]
+    );
+
+    if (
+      record?.recordKind !== "memory" ||
+      record.scopeId !== target.scopeId ||
+      record.contextKey !== target.contextKey ||
+      record.deletedAt === null
+    ) {
+      throw new Error("Memory restore rollback target changed before cleanup.");
+    }
+
+    const [statementIds, edgeIds, entityCandidateIds] = await Promise.all([
+      this.findExclusiveMemoryIds("statement", [target.id], createdAfter),
+      this.findExclusiveMemoryIds("edge", [target.id], createdAfter),
+      this.findExclusiveMemoryIds("entity", [target.id], createdAfter),
+    ]);
+    const referencedEntityIds = await this.findReferencedEntityIds(
+      statementIds,
+      edgeIds
+    );
+    const deletableEntities = await this.findDeletableEntities(
+      uniqueStrings([...entityCandidateIds, ...referencedEntityIds]),
+      statementIds,
+      edgeIds,
+      { assetId: target.id, createdAfter }
+    );
+
+    return {
+      assetId: target.id,
+      createdAfter,
+      graphVectorIds: uniqueStrings(
+        deletableEntities.map((entity) => entity.vectorId)
+      ),
+      statementIds,
+      edgeIds,
+      entityIds: deletableEntities.map((entity) => entity.id),
+    };
+  }
+
+  public async completeMemoryRestoreRollback(
+    plan: MemoryGraphRollbackPlan
+  ): Promise<void> {
+    const statements: D1PreparedStatement[] = [];
+    const appendDelete = (
+      table: "edges" | "statements" | "entities",
+      ids: string[]
+    ): void => {
+      if (ids.length === 0) {
+        return;
+      }
+
+      statements.push(
+        this.database
+          .prepare(
+            `DELETE FROM "${table}" WHERE id IN (${placeholders(ids.length)})`
+          )
+          .bind(...ids)
+      );
+    };
+
+    statements.push(
+      this.database
+        .prepare(
+          `DELETE FROM provenance
+           WHERE asset_id = ? AND created_at >= ?`
+        )
+        .bind(plan.assetId, plan.createdAfter)
+    );
+
+    appendDelete("edges", plan.edgeIds);
+    appendDelete("statements", plan.statementIds);
+    appendDelete("entities", plan.entityIds);
+
+    if (statements.length > 0) {
+      await this.database.batch(statements);
+    }
   }
 
   public async prepareMemoryPurge(

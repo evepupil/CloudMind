@@ -5,6 +5,7 @@ export interface MemoryPurgeTarget {
   id: string;
   scopeId: MemoryScope;
   contextKey: ContextKey;
+  createdAfter?: string | undefined;
 }
 
 export interface MemoryPurgePlan {
@@ -18,6 +19,15 @@ export interface MemoryPurgePlan {
   entityIds: string[];
 }
 
+export interface MemoryGraphRollbackPlan {
+  assetId: string;
+  createdAfter: string;
+  graphVectorIds: string[];
+  statementIds: string[];
+  edgeIds: string[];
+  entityIds: string[];
+}
+
 export type MemoryPurgeFailureCode =
   | "BLOB_DELETE_FAILED"
   | "ASSET_VECTOR_DELETE_FAILED"
@@ -25,6 +35,10 @@ export type MemoryPurgeFailureCode =
   | "DATABASE_DELETE_FAILED";
 
 export interface MemoryPurgeRepository {
+  prepareMemoryRestoreRollback(
+    target: MemoryPurgeTarget
+  ): Promise<MemoryGraphRollbackPlan>;
+  completeMemoryRestoreRollback(plan: MemoryGraphRollbackPlan): Promise<void>;
   prepareMemoryPurge(target: MemoryPurgeTarget): Promise<MemoryPurgePlan>;
   completeMemoryPurge(plan: MemoryPurgePlan): Promise<void>;
   failMemoryPurge(

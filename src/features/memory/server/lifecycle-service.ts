@@ -109,6 +109,44 @@ const markPurgeFailed = async (
   throw error;
 };
 
+const cleanupRestoreGraph = async (
+  dependencies: MemoryLifecycleDependencies,
+  bindings: AppBindings | undefined,
+  target: MemoryTarget,
+  createdAfter: string
+): Promise<void> => {
+  try {
+    const repository = await dependencies.getMemoryPurgeRepository(bindings);
+    const plan = await repository.prepareMemoryRestoreRollback({
+      ...target,
+      createdAfter,
+    });
+
+    if (plan.graphVectorIds.length > 0) {
+      try {
+        const graphVectorStore =
+          await dependencies.getGraphVectorStore(bindings);
+        await graphVectorStore.deleteByIds(plan.graphVectorIds);
+      } catch (error) {
+        logger.warn(
+          "restore_rollback_graph_vector_cleanup_pending",
+          { assetId: target.id, vectorCount: plan.graphVectorIds.length },
+          { error }
+        );
+        return;
+      }
+    }
+
+    await repository.completeMemoryRestoreRollback(plan);
+  } catch (error) {
+    logger.warn(
+      "restore_rollback_graph_cleanup_pending",
+      { assetId: target.id },
+      { error }
+    );
+  }
+};
+
 const assertMemoryTarget = (item: AssetDetail, target: MemoryTarget): void => {
   if (item.recordKind !== MEMORY_RECORD_KIND) {
     throw new MemoryLifecycleError(
@@ -274,6 +312,7 @@ export const createMemoryLifecycleService = (
         );
       }
 
+      const restoreStartedAt = new Date().toISOString();
       await repository.restoreAsset(deleted.id);
 
       try {
@@ -304,6 +343,13 @@ export const createMemoryLifecycleService = (
             );
           }
         }
+
+        await cleanupRestoreGraph(
+          dependencies,
+          bindings,
+          target,
+          restoreStartedAt
+        );
 
         throw error;
       }

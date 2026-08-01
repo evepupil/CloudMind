@@ -53,6 +53,7 @@ export const writeGraphToMemory = async (
   const contextKey = target.contextKey ?? GLOBAL_CONTEXT_KEY;
   const recordKind = target.recordKind ?? LIBRARY_RECORD_KIND;
   const entityIdByNormalized = new Map<string, string>();
+  const provenancedEntityIds = new Set<string>();
   // 优先采用 entities 列表里声明的 type；statement 里出现的实体若未声明则 type 为空。
   const typeByNormalized = new Map<string, string | null>();
 
@@ -106,9 +107,30 @@ export const writeGraphToMemory = async (
     return entity.id;
   };
 
+  const recordEntityProvenance = async (entityId: string): Promise<void> => {
+    if (provenancedEntityIds.has(entityId)) {
+      return;
+    }
+
+    provenancedEntityIds.add(entityId);
+    await memoryRepository.addProvenance({
+      scopeId,
+      contextKey,
+      recordKind,
+      memoryType: "entity",
+      memoryId: entityId,
+      assetId: target.assetId,
+      chunkIndex: target.chunkIndex ?? null,
+    });
+  };
+
   // 先把声明过的实体都消歧落库，保证 mention_count 与 type 完整。
   for (const entity of graph.entities) {
-    await resolveEntity(entity.name);
+    const entityId = await resolveEntity(entity.name);
+
+    if (entityId) {
+      await recordEntityProvenance(entityId);
+    }
   }
 
   let statementCount = 0;
@@ -140,6 +162,8 @@ export const writeGraphToMemory = async (
     if (!subjectId) {
       continue;
     }
+
+    await recordEntityProvenance(subjectId);
 
     // 智能写调和：取同主语仍有效的陈述作候选，LLM 判 ADD/UPDATE/DELETE/NOOP。
     // 未注入 reconcile 或无候选时退回 ADD（与历史行为一致）。
@@ -187,6 +211,10 @@ export const writeGraphToMemory = async (
     const objectEntityId = statement.objectIsEntity
       ? await resolveEntity(statement.object)
       : null;
+
+    if (objectEntityId) {
+      await recordEntityProvenance(objectEntityId);
+    }
 
     const created = await memoryRepository.createStatement({
       scopeId,

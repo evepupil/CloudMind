@@ -445,8 +445,11 @@ describe("writeGraphToMemory", () => {
     });
     expect(repo.statements[0]?.objectEntityId).toBeTruthy();
     expect(repo.edges[0]).toMatchObject({ relation: "works at" });
-    // statement + edge each get a provenance row back to the asset.
-    expect(repo.provenance).toHaveLength(2);
+    // entities, statement and edge each get a provenance row back to the asset.
+    expect(repo.provenance).toHaveLength(4);
+    expect(
+      repo.provenance.filter((p) => p.memoryType === "entity")
+    ).toHaveLength(2);
     expect(repo.provenance.every((p) => p.assetId === "a1")).toBe(true);
   });
 

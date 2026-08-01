@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { D1MemoryPurgeRepository } from "@/platform/db/d1/repositories/d1-memory-purge-repository";
 
 const now = "2026-07-24T08:00:00.000Z";
+const beforeRestore = "2026-07-24T07:00:00.000Z";
 const contextKey = "project:github:evepupil/CloudMind-purge-gate";
 
 const countRows = async (table: string, id: string): Promise<number> => {
@@ -17,6 +18,123 @@ const countRows = async (table: string, id: string): Promise<number> => {
 };
 
 describe("memory hard delete repository", () => {
+  it("rolls back graph records created for a failed restore while retaining shared entities", async () => {
+    const ids = {
+      asset: crypto.randomUUID(),
+      otherAsset: crypto.randomUUID(),
+      exclusiveEntity: crypto.randomUUID(),
+      sharedEntity: crypto.randomUUID(),
+      statement: crypto.randomUUID(),
+      edge: crypto.randomUUID(),
+    };
+    const insertAsset = env.DB.prepare(
+      `INSERT INTO assets (
+         id, type, title, status, record_kind, scope_id, context_key,
+         deleted_at, created_at, updated_at
+       ) VALUES (?, 'note', 'restore rollback fixture', 'ready', 'memory',
+                 'agent', ?, ?, ?, ?)`
+    );
+    await env.DB.batch([
+      insertAsset.bind(ids.asset, contextKey, now, now, now),
+      insertAsset.bind(ids.otherAsset, contextKey, now, now, now),
+    ]);
+
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO entities (
+           id, scope_id, context_key, canonical_name, normalized_name,
+           embedding_vector_id, created_at, updated_at
+         ) VALUES (?, 'agent', ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        ids.exclusiveEntity,
+        contextKey,
+        "exclusive",
+        "exclusive",
+        `graph-${ids.exclusiveEntity}`,
+        now,
+        now
+      ),
+      env.DB.prepare(
+        `INSERT INTO entities (
+           id, scope_id, context_key, canonical_name, normalized_name,
+           embedding_vector_id, created_at, updated_at
+         ) VALUES (?, 'agent', ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        ids.sharedEntity,
+        contextKey,
+        "shared",
+        "shared",
+        `graph-${ids.sharedEntity}`,
+        beforeRestore,
+        beforeRestore
+      ),
+      env.DB.prepare(
+        `INSERT INTO statements (
+           id, scope_id, context_key, record_kind, subject_entity_id,
+           predicate, object_literal, nl_text, created_at, updated_at
+         ) VALUES (?, 'agent', ?, 'memory', ?, 'is', 'value', 'fixture', ?, ?)`
+      ).bind(ids.statement, contextKey, ids.exclusiveEntity, now, now),
+      env.DB.prepare(
+        `INSERT INTO edges (
+           id, scope_id, context_key, record_kind, src_entity_id,
+           dst_entity_id, relation, created_at, updated_at
+         ) VALUES (?, 'agent', ?, 'memory', ?, ?, 'links', ?, ?)`
+      ).bind(
+        ids.edge,
+        contextKey,
+        ids.exclusiveEntity,
+        ids.sharedEntity,
+        now,
+        now
+      ),
+    ]);
+
+    const insertProvenance = env.DB.prepare(
+      `INSERT INTO provenance (
+         id, scope_id, context_key, record_kind, memory_type,
+         memory_id, asset_id, created_at
+       ) VALUES (?, 'agent', ?, 'memory', ?, ?, ?, ?)`
+    );
+    await env.DB.batch([
+      insertProvenance.bind(
+        crypto.randomUUID(),
+        contextKey,
+        "statement",
+        ids.statement,
+        ids.asset,
+        now
+      ),
+      insertProvenance.bind(
+        crypto.randomUUID(),
+        contextKey,
+        "edge",
+        ids.edge,
+        ids.asset,
+        now
+      ),
+    ]);
+
+    const repository = new D1MemoryPurgeRepository(env.DB);
+    const plan = await repository.prepareMemoryRestoreRollback({
+      id: ids.asset,
+      scopeId: "agent",
+      contextKey,
+      createdAfter: now,
+    });
+
+    expect(plan.graphVectorIds).toEqual([`graph-${ids.exclusiveEntity}`]);
+    expect(plan.statementIds).toEqual([ids.statement]);
+    expect(plan.edgeIds).toEqual([ids.edge]);
+    expect(plan.entityIds).toEqual([ids.exclusiveEntity]);
+
+    await repository.completeMemoryRestoreRollback(plan);
+
+    expect(await countRows("statements", ids.statement)).toBe(0);
+    expect(await countRows("edges", ids.edge)).toBe(0);
+    expect(await countRows("entities", ids.exclusiveEntity)).toBe(0);
+    expect(await countRows("entities", ids.sharedEntity)).toBe(1);
+  });
+
   it("deletes one version chain while retaining shared L2 records", async () => {
     const ids = {
       v1: crypto.randomUUID(),
