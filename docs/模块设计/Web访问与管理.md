@@ -8,7 +8,7 @@
 >
 > 当前状态：已完成
 >
-> 最近更新时间：2026-07-25
+> 最近更新时间：2026-08-02
 
 ## 职责与边界
 
@@ -50,6 +50,8 @@ user action -> REST route -> domain service -> redirect / partial navigation
 - 登录、改密、MCP token 管理、配置 JSON、AI 安装提示词和移动端导航。
 - 统一按钮、输入框、状态、空状态、面板和反馈组件。
 - 资产、搜索、问答、首页和 Activity 服务端查询统一传入 personal scope 过滤。
+- 图谱、时间线和整合视图的 SSR 与只读 API 接受并校验 `contextKey`，同一 scope 下的
+  项目记忆按项目隔离展示。
 - Agent 管理页面只调用 memory server service；组件不直接访问 D1、R2 或 Vectorize。
 
 ## 验证方式
@@ -65,6 +67,7 @@ user action -> REST route -> domain service -> redirect / partial navigation
 
 ## 改动历史
 
+- 2026-08-02：补齐记忆浏览视图的 `contextKey` 传递和输入校验，修复项目记忆混合展示。
 - 2026-07-25：修复站内局部导航后安装面板无法复制的问题；提示词改为客户端无关，
   去掉 AI 客户端选择，由当前 AI 自行识别 MCP 和 Skill 安装方式。
 - 2026-07-25：MCP token 卡片增加安装视图，可切换提示词/JSON 并一键复制当前内容。
