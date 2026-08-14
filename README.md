@@ -2,7 +2,7 @@
   <br>
   <h1 align="center">CloudMind</h1>
   <p align="center">
-    Open-source, user-owned AI memory on your own Cloudflare account.
+    开源、用户自有、运行在个人 Cloudflare 账号中的 AI 记忆层。
   </p>
   <p align="center">
     <a href="https://www.typescriptlang.org/">
@@ -22,46 +22,43 @@
     </a>
   </p>
   <p align="center">
-    <a href="./README.md">English</a> |
-    <a href="./README.zh-CN.md">简体中文</a>
+    <a href="./README.md">简体中文</a> |
+    <a href="./README.en.md">English</a>
   </p>
   <p align="center">
-    <a href="#capabilities">Capabilities</a> ·
-    <a href="#architecture">Architecture</a> ·
-    <a href="#quick-start">Quick Start</a> ·
-    <a href="#deployment">Deployment</a> ·
+    <a href="#当前能力">当前能力</a> ·
+    <a href="#架构">架构</a> ·
+    <a href="#快速开始">快速开始</a> ·
+    <a href="#部署">部署</a> ·
     <a href="#mcp-server">MCP Server</a> ·
-    <a href="#data-sovereignty">Data Sovereignty</a>
+    <a href="#数据主权">数据主权</a>
   </p>
 </p>
 
 ---
 
-## Overview
+## 概览
 
-CloudMind is a BYOC (Bring Your Own Cloud) personal AI memory layer. It runs
-inside the user's Cloudflare account and keeps raw sources, structured memory,
-search indexes, and exports under the user's control.
+CloudMind 是一套 BYOC（Bring Your Own Cloud）个人 AI 记忆层。它运行在用户
+自己的 Cloudflare 账号中，原始来源、结构化记忆、搜索索引和导出数据都由用户掌控。
 
-It can ingest URLs, notes, and PDFs; extract and reconcile knowledge; retrieve
-evidence through lexical, semantic, and graph channels; and expose selective
-personal or agent working memory to AI clients through MCP.
+它可以收集 URL、笔记和 PDF，提取并调和知识，通过全文、语义和知识图谱多个渠道
+检索证据，还能通过 MCP 向 AI 客户端提供经过筛选的个人记忆和 Agent 工作记忆。
 
-The current release is **v0.3.0**. Its roadmap milestones are complete and
-covered by local gates, GitHub Actions, production smoke checks, and a Worker
-rollback rehearsal.
+当前版本为 **v0.3.0**。现行 roadmap 的全部里程碑已经完成，并通过本地门禁、
+GitHub Actions、生产 smoke 和 Worker 回滚演练。
 
-## Memory Model
+## 记忆模型
 
-CloudMind uses three layers:
+CloudMind 使用三层结构：
 
-| Layer | Responsibility |
+| 层级 | 职责 |
 | --- | --- |
-| L1 Source | Immutable assets, chunks, and R2 snapshots; the exportable source of truth |
-| L2 Semantic Memory | D1 knowledge graph with entities, bi-temporal statements, edges, provenance, and optional communities |
-| L3 Memory Surface | Web management and MCP verbs for remember, recall, update, forget, and restore |
+| L1 来源层 | 不可变资产、chunks 和 R2 原始快照，是可导出的事实来源 |
+| L2 语义记忆层 | D1 知识图谱，包含实体、双时间 statements、关系、来源和可选 communities |
+| L3 记忆面 | Web 管理和 MCP 记忆动词，支持记住、回忆、更新、遗忘和恢复 |
 
-Every record also carries three composable dimensions:
+每条记录还带有三个可以自由组合的维度：
 
 ```text
 recordKind = library | memory
@@ -69,70 +66,68 @@ scopeId    = personal | agent
 contextKey = global | project:<stable-key>
 ```
 
-These dimensions keep record shape, memory owner, and project context
-independent. Filters use OR within one dimension and AND across dimensions.
+三个维度分别表达记录形态、记忆归属和项目上下文。单个维度内使用 OR，跨维度使用
+AND，因此 Agent 可以按实际任务灵活筛选。
 
-CloudMind does not automatically archive complete external conversations.
-AI clients write selected, high-density memory through `remember_agent`; users
-can explicitly archive a complete source or conversation as a library asset.
+CloudMind 不会自动归档完整的外部会话。AI 客户端通过 `remember_agent` 写入经过
+挑选的高密度记忆；用户需要保存完整资料或对话时，可以显式归档成 library asset。
 
-## Capabilities
+## 当前能力
 
-| Area | Current capability |
+| 领域 | 已有能力 |
 | --- | --- |
-| Ingest | Save text, URLs, and PDFs through Web, REST, or MCP |
-| Processing | Queue-driven normalization, summarization, chunking, embedding, entity extraction, and reconciliation |
-| Retrieval | Dense Vectorize recall, D1 FTS5/BM25, graph recall, RRF fusion, Workers AI reranking, and MMR |
-| Memory | Personal and agent memory, global/project context, date filters, version history, and provenance |
-| Lifecycle | Dedicated update, soft forget, restore, confirmed hard delete, and cross-storage cleanup |
-| Web | Observatory workspace, library, search, ask, graph, timeline, consolidation, activity, and Agent Memory management |
-| Data sovereignty | Immutable raw snapshots, checksummed full export, offline validation, and fresh-resource restore |
-| Release | SemVer, changelog gate, remote migration verification, production smoke, automatic rollback, and rehearsal |
-| Auth | Single-user login, forced first password change, MCP tokens, and copyable AI installation prompts |
+| 采集 | 通过 Web、REST 或 MCP 保存文本、URL 和 PDF |
+| 处理 | 队列驱动的规范化、摘要、分块、embedding、实体提取和知识调和 |
+| 检索 | Vectorize 语义召回、D1 FTS5/BM25、图检索、RRF 融合、Workers AI 重排和 MMR |
+| 记忆 | 个人记忆与 Agent 记忆、全局/项目上下文、日期过滤、版本历史和来源追踪 |
+| 生命周期 | 专用更新、软遗忘、恢复、确认后永久删除，以及跨存储清理 |
+| Web | Observatory 工作台、资料库、搜索、问答、图谱、时间线、整合、活动和 Agent 记忆管理 |
+| 数据主权 | 不可变原始快照、带校验和的完整导出、离线校验和全新资源恢复 |
+| 发布 | SemVer、changelog 门禁、远端 migration 核验、生产 smoke、自动回滚和回滚演练 |
+| 认证 | 单用户登录、首次强制改密、MCP token 和可复制的 AI 安装提示词 |
 
-## Architecture
+## 架构
 
 ```mermaid
 flowchart TD
     Sources["Web / REST / MCP"] --> App["HonoX + Hono Worker"]
-    App --> Auth["Single-user auth + MCP tokens"]
+    App --> Auth["单用户认证 + MCP tokens"]
     App --> L1["L1 assets + chunks"]
-    L1 --> R2["R2 immutable snapshots"]
+    L1 --> R2["R2 不可变快照"]
     L1 --> Queue["Cloudflare Queues"]
-    Queue --> AI["Workers AI processing"]
-    AI --> L2["L2 graph in D1"]
-    AI --> AssetVectors["Asset Vectorize index"]
-    L2 --> GraphVectors["Graph Vectorize index"]
-    L2 --> Retrieval["Dense + FTS5 + graph retrieval"]
+    Queue --> AI["Workers AI 处理"]
+    AI --> L2["D1 中的 L2 图谱"]
+    AI --> AssetVectors["资产 Vectorize 索引"]
+    L2 --> GraphVectors["图谱 Vectorize 索引"]
+    L2 --> Retrieval["语义 + 全文 + 图检索"]
     AssetVectors --> Retrieval
     GraphVectors --> Retrieval
-    Retrieval --> L3["L3 Web + MCP memory surface"]
+    Retrieval --> L3["L3 Web + MCP 记忆面"]
 ```
 
-The application is one HonoX full-stack project. Domain behavior stays behind
-repository, blob, vector, queue, and AI provider ports so D1, R2, Vectorize,
-Queues, and Workers AI can be replaced later.
+项目采用单个 HonoX 全栈应用。领域逻辑通过 repository、blob、vector、queue 和
+AI provider 端口与基础设施隔离，未来可以替换 D1、R2、Vectorize、Queues 和
+Workers AI。
 
-## Processing Model
+## 处理模型
 
-Assets enter type-specific workflows:
+资产会进入按类型划分的 workflow：
 
 - `note_ingest_v1`
 - `url_ingest_v1`
 - `pdf_ingest_v1`
 
-A typical run saves the immutable source, normalizes content, creates chunks,
-embeds and indexes evidence, extracts graph candidates, reconciles current and
-historical statements, and then marks the asset ready. A retry reuses the first
-archived source instead of overwriting it.
+一次典型处理会保存不可变来源、规范化内容、生成 chunks、向量化并写入索引、提取
+图谱候选、调和当前与历史 statements，最后把资产标记为 ready。重试时会复用最早
+归档的原始来源，不会覆盖它。
 
-## Requirements
+## 环境要求
 
 - Node.js `>=24.18.0 <25`
-- pnpm `10.21.0` through Corepack
-- A Cloudflare account and Wrangler login for cloud deployment
+- 通过 Corepack 使用 pnpm `10.21.0`
+- 云端部署需要 Cloudflare 账号和 Wrangler 登录
 
-## Quick Start
+## 快速开始
 
 ```bash
 git clone https://github.com/evepupil/CloudMind.git
@@ -142,45 +137,45 @@ pnpm install
 cp .dev.vars.example .dev.vars
 ```
 
-Replace `JWT_SECRET` in `.dev.vars` with a long random value, then initialize
-the local D1 database and start Vite:
+把 `.dev.vars` 中的 `JWT_SECRET` 替换为足够长的随机值，然后初始化本地 D1 并启动
+Vite：
 
 ```bash
 pnpm exec wrangler d1 migrations apply DB --local
 pnpm dev
 ```
 
-The default development URL is `http://localhost:5173`.
+默认开发地址为 `http://localhost:5173`。
 
-To run through Wrangler's Worker runtime:
+需要通过 Wrangler 的 Worker runtime 运行时：
 
 ```bash
 pnpm build
 pnpm worker:dev
 ```
 
-## Environment And Bindings
+## 环境变量与绑定
 
-| Binding / Var | Purpose |
+| Binding / Var | 用途 |
 | --- | --- |
-| `DB` | D1 metadata, auth, workflows, memory versions, graph, and audit data |
-| `ASSET_FILES` | R2 raw and processed source objects |
-| `ASSET_VECTORS` | Vectorize index for asset chunks |
-| `GRAPH_VECTORS` | Vectorize index for entity and graph recall |
-| `WORKFLOW_QUEUE` | Queue for asynchronous ingest workflows |
-| `AI` | Workers AI for generation, embedding, extraction, and reranking |
-| `JWT_SECRET` | Required session-signing secret |
-| `JINA_API_KEY` | Optional Jina Reader key for URL extraction |
+| `DB` | D1 元数据、认证、workflows、记忆版本、图谱和审计数据 |
+| `ASSET_FILES` | R2 原始来源与处理后内容 |
+| `ASSET_VECTORS` | 资产 chunks 的 Vectorize 索引 |
+| `GRAPH_VECTORS` | 实体和图检索的 Vectorize 索引 |
+| `WORKFLOW_QUEUE` | 执行异步采集 workflow 的 Queue |
+| `AI` | 用于生成、embedding、提取和重排的 Workers AI |
+| `JWT_SECRET` | 必填的会话签名密钥 |
+| `JINA_API_KEY` | 可选的 Jina Reader URL 抽取密钥 |
 
-Wrangler-generated binding types live in `worker-configuration.d.ts`; optional
-application variables are added in [`src/env.ts`](./src/env.ts).
+Wrangler 生成的绑定类型位于 `worker-configuration.d.ts`，应用可选变量补充在
+[`src/env.ts`](./src/env.ts) 中。
 
-## Deployment
+## 部署
 
-### Fresh Cloudflare Account
+### 全新 Cloudflare 账号
 
-The bootstrap script creates account-specific D1, R2, two Vectorize indexes,
-metadata indexes, Queue resources, and bindings before the first Worker deploy:
+首次部署前，bootstrap 脚本会创建账号专属的 D1、R2、两个 Vectorize 索引、
+metadata indexes、Queue 和绑定：
 
 ```bash
 pnpm install
@@ -189,40 +184,38 @@ pnpm deploy:one-click -- --prefix my-cloudmind
 pnpm exec wrangler secret put JWT_SECRET
 ```
 
-The first deployment skips production smoke because a public URL may not exist
-yet. After assigning a `workers.dev` or custom-domain URL, run:
+首次部署时会跳过生产 smoke，因为公开 URL 可能还没有创建。配置 `workers.dev` 或
+自定义域名后执行：
 
 ```bash
 SMOKE_BASE_URL=https://your-cloudmind.example.com pnpm release:smoke
 ```
 
-Sign in with the one-time default credentials `admin / admin`; CloudMind forces
-an immediate password change.
+首次登录使用一次性默认账号 `admin / admin`，CloudMind 会立即要求修改密码。
 
-The generic Cloudflare Deploy Button is intentionally not the fresh-account
-path. CloudMind requires account-specific storage resources, metadata indexes,
-and a required secret, all of which are created explicitly by the bootstrap
-script.
+通用 Cloudflare Deploy Button 不适合作为全新账号的部署入口。CloudMind 需要
+账号专属存储资源、metadata indexes 和必填 secret，bootstrap 脚本会明确创建这些
+资源。
 
-### Existing Deployment
+### 已有部署
 
-`pnpm deploy` builds the application and then runs the verified release chain:
+`pnpm deploy` 会先构建应用，再执行经过核验的发布链：
 
 ```text
-remote D1 migrations
-  -> exact migration verification
-  -> Worker deploy
-  -> production health, login, and MCP-auth smoke
-  -> automatic Worker rollback when post-deploy smoke fails
+远端 D1 migrations
+  -> 精确核验 migration
+  -> 部署 Worker
+  -> 生产 health、login 和 MCP 认证 smoke
+  -> 部署后 smoke 失败时自动回滚 Worker
 ```
 
-Bash:
+Bash：
 
 ```bash
 SMOKE_BASE_URL=https://cloudmind.example.com pnpm deploy
 ```
 
-PowerShell:
+PowerShell：
 
 ```powershell
 $env:SMOKE_BASE_URL='https://cloudmind.example.com'
@@ -233,74 +226,71 @@ try {
 }
 ```
 
-D1 migrations only move forward. Schema changes must remain compatible with
-the previous Worker version. See the
-[`Release and Rollback Runbook`](./docs/runbooks/发布与回滚.md).
+D1 migration 只向前执行。schema 改动必须兼容上一个 Worker 版本。详细流程见
+[`发布与回滚 Runbook`](./docs/runbooks/发布与回滚.md)。
 
-## Web Routes
+## Web 路由
 
-| Route | Purpose |
+| 路由 | 用途 |
 | --- | --- |
-| `/` | Observatory overview |
-| `/capture` | Save text, URL, or PDF sources |
-| `/assets` | Library list and management |
-| `/assets/:id` | Asset detail, provenance, content, and workflow state |
-| `/assets/:id/workflows` | Workflow history for one asset |
-| `/search` | Hybrid retrieval UI |
-| `/ask` | Source-aware library Q&A |
-| `/memory/agent` | Agent memory filters, projects, and lifecycle management |
-| `/memory/agent/:id` | Agent memory detail and version history |
-| `/memory/graph` | Knowledge graph view |
-| `/memory/timeline` | Time-oriented memory view |
-| `/memory/consolidation` | Consolidation and maintenance view |
-| `/activity` | Processing and system activity |
-| `/mcp-tokens` | MCP token management, config JSON, and AI installation prompts |
-| `/login`, `/change-password` | Single-user authentication |
+| `/` | Observatory 总览 |
+| `/capture` | 保存文本、URL 或 PDF 来源 |
+| `/assets` | 资料库列表和管理 |
+| `/assets/:id` | 资产详情、来源、内容和 workflow 状态 |
+| `/assets/:id/workflows` | 单个资产的 workflow 历史 |
+| `/search` | 混合检索界面 |
+| `/ask` | 带来源的资料库问答 |
+| `/memory/agent` | Agent 记忆过滤、项目和生命周期管理 |
+| `/memory/agent/:id` | Agent 记忆详情和版本历史 |
+| `/memory/graph` | 知识图谱视图 |
+| `/memory/timeline` | 按时间查看记忆 |
+| `/memory/consolidation` | 记忆整合与维护视图 |
+| `/activity` | 处理和系统活动 |
+| `/mcp-tokens` | MCP token 管理、配置 JSON 和 AI 安装提示词 |
+| `/login`、`/change-password` | 单用户认证 |
 
-## API Surface
+## API
 
-| Area | Endpoints |
+| 领域 | Endpoints |
 | --- | --- |
-| Ingest | `POST /api/ingest/text`, `/url`, `/file`; `POST /api/assets/:id/process` |
-| Assets | `GET /api/assets`, `GET/PATCH/DELETE /api/assets/:id`, restore, jobs, and workflows |
-| Retrieval | `POST /api/search`, `POST /api/chat` |
-| Memory Web | `GET /api/memory/graph`, `/timeline`, `/consolidation`, `/manage`, `/manage/:id` |
-| Health | `GET /api/health` |
-| MCP | Authenticated `POST /mcp`; `GET` and `DELETE` return `405` |
+| 采集 | `POST /api/ingest/text`、`/url`、`/file`；`POST /api/assets/:id/process` |
+| 资产 | `GET /api/assets`、`GET/PATCH/DELETE /api/assets/:id`，以及恢复、jobs 和 workflows |
+| 检索 | `POST /api/search`、`POST /api/chat` |
+| 记忆 Web | `GET /api/memory/graph`、`/timeline`、`/consolidation`、`/manage`、`/manage/:id` |
+| 健康检查 | `GET /api/health` |
+| MCP | 需要认证的 `POST /mcp`；`GET` 和 `DELETE` 返回 `405` |
 
 ## MCP Server
 
-CloudMind exposes a stateless HTTP MCP server at `POST /mcp`. Requests require
-a bearer token created from `/mcp-tokens`.
+CloudMind 在 `POST /mcp` 提供无状态 HTTP MCP Server。请求需要携带从
+`/mcp-tokens` 创建的 bearer token。
 
-Each active token can produce generic config JSON or a copyable AI installation
-prompt. The client identifies its own MCP and Skill setup method, configures
-CloudMind, installs the `cloudmind-memory` Skill, verifies the tool catalog, and
-keeps the token out of logs, repositories, and long-term memory.
+每个有效 token 都可以生成通用配置 JSON 或可复制的 AI 安装提示词。AI 客户端会自行
+识别 MCP 与 Skill 的安装方式，配置 CloudMind、安装 `cloudmind-memory` Skill、验证
+工具列表，并避免把 token 写入日志、仓库或长期记忆。
 
-The current 20 tools are grouped by responsibility:
+当前 20 个工具按职责分组：
 
-| Group | Tools |
+| 分组 | Tools |
 | --- | --- |
-| Personal memory | `remember`, `recall`, `update_memory`, `forget`, `restore_memory` |
-| Agent memory | `remember_agent`, `recall_agent` |
-| Library | `save_asset`, `list_assets`, `search_assets`, `search_assets_for_context`, `get_asset`, `ask_library`, `ask_library_for_context` |
-| Asset management | `update_asset`, `delete_asset`, `restore_asset`, `reprocess_asset` |
-| Operations | `list_asset_workflows`, `get_workflow_run` |
+| 个人记忆 | `remember`、`recall`、`update_memory`、`forget`、`restore_memory` |
+| Agent 记忆 | `remember_agent`、`recall_agent` |
+| 资料库 | `save_asset`、`list_assets`、`search_assets`、`search_assets_for_context`、`get_asset`、`ask_library`、`ask_library_for_context` |
+| 资产管理 | `update_asset`、`delete_asset`、`restore_asset`、`reprocess_asset` |
+| 运维 | `list_asset_workflows`、`get_workflow_run` |
 
-Use `recall` for personal preferences and history. Use `recall_agent` with an
-explicit stable project `contextKey` for prior decisions, progress, blockers,
-and agent working memory. Use library search for broad source material.
+个人偏好和历史使用 `recall`。继续 Agent 以前的项目决策、进度、阻塞和工作记忆时，
+使用 `recall_agent` 并明确传入稳定的项目 `contextKey`。查找大量来源资料时使用资料库
+搜索。
 
-Tool registration lives in
-[`src/features/mcp/server/service.ts`](./src/features/mcp/server/service.ts).
-The client workflow is documented in
-[`skills/cloudmind-memory/SKILL.md`](./skills/cloudmind-memory/SKILL.md).
+工具注册位于
+[`src/features/mcp/server/service.ts`](./src/features/mcp/server/service.ts)。客户端调用流程
+见 [`skills/cloudmind-memory/SKILL.md`](./skills/cloudmind-memory/SKILL.md)。
 
-## Data Sovereignty
+## 数据主权
 
-CloudMind exports D1 business tables, referenced R2 objects, and both vector
-indexes into a versioned package with a checksummed manifest:
+CloudMind 会把 D1 业务表、被引用的 R2 对象和两个向量索引导出成带版本的完整数据包，
+manifest 中包含逐文件校验和：
 
 ```bash
 pnpm data:export -- --output <package-directory> --remote
@@ -311,79 +301,76 @@ pnpm data:restore -- --package <package-directory> --remote \
   --confirm-empty-target
 ```
 
-Restore only accepts explicitly named isolated resources and verifies tables,
-FTS, foreign keys, objects, and vectors. Read the
-[`Data Export and Restore Runbook`](./docs/runbooks/数据导出与恢复.md) before use.
+恢复只接受明确命名的隔离资源，并核验数据表、FTS、外键、R2 对象和向量。执行前请阅读
+[`数据导出与恢复 Runbook`](./docs/runbooks/数据导出与恢复.md)。
 
-## Project Structure
+## 项目结构
 
 ```text
-app/routes/                         HonoX pages
-app/server.ts                       HTTP, Queue, and scheduled entrypoint
-src/core/                           domain ports and contracts
-src/features/assets/                library and asset lifecycle
-src/features/ingest/                text, URL, and PDF ingest
-src/features/search/                hybrid and graph retrieval
-src/features/memory/                graph, memory lifecycle, and Agent Web
-src/features/sovereignty/           hard-delete and data-sovereignty services
-src/features/mcp/                   remote MCP server
-src/features/workflows/             workflow, Queue, and scheduled consumers
-src/platform/                       D1, R2, Vectorize, AI, Queue adapters
+app/routes/                         HonoX 页面
+app/server.ts                       HTTP、Queue 和 scheduled 入口
+src/core/                           领域端口和契约
+src/features/assets/                资料库和资产生命周期
+src/features/ingest/                文本、URL 和 PDF 采集
+src/features/search/                混合检索和图检索
+src/features/memory/                图谱、记忆生命周期和 Agent Web
+src/features/sovereignty/           永久删除和数据主权服务
+src/features/mcp/                   远程 MCP Server
+src/features/workflows/             workflow、Queue 和 scheduled consumers
+src/platform/                       D1、R2、Vectorize、AI 和 Queue adapters
 drizzle/                            D1 migrations
-scripts/ops/                        export, restore, and acceptance operations
-scripts/release/                    version, migration, smoke, deploy, rollback
-tests/                              unit, eval, and Workers integration tests
-docs/模块设计/                       current module documentation
+scripts/ops/                        导出、恢复和验收脚本
+scripts/release/                    版本、migration、smoke、部署和回滚脚本
+tests/                              单元、eval 和 Workers 集成测试
+docs/模块设计/                       当前模块文档
 ```
 
 ## Scripts
 
-| Command | Purpose |
+| 命令 | 用途 |
 | --- | --- |
-| `pnpm dev` | Vite development server |
-| `pnpm build` | Production CSS and Worker build |
-| `pnpm worker:dev` | Wrangler local Worker runtime |
-| `pnpm gate` | Full config, version, type, lint, test, eval, build, binding, and Workers gate |
-| `pnpm eval` | Deterministic 25-query retrieval regression suite |
-| `pnpm deploy:one-click` | Create fresh Cloudflare resources and first deploy |
-| `pnpm deploy` | Build and run the verified production release chain |
-| `pnpm release:smoke` | Production health, login, and MCP-auth smoke |
-| `pnpm release:rollback:rehearse` | Roll back to the previous stable Worker and restore current |
-| `pnpm data:export` | Create a versioned full data package |
-| `pnpm data:validate` | Validate a package offline |
-| `pnpm data:restore` | Restore into explicitly named isolated resources |
+| `pnpm dev` | Vite 开发服务 |
+| `pnpm build` | 生产 CSS 和 Worker 构建 |
+| `pnpm worker:dev` | Wrangler 本地 Worker runtime |
+| `pnpm gate` | 配置、版本、类型、lint、测试、eval、构建、绑定和 Workers 完整门禁 |
+| `pnpm eval` | 固定 25 个查询的检索回归测试 |
+| `pnpm deploy:one-click` | 创建全新 Cloudflare 资源并首次部署 |
+| `pnpm deploy` | 构建并执行经过核验的生产发布链 |
+| `pnpm release:smoke` | 生产 health、login 和 MCP 认证 smoke |
+| `pnpm release:rollback:rehearse` | 回滚到上一稳定 Worker，再恢复当前版本 |
+| `pnpm data:export` | 创建带版本的完整数据包 |
+| `pnpm data:validate` | 离线校验数据包 |
+| `pnpm data:restore` | 恢复到明确命名的隔离资源 |
 
-## Verification
+## 验证
 
-Run the same gate used by GitHub Actions:
+执行与 GitHub Actions 相同的门禁：
 
 ```bash
 pnpm gate
 git diff --check
 ```
 
-The gate covers strict TypeScript, Biome, unit tests, retrieval eval, production
-build, generated binding drift, and Miniflare D1/Queue integration tests.
+门禁覆盖 strict TypeScript、Biome、单元测试、检索 eval、生产构建、生成绑定漂移和
+Miniflare D1/Queue 集成测试。
 
-## Documentation
+## 文档
 
-- Product north star: [`docs/vision.md`](./docs/vision.md)
-- Current roadmap: [`docs/roadmap.md`](./docs/roadmap.md)
-- Memory architecture: [`docs/memory-layer-architecture.md`](./docs/memory-layer-architecture.md)
-- Current modules: [`docs/模块设计/`](./docs/模块设计/)
-- Release runbook: [`docs/runbooks/发布与回滚.md`](./docs/runbooks/发布与回滚.md)
-- Export and restore: [`docs/runbooks/数据导出与恢复.md`](./docs/runbooks/数据导出与恢复.md)
+- 产品北极星：[`docs/vision.md`](./docs/vision.md)
+- 当前路线图：[`docs/roadmap.md`](./docs/roadmap.md)
+- 记忆层架构：[`docs/memory-layer-architecture.md`](./docs/memory-layer-architecture.md)
+- 当前模块：[`docs/模块设计/`](./docs/模块设计/)
+- 发布与回滚：[`docs/runbooks/发布与回滚.md`](./docs/runbooks/发布与回滚.md)
+- 导出与恢复：[`docs/runbooks/数据导出与恢复.md`](./docs/runbooks/数据导出与恢复.md)
 
-Historical roadmaps are kept under `docs/roadmap-archive/` and do not describe
-current project status.
+历史路线图保存在 `docs/roadmap-archive/`，只用于查阅过去的决策。
 
 ## Contributing
 
-- Keep product logic under `src/features` and infrastructure under
-  `src/platform`.
-- Preserve strict TypeScript and avoid `any`.
-- Add focused tests for service, repository, API, MCP, and state transitions.
-- Update the corresponding module document with implementation changes.
-- Run `pnpm gate` before committing.
+- 产品逻辑放在 `src/features`，基础设施放在 `src/platform`。
+- 保持 TypeScript strict，避免 `any`。
+- service、repository、API、MCP 和状态变更需要补充聚焦测试。
+- 实现变化时同步更新对应模块文档。
+- 提交前执行 `pnpm gate`。
 
-Project-specific engineering rules live in [`AGENTS.md`](./AGENTS.md).
+项目工程规范见 [`AGENTS.md`](./AGENTS.md)。
